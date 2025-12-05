@@ -51,14 +51,14 @@ fun AddAccountScreen(onNavigateBack: () -> Unit) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { "Account Name" },
+                label = { Text("Account Name") },
                 modifier = Modifier.fillMaxWidth(),
 
                 )
             OutlinedTextField(
                 value = balance,
                 onValueChange = { balance = it },
-                label = { "Balance" },
+                label = { Text("Balance") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
