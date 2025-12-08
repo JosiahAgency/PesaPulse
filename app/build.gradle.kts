@@ -69,5 +69,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation("androidx.compose.material:material-icons-extended")
-
+    implementation("com.google.accompanist:accompanist-pager:0.32.0")
 }

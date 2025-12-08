@@ -271,7 +271,12 @@ fun TransactionItem(tx: MpesaTransactions) {
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = if (tx.type == "income")
+                Color(0xFFDFFFE2)
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -282,13 +287,19 @@ fun TransactionItem(tx: MpesaTransactions) {
                     Text(
                         text = tx.recipient,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (tx.type == "income")
+                            Color(0xFF2E7D32)   // a clean, readable green
+                        else
+                            MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "Transaction ID: ${tx.id}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                        color = if (tx.type == "income")
+                            Color(0xFF2E7D32)
+                        else
+                            MaterialTheme.colorScheme.onSurface                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -324,14 +335,21 @@ fun TransactionItem(tx: MpesaTransactions) {
                     Text(
                         text = tx.type.replaceFirstChar { it.uppercase() },
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = if (tx.type == "income")
+                            Color(0xFF2E7D32)   // a clean, readable green
+                        else
+                            MaterialTheme.colorScheme.onSurface
                     )
                 }
 
                 Text(
                     text = tx.date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (tx.type == "income")
+                        Color(0xFF2E7D32)   // a clean, readable green
+                    else
+                        MaterialTheme.colorScheme.onSurface
                 )
             }
 
