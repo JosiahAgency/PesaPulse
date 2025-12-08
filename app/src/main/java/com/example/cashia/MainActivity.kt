@@ -57,8 +57,8 @@ class MainActivity : ComponentActivity() {
 fun CashiaApp() {
     val navController = rememberNavController()
     val paths = listOf(
-        AppDestinations.Dashboard,
         AppDestinations.Transactions,
+        AppDestinations.Dashboard,
         AppDestinations.Accounts,
     )
     Scaffold(bottomBar = {
@@ -89,6 +89,9 @@ fun CashiaApp() {
             modifier = Modifier.padding(innerPadding)
 
         ) {
+            composable(AppDestinations.Transactions.route) {
+                TransactionScreen { navController.popBackStack() }
+            }
             composable(AppDestinations.Dashboard.route) {
                 DashboardScreen { route -> navController.navigate(route) }
             }
@@ -103,9 +106,6 @@ fun CashiaApp() {
                     accounts = accounts,
                     onAddAccount = { navController.navigate(AppDestinations.AddAccount.route) }
                 )
-            }
-            composable(AppDestinations.Transactions.route) {
-                TransactionScreen { navController.popBackStack() }
             }
             composable(AppDestinations.AddAccount.route) {
                 AddAccountScreen(
