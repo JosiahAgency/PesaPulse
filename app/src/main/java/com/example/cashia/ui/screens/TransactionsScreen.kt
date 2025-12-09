@@ -22,12 +22,16 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -87,6 +91,7 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
     val monthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
     val year = now.year
     val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+
     val currentMonthTransactions = transactions.filter { tx ->
         val date = LocalDate.parse(tx.date, formatter)
         date.year == now.year && date.monthValue == now.monthValue
@@ -110,9 +115,16 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
         Log.d("Transactions", "Search query: $searchQuery")
     }
 
-    Scaffold() { innerPadding ->
+    val incomeColor = MaterialTheme.colorScheme.tertiary
+    val expenseColor = MaterialTheme.colorScheme.error
+    val balanceColor = MaterialTheme.colorScheme.primary
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
         Column(
             modifier = Modifier
+                .padding(innerPadding)
                 .padding(20.dp, 12.dp)
         ) {
             Row(
@@ -129,106 +141,117 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                         text = "Your Transactions",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = "$monthName $year",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                shape = RoundedCornerShape(16.dp),
+                    .padding(vertical = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = null,
-                                tint = Color.Cyan,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text("Balance", style = MaterialTheme.typography.labelMedium)
-                                Text(
-                                    text = "Ksh ${formatAmount(latestBalance)}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Cyan
-                                )
-                            }
-                        }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowUpward,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = balanceColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Latest Balance", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                text = "Ksh ${formatAmount(latestBalance)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = balanceColor
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "Expenses",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Ksh ${formatAmount(totalExpenses)}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDownward,
-                                contentDescription = "Income",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "Income",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Ksh ${formatAmount(totalIncome)}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowCircleUp,
+                            contentDescription = null,
+                            tint = expenseColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Total Expenses",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Ksh ${formatAmount(totalExpenses)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = expenseColor
+                            )
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowCircleDown,
+                            contentDescription = "Income",
+                            tint = incomeColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Total Income",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Ksh ${formatAmount(totalIncome)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = incomeColor
+                            )
+                        }
+                    }
+
                 }
             }
 
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search ...") },
+                placeholder = { Text("Search Transactions...") },
                 leadingIcon = {
                     Icon(Icons.Default.Search, contentDescription = null)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults
+                    .colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                    )
             )
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -240,10 +263,13 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                 )
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(transactions) { tx ->
+                    items(transactions.filter {
+                        it.recipient.contains(searchQuery, ignoreCase = true) ||
+                                it.id.contains(searchQuery, ignoreCase = true)
+                    }) { tx ->
                         TransactionItem(tx)
                     }
                 }
@@ -255,30 +281,26 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
 @Composable
 fun TransactionItem(tx: MpesaTransactions) {
 
-    val amountColor = if (tx.type === "income") {
-        MaterialTheme.colorScheme.primary
+    val isIncome = tx.type == "income"
+    val dataColor = if (isIncome) {
+        MaterialTheme.colorScheme.tertiary
     } else {
-        Color.Red
+        MaterialTheme.colorScheme.error
     }
-
-    val icon = if (tx.type == "income")
+    val icon = if (isIncome)
         Icons.Default.ArrowCircleUp
     else
         Icons.Default.ArrowCircleDown
 
-
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (tx.type == "income")
-                Color(0xFFDFFFE2)
-            else
-                MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp, 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -288,36 +310,37 @@ fun TransactionItem(tx: MpesaTransactions) {
                         text = tx.recipient,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (tx.type == "income")
-                            Color(0xFF2E7D32)   // a clean, readable green
-                        else
-                            MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "Transaction ID: ${tx.id}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (tx.type == "income")
-                            Color(0xFF2E7D32)
-                        else
-                            MaterialTheme.colorScheme.onSurface                    )
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = amountColor,
+                        tint = dataColor,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = "Ksh ${tx.amount}",
+                        text = if (isIncome) "+ Ksh ${formatAmount(tx.amount)}" else "- Ksh ${
+                            formatAmount(
+                                tx.amount
+                            )
+                        }",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = amountColor
+                        color = dataColor
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) // Professional separator
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -326,9 +349,9 @@ fun TransactionItem(tx: MpesaTransactions) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = if (tx.type == "income") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                        imageVector = if (isIncome) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
                         contentDescription = null,
-                        tint = if (tx.type == "income") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        tint = dataColor,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(6.dp))
@@ -336,20 +359,14 @@ fun TransactionItem(tx: MpesaTransactions) {
                         text = tx.type.replaceFirstChar { it.uppercase() },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
-                        color = if (tx.type == "income")
-                            Color(0xFF2E7D32)   // a clean, readable green
-                        else
-                            MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
                 Text(
                     text = tx.date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (tx.type == "income")
-                        Color(0xFF2E7D32)   // a clean, readable green
-                    else
-                        MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

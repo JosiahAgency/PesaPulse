@@ -2,11 +2,11 @@ package com.example.cashia.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Define your custom greens
-val Green80 = Color(0xFF4CAF50)   // medium green
-val GreenGrey80 = Color(0xFF81C784) // lighter green
-val Teal80 = Color(0xFF388E3C)    // deep green accent
+// Define your custom colors using the new corporate theme's feel
+val CorporateBlue900 = Color(0xFF0D47A1) // Very deep navy
+val CorporateBlue600 = Color(0xFF1E88E5) // Standard blue
+val Gray500 = Color(0xFF9E9E9E)          // Mid-tone neutral gray
 
-val Green40 = Color(0xFF2E7D32)   // darker green
-val GreenGrey40 = Color(0xFF66BB6A) // mid-tone green
-val Teal40 = Color(0xFF1B5E20)    // very dark green accent
+val SuccessGreen = Color(0xFF4CAF50)     // For 'Success' or 'Go' actions
+val WarningOrange = Color(0xFFFF9800)    // For 'Warning' status
+val ErrorRed = Color(0xFFF44336)         // For 'Error' or 'Stop' status

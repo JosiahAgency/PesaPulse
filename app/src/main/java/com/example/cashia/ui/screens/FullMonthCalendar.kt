@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,46 +30,79 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cashia.models.MpesaTransactions
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 @Composable
-fun FullMonthCalendar(selectedDate: LocalDate, onDateSelected: (LocalDate) -> Unit) {
+fun FullMonthCalendar(
+    allTransactions: List<MpesaTransactions>,
+    selectedDate: LocalDate,
+    onDateSelected: (LocalDate) -> Unit
+) {
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
 
-    val monthGrid = generateMonthGrid(currentMonth)
+    val monthGrid = remember(currentMonth) { generateMonthGrid(currentMonth) }
     val monthTitle = currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() } +
             " " + currentMonth.year
 
-    Column {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+            .padding(8.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = {
                 currentMonth = currentMonth.minusMonths(1)
             }) {
-                Icon(Icons.Default.ArrowBack, null)
+                Icon(
+                    Icons.Default.KeyboardDoubleArrowLeft,
+                    "Previous Month",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Text(
                 text = monthTitle,
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             IconButton(onClick = {
                 currentMonth = currentMonth.plusMonths(1)
             }) {
-                Icon(Icons.Default.ArrowForward, null)
+                Icon(
+                    Icons.Default.KeyboardDoubleArrowRight,
+                    "Next Month",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            listOf("Mon", "Tue", "Wed", "Thur", "Fri", "Sat", "Sun").forEach {
-                Text(it, style = MaterialTheme.typography.labelMedium)
+            listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        day,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
 
         monthGrid.forEach { week ->
             Row(
@@ -74,36 +111,83 @@ fun FullMonthCalendar(selectedDate: LocalDate, onDateSelected: (LocalDate) -> Un
             ) {
                 week.forEach { day ->
                     if (day == null) {
-                        Box(modifier = Modifier.size(38.dp))
+                        Box(modifier = Modifier.size(40.dp))
                     } else {
                         val isSelected = day == selectedDate
+                        val dayTransactions = allTransactions.filter { tx ->
+                            LocalDate.parse(tx.date, DateTimeFormatter.ISO_LOCAL_DATE) == day
+                        }
+                        val hasIncome = dayTransactions.any { it.type == "income" }
+                        val hasExpense = dayTransactions.any { it.type == "expense" }
+
+                        val backgroundColor = when {
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            dayTransactions.isNotEmpty() -> MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.3f
+                            )
+
+                            else -> Color.Transparent
+                        }
+
+                        val textColor = if (isSelected)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurface
+
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isSelected)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                )
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(backgroundColor)
                                 .clickable {
                                     onDateSelected(day)
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = day.dayOfMonth.toString(),
-                                color = if (isSelected)
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = day.dayOfMonth.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = textColor
+                                )
+
+                                if (hasIncome || hasExpense) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        if (hasExpense) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) Color.White.copy(alpha = 0.7f)
+                                                        else MaterialTheme.colorScheme.error
+                                                    )
+                                            )
+                                        }
+                                        if (hasIncome) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) Color.White
+                                                        else MaterialTheme.colorScheme.tertiary
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
         }
     }
 }
@@ -112,8 +196,8 @@ fun generateMonthGrid(month: YearMonth): List<List<LocalDate?>> {
     val firstDay = month.atDay(1)
     val lastDay = month.atEndOfMonth()
 
-    val start = firstDay.with(DayOfWeek.MONDAY)
-    val end = lastDay.with(DayOfWeek.SUNDAY)
+    val start = firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+    val end = lastDay.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
 
     val days = mutableListOf<List<LocalDate?>>()
     var current = start
@@ -128,4 +212,3 @@ fun generateMonthGrid(month: YearMonth): List<List<LocalDate?>> {
     }
     return days
 }
-
