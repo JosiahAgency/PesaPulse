@@ -29,7 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+    import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
@@ -45,16 +45,24 @@ import com.example.cashia.ui.screens.TransactionScreen
 import com.example.cashia.ui.theme.CashiaTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val PERMISSIONS_REQUEST_CODE = 100
+    private val permissionsToRequest = arrayOf(
+        Manifest.permission.READ_SMS,
+    )
+
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.READ_SMS
-            ) !== PackageManager.PERMISSION_GRANTED
-        ) {
+        if (permissionsToRequest.any {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    it
+                ) != PackageManager.PERMISSION_GRANTED
+            }) {
             ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.READ_SMS), 100
+                this, permissionsToRequest, PERMISSIONS_REQUEST_CODE
             )
         }
         enableEdgeToEdge()

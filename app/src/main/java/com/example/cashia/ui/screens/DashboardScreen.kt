@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowCircleDown
 import androidx.compose.material.icons.filled.ArrowCircleUp
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,29 +41,57 @@ fun DashboardScreen(onNavigate: (String) -> Unit) {
         SmsRepository.fetchMpesaMessages(context).mapNotNull { parseMpesaMessage(it) }
     }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-
+    val today = LocalDate.now()
     val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-
-    val transactionsForSelectedDate = transactions.filter {
-        LocalDate.parse(it.date, formatter) == selectedDate
+    val displayFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy")
+    val transactionsForSelectedDate = remember(selectedDate, transactions) {
+        transactions.filter {
+            LocalDate.parse(it.date, formatter) == selectedDate
+        }
     }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        Column(
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            if (selectedDate != today) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        selectedDate = today
+                    }, icon = {
+                        Icon(Icons.Default.Today, contentDescription = "Today")
+
+                    }, text = {
+                        Text("Today", fontWeight = FontWeight.SemiBold)
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+    ) { padding ->
+        LazyColumn(
             modifier = Modifier
-                .padding(padding)
-                .padding(16.dp, 0.dp),
+                .padding(padding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Welcome Back,",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            DailySummaryCard(transactionsForSelectedDate)
-            WeeklySpendingChart(transactions, selectedDate, { selectedDate = it })
-            Spacer(Modifier.height(6.dp))
-            DailyTransactions(transactions, selectedDate, { selectedDate = it })
+            item {
+                Text(
+                    text = selectedDate.format(displayFormatter),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item {
+                DailySummaryCard(transactionsForSelectedDate)
+            }
+            item {
+                WeeklySpendingChart(transactions, selectedDate, { selectedDate = it })
+            }
+            item {
+                DailyTransactions(transactions, selectedDate, { selectedDate = it })
+            }
         }
     }
 }
