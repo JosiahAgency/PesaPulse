@@ -29,7 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-    import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
@@ -38,8 +38,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.models.AccountsModel
 import com.example.cashia.ui.navigation.AppDestinations
-import com.example.cashia.ui.screens.AccountsScreen
-import com.example.cashia.ui.screens.AddAccountScreen
+import com.example.cashia.ui.screens.AnalyticsScreen
 import com.example.cashia.ui.screens.DashboardScreen
 import com.example.cashia.ui.screens.TransactionScreen
 import com.example.cashia.ui.theme.CashiaTheme
@@ -90,7 +89,7 @@ fun CashiaApp(
     val paths = listOf(
         AppDestinations.Transactions,
         AppDestinations.Dashboard,
-        AppDestinations.Accounts,
+        AppDestinations.Analytics,
     )
     Scaffold(
         topBar = {
@@ -171,22 +170,8 @@ fun CashiaApp(
             composable(AppDestinations.Dashboard.route) {
                 DashboardScreen { route -> navController.navigate(route) }
             }
-            composable(AppDestinations.Accounts.route) {
-                val accounts = listOf(
-                    AccountsModel(1, "Cash", 1200.0),
-                    AccountsModel(2, "Bank", 5400.0)
-                )
-
-                AccountsScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    accounts = accounts,
-                    onAddAccount = { navController.navigate(AppDestinations.AddAccount.route) }
-                )
-            }
-            composable(AppDestinations.AddAccount.route) {
-                AddAccountScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                )
+            composable(AppDestinations.Analytics.route) {
+                AnalyticsScreen()
             }
         }
     }

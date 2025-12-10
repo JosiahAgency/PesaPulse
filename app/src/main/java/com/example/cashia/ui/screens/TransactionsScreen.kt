@@ -1,12 +1,10 @@
 package com.example.cashia.ui.screens
 
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -40,17 +39,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.Utility.SmsRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.models.parseMpesaMessage
+import com.example.cashia.models.TransactionsViewModel
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,74 +55,40 @@ import java.util.Locale
 fun TransactionScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
 
-    val messages = remember {
-        try {
-            val fetched = SmsRepository.fetchMpesaMessages(context)
-            Log.d("AndroidStudio 1Transactions", "Fetched ${fetched.size} SMS messages")
-            fetched
-        } catch (e: Exception) {
-            Log.e("AndroidStudio 2Transactions", "Failed fetching SMS: ${e.message}")
-            emptyList<String>()
-        }
-    }
-
-    val transactions = remember(messages) {
-        val parsed = messages.mapNotNull {
-            try {
-                parseMpesaMessage(it)
-            } catch (e: Exception) {
-                Log.e("AndroidStudio 3Transactions", "Parse error: ${e.message}")
-                null
-            }
-        }
-        Log.d(
-            "AndroidStudio 4Transactions",
-            "Parsed ${parsed.size} Mpesa transactions from ${messages.size} messages"
-        )
-        parsed
-    }
-
-
-    val now = LocalDate.now()
-    val monthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-    val year = now.year
-    val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-
-    val currentMonthTransactions = transactions.filter { tx ->
-        val date = LocalDate.parse(tx.date, formatter)
-        date.year == now.year && date.monthValue == now.monthValue
-    }
-
-    val latestBalance = currentMonthTransactions
-        .maxByOrNull { LocalDate.parse(it.date) }
-        ?.balance ?: 0.0
-
-    val totalIncome = currentMonthTransactions
-        .filter { it.type == "income" }
-        .sumOf { it.amount }
-
-    val totalExpenses = currentMonthTransactions
-        .filter { it.type == "expense" }
-        .sumOf { it.amount }
-
-    var searchQuery by remember { mutableStateOf("") }
-
-    if (searchQuery.isNotBlank()) {
-        Log.d("Transactions", "Search query: $searchQuery")
-    }
-
     val incomeColor = MaterialTheme.colorScheme.tertiary
     val expenseColor = MaterialTheme.colorScheme.error
     val balanceColor = MaterialTheme.colorScheme.primary
+
+    val viewModel: TransactionsViewModel = viewModel(
+        factory = TransactionsViewModel.provideFactory(context)
+    )
+    val state = viewModel.state
+
+    val totalIncome = state.totalIncome
+    val totalExpenses = state.totalExpenses
+    val latestBalance = state.latestBalance
+    val transactions = state.allTransactions
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredTransactions = transactions.filter {
+        it.recipient.contains(searchQuery, ignoreCase = true) || it.id.contains(
+            searchQuery,
+            ignoreCase = true
+        )
+    }
+
+    val groupedTransactions = remember(filteredTransactions) {
+        filteredTransactions
+            .groupBy { LocalDate.parse(it.date) }
+            .toSortedMap(compareByDescending { it })
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .padding(16.dp, 0.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
+            contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -146,7 +109,7 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
-                            text = "$monthName $year",
+                            text = state.currentMonth,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -273,12 +236,33 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else if (groupedTransactions.isEmpty() && searchQuery.isNotBlank()) {
+                item {
+                    Text(
+                        "No matching transactions found.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
-                items(transactions.filter {
-                    it.recipient.contains(searchQuery, ignoreCase = true) ||
-                            it.id.contains(searchQuery, ignoreCase = true)
-                }) { tx ->
-                    TransactionItem(tx)
+                groupedTransactions.forEach { (date, dailyTransactions) ->
+                    stickyHeader {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.background,
+                            shadowElevation = 1.dp
+                        ) {
+                            Text(
+                                text = date.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                    items(items = dailyTransactions, key = { it.id }) { tx ->
+                        TransactionItem(tx)
+                    }
                 }
             }
         }
@@ -294,10 +278,6 @@ fun TransactionItem(tx: MpesaTransactions) {
     } else {
         MaterialTheme.colorScheme.error
     }
-    val icon = if (isIncome)
-        Icons.Default.ArrowCircleUp
-    else
-        Icons.Default.ArrowCircleDown
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -319,21 +299,23 @@ fun TransactionItem(tx: MpesaTransactions) {
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = "Transaction ID: ${tx.id}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isIncome) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                            contentDescription = null,
+                            tint = dataColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = tx.type.replaceFirstChar { it.uppercase() } + " • ID: ${tx.id}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = dataColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = if (isIncome) "+ Ksh ${formatAmount(tx.amount)}" else "- Ksh ${
                             formatAmount(
@@ -341,43 +323,24 @@ fun TransactionItem(tx: MpesaTransactions) {
                             )
                         }",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = dataColor
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) // Professional separator
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (isIncome) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                        contentDescription = null,
-                        tint = dataColor,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = tx.type.replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
                 Text(
                     text = tx.date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-
         }
     }
 }
