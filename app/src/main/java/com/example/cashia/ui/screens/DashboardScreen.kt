@@ -125,6 +125,10 @@ fun TimeScopedSummaryCard(
             val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
             "Monthly Summary: ${startDate.format(monthYearFormatter)}"
         }
+
+        TimeScope.CUSTOM -> {
+            "Summary for ${startDate.format(fullDateFormatter)}"
+        }
     }
 
 

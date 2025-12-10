@@ -17,7 +17,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
-import kotlin.time.TimeSource
 
 data class TransactionState(
     val allTransactions: List<MpesaTransactions> = emptyList(),
@@ -109,16 +108,16 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
         val startDate = when (scope) {
             TimeScope.DAY -> selectedDate
-            // Start of the week (Sunday)
             TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-            // Start of the month
             TimeScope.MONTH -> selectedDate.withDayOfMonth(1)
+            TimeScope.CUSTOM -> selectedDate
         }
 
         val endDate = when (scope) {
             TimeScope.DAY -> selectedDate
             TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
             TimeScope.MONTH -> selectedDate.with(TemporalAdjusters.lastDayOfMonth())
+            TimeScope.CUSTOM -> selectedDate
         }
 
         val scopedTransactions = transactions.filter { tx ->

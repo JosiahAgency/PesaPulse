@@ -168,7 +168,7 @@ fun CashiaApp(
                 TransactionScreen { navController.popBackStack() }
             }
             composable(AppDestinations.Dashboard.route) {
-                DashboardScreen { route -> navController.navigate(route) }
+                DashboardScreen()
             }
             composable(AppDestinations.Analytics.route) {
                 AnalyticsScreen()
