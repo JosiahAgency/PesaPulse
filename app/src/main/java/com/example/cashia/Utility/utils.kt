@@ -5,5 +5,5 @@ enum class TimeScope {
 }
 
 enum class TransactionType {
-    ALL, INCOME, EXPENSE
+    INCOME, EXPENSE
 }

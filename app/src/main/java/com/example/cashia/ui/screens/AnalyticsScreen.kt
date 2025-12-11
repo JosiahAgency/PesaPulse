@@ -1,12 +1,10 @@
 package com.example.cashia.ui.screens
 
 import android.app.DatePickerDialog
-import android.graphics.Paint.Align
 import android.widget.DatePicker
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,13 +19,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -42,23 +45,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
@@ -69,7 +67,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Calendar
-import kotlin.collections.mapOf
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,6 +85,8 @@ fun AnalyticsScreen() {
 
     var startDate by remember { mutableStateOf(LocalDate.now().minusMonths(1).withDayOfMonth(1)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
+
+    var topNCount by remember { mutableIntStateOf(5) }
 
     LaunchedEffect(selectedScope) {
         if (selectedScope != TimeScope.CUSTOM) {
@@ -113,7 +112,6 @@ fun AnalyticsScreen() {
             val date = LocalDate.parse(tx.date, DateTimeFormatter.ISO_LOCAL_DATE)
             val isDateInRange = !date.isBefore(startDate) && !date.isAfter(endDate)
             val isTypeMatch = when (selectedType) {
-                TransactionType.ALL -> true
                 TransactionType.INCOME -> tx.type == "income"
                 TransactionType.EXPENSE -> tx.type == "expense"
             }
@@ -123,10 +121,9 @@ fun AnalyticsScreen() {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-    ) { innerPadding ->
+    ) {
         LazyColumn(
             modifier = Modifier
-                .padding(innerPadding)
                 .fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -150,231 +147,46 @@ fun AnalyticsScreen() {
                 }
             }
             item {
-                Text(
-                    "Trends",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (filteredTransactions.isEmpty()) {
-                    EmptyAnalyticsState("No data for this period")
-                } else {
-                    SimpleBarChart(filteredTransactions, selectedType)
+                val breakdownTitle = when (selectedType) {
+                    TransactionType.INCOME -> "Top Income Sources"
+                    TransactionType.EXPENSE -> "Top Expenditure Categories"
                 }
-            }
-            item {
-                Text(
-                    "Top Breakdown",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            breakdownTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Text(
+                            "Percentages are relative to the total ${selectedType.name.lowercase()} Period",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    ItemCountSelector(
+                        currentCount = topNCount,
+                        onCountChange = { topNCount = it }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (filteredTransactions.isEmpty()) {
                     EmptyAnalyticsState("No transactions to break down")
                 } else {
-                    TopBreakdownList(filteredTransactions, selectedType)
+                    TopBreakdownList(filteredTransactions, selectedType, n = topNCount)
                 }
             }
         }
     }
 }
 
-@Composable
-fun SimpleBarChart(transactions: List<MpesaTransactions>, type: TransactionType) {
-    val primaryBarColor = when (type) {
-        TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
-        TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-        TransactionType.ALL -> MaterialTheme.colorScheme.primary
-    }
-    val secondaryBarColor = MaterialTheme.colorScheme.error
-
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-
-    val groupedData = remember(transactions, type) {
-        val dailyGroups = transactions.groupBy {
-            LocalDate.parse(
-                it.date,
-                DateTimeFormatter.ISO_LOCAL_DATE
-            )
-        }
-
-        dailyGroups.mapValues { (_, txList) ->
-            if (type == TransactionType.ALL) {
-                mapOf(
-                    "income" to txList.filter { it.type == "income" }.sumOf { it.amount },
-                    "expense" to txList.filter { it.type == "expense" }.sumOf { it.amount }
-                )
-            } else {
-                mapOf(type.name.lowercase() to txList.sumOf { it.amount })
-            }
-        }.toSortedMap()
-    }
-
-    val maxValue = remember(groupedData) {
-        groupedData.values.flatMap { it.values }.maxOrNull() ?: 1.0
-    }
-    val density = LocalDensity.current
-    val textPaint = remember(density, labelColor) {
-        android.graphics.Paint().apply {
-            color = labelColor.toArgb()
-            textSize = density.run { 10.sp.toPx() }
-        }
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = "Total: Ksh ${formatAmount(transactions.sumOf { it.amount })}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(16.dp))
-
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val xAxisHeight = 30.dp.toPx()
-                    val yAxisWidth = 50.dp.toPx()
-                    val chartWidth = size.width - yAxisWidth
-                    val chartHeight = size.height - xAxisHeight
-                    val barCountPerGroup = if (type == TransactionType.ALL) 2 else 1
-                    val totalGroups = groupedData.size
-
-                    // Total available space for one day (including bars and internal space)
-                    val groupWidth = chartWidth / totalGroups.coerceAtLeast(1)
-
-                    // Dynamic bar width
-                    val barWidth = (groupWidth / (barCountPerGroup + 1f)).coerceAtMost(40.dp.toPx())
-                    val innerSpace =
-                        (groupWidth - (barWidth * barCountPerGroup)) / (barCountPerGroup + 1f)
-                    val ySteps = 3
-                    drawIntoCanvas { canvas ->
-                        textPaint.textAlign = Align.RIGHT
-                        for (i in 0 until ySteps) {
-                            val ratio = i.toFloat() / (ySteps - 1)
-                            val yPos = chartHeight * (1 - ratio)
-                            val labelValue = (maxValue * ratio)
-
-                            drawLine(
-                                color = gridColor,
-                                start = Offset(yAxisWidth, yPos),
-                                end = Offset(size.width, yPos),
-                                strokeWidth = 1.dp.toPx()
-                            )
-
-                            val labelText =
-                                if (i == 0) "0" else "KES ${abbreviateNumber(labelValue)}"
-
-                            canvas.nativeCanvas.drawText(
-                                labelText,
-                                yAxisWidth - 10.dp.toPx(),
-                                yPos + 10f,
-                                textPaint
-                            )
-                        }
-                    }
-
-                    var xOffset = yAxisWidth + innerSpace
-                    val skipLabel = if (totalGroups > 7) 2 else 1
-                    var index = 0
-
-                    drawIntoCanvas { canvas ->
-                        textPaint.textAlign = Align.CENTER
-                        groupedData.forEach { (date, amount) ->
-                            if (type == TransactionType.ALL) {
-                                val expenseAmount = amount["expense"] ?: 0.0
-                                val expenseBarHeight =
-                                    (expenseAmount / maxValue * chartHeight).toFloat()
-                                drawRect(
-                                    color = secondaryBarColor,
-                                    topLeft = Offset(xOffset, chartHeight - expenseBarHeight),
-                                    size = Size(barWidth, expenseBarHeight)
-                                )
-                                xOffset += barWidth
-                            } else {
-                                val amount = amount.values.firstOrNull() ?: 0.0
-                                val barHeight = (amount / maxValue * chartHeight).toFloat()
-
-                                drawRect(
-                                    color = primaryBarColor,
-                                    topLeft = Offset(xOffset, chartHeight - barHeight),
-                                    size = Size(barWidth, barHeight)
-                                )
-                                xOffset += barWidth
-                            }
-
-                            if (index % skipLabel == 0) {
-                                val dateLabel = date.format(DateTimeFormatter.ofPattern("dd/MM"))
-
-                                val labelX = xOffset - (groupWidth / 2)
-                                canvas.nativeCanvas.drawText(
-                                    dateLabel,
-                                    labelX,
-                                    chartHeight + 20.dp.toPx(),
-                                    textPaint
-                                )
-                            }
-
-                            xOffset += innerSpace
-                            index++
-                        }
-                    }
-                }
-            }
-            if (type == TransactionType.ALL) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LegendItem(color = secondaryBarColor, label = "Expenses")
-                    LegendItem(color = primaryBarColor, label = "Income")
-                }
-            }
-        }
-    }
-}
-
-fun abbreviateNumber(value: Double): String {
-    val suffixes = arrayOf(" ", "k", "M", "B", "T")
-    var v = value
-    var i = 0
-    while (v >= 1000 && i < suffixes.size - 1) {
-        v /= 1000.0
-        i++
-    }
-    return if (v % 1.0 != 0.0) {
-        String.format("%.1f%s", v, suffixes[i])
-    } else {
-        String.format("%.0f%s", v, suffixes[i])
-    }
-}
-
-@Composable
-fun LegendItem(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .background(color, RoundedCornerShape(2.dp))
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
 
 @Composable
 fun EmptyAnalyticsState(message: String) {
@@ -393,11 +205,10 @@ fun EmptyAnalyticsState(message: String) {
 }
 
 @Composable
-fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionType) {
+fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionType, n: Int) {
     val amountColor = when (type) {
         TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
         TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-        TransactionType.ALL -> MaterialTheme.colorScheme.primary
     }
 
     val breakdown = remember(transactions) {
@@ -408,7 +219,7 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
     val totalAmount = remember(breakdown) {
         breakdown.sumOf { it.value }
     }
-    val topBreakdown = breakdown.take(5)
+    val topBreakdown = breakdown.take(n)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -493,6 +304,69 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
 }
 
 @Composable
+fun ItemCountSelector(
+    currentCount: Int,
+    onCountChange: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(3, 5, 10, 20, 40, 60, 100)
+
+    Box(
+        modifier = Modifier.wrapContentSize(Alignment.TopEnd)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "Show: $currentCount",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+        ) {
+            options.forEach { number ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "$number items",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    onClick = {
+                        onCountChange(number)
+                        expanded = false
+                    },
+                    trailingIcon = {
+                        if (number == currentCount) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun AnimatedProgressBar(progress: Float, color: Color) {
     val animatedProgress = remember { Animatable(0f) }
 
@@ -516,22 +390,37 @@ fun AnimatedProgressBar(progress: Float, color: Color) {
 
 @Composable
 fun AnalysisScopeSelector(selectedScope: TimeScope, onScopeChange: (TimeScope) -> Unit) {
+    val selectedColor = MaterialTheme.colorScheme.primary
     Column {
-        Text("Analyze Period", style = MaterialTheme.typography.labelLarge)
+        Text("Select Period", style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(4.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TimeScope.entries.forEach { scope ->
+                val isSelected = selectedScope == scope
                 FilterChip(
-                    selected = selectedScope == scope,
+                    selected = isSelected,
                     onClick = { onScopeChange(scope) },
                     label = {
                         Text(
-                            scope.name.lowercase().replaceFirstChar { it.uppercase() })
+                            scope.name.lowercase().replaceFirstChar { it.uppercase() },
+                            color = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     },
-                    leadingIcon = { Icon(Icons.Default.DateRange, null, Modifier.size(18.dp)) }
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.DateRange,
+                            null,
+                            Modifier.size(18.dp),
+                            tint = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = selectedColor.copy(alpha = 0.1f),
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
                 )
             }
         }
@@ -554,7 +443,6 @@ fun TransactionTypeSelector(
                 val typeColor = when (type) {
                     TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
                     TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-                    TransactionType.ALL -> MaterialTheme.colorScheme.primary
                 }
                 val isSelected = selectedType == type
 
@@ -628,59 +516,63 @@ fun AdjustableDateRangeDisplay(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(10.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .padding(8.dp)
                     .clickable { showDatePicker(startDate, onStartDateSelected, true) },
-                horizontalAlignment = Alignment.Start
             ) {
                 Text(
                     "Start Date:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    startDate.format(formatter),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
 
-            Text(
-                startDate.format(formatter),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .width(1.dp)
+                    .height(40.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
             )
-        }
-        Text(
-            text = " - ",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clickable { showDatePicker(endDate, onEndDateSelected, false) },
-            horizontalAlignment = Alignment.End
-        ) {
-            Text(
-                "End Date:",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                endDate.format(formatter),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+                    .clickable { showDatePicker(endDate, onEndDateSelected, false) },
+            ) {
+                Text(
+                    "End Date:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    endDate.format(formatter),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

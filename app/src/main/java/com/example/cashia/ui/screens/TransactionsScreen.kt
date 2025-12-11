@@ -134,7 +134,6 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                             .fillMaxWidth()
                             .padding(20.dp)
                     ) {
-
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.AccountBalanceWallet,
@@ -144,7 +143,10 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                             )
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Latest Balance", style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    "Running Balance",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
                                 Text(
                                     text = "Ksh ${formatAmount(latestBalance)}",
                                     style = MaterialTheme.typography.titleMedium,
@@ -159,52 +161,63 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
                             )
                         )
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowCircleUp,
-                                contentDescription = null,
-                                tint = expenseColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Total Expenses",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                Icon(
+                                    imageVector = Icons.Default.TrendingDown,
+                                    contentDescription = null,
+                                    tint = expenseColor,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Text(
-                                    text = "Ksh ${formatAmount(totalExpenses)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = expenseColor
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Expenses",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Ksh ${formatAmount(totalExpenses)}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = expenseColor
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingUp,
+                                    contentDescription = "Income",
+                                    tint = incomeColor,
+                                    modifier = Modifier.size(20.dp)
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Income",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Ksh ${formatAmount(totalIncome)}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = incomeColor
+                                    )
+                                }
                             }
                         }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowCircleDown,
-                                contentDescription = "Income",
-                                tint = incomeColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Total Income",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Ksh ${formatAmount(totalIncome)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = incomeColor
-                                )
-                            }
-                        }
-
                     }
                 }
             }
