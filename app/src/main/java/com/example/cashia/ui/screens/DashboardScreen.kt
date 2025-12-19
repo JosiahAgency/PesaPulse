@@ -106,7 +106,7 @@ fun DashboardScreen() {
                     TimeScopedSummaryCard(selectedScope, { selectedScope = it }, summaryData)
                 }
                 item {
-                    WeeklySpendingChart(state.allTransactions, selectedDate, { selectedDate = it })
+                    FullMonthCalendar(state.allTransactions, selectedDate, { selectedDate = it })
                 }
                 item {
                     DailyTransactions(state.allTransactions, selectedDate, { selectedDate = it })
@@ -255,15 +255,6 @@ fun SummaryItem(label: String, amount: Double, color: Color, icon: ImageVector) 
             )
         }
     }
-}
-
-@Composable
-fun WeeklySpendingChart(
-    transactions: List<MpesaTransactions>,
-    selectedDate: LocalDate,
-    onDaySelected: (LocalDate) -> Unit
-) {
-    FullMonthCalendar(transactions, selectedDate, onDaySelected)
 }
 
 @Composable

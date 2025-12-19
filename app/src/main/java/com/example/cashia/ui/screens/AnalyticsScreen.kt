@@ -157,7 +157,7 @@ fun AnalyticsScreen() {
                 }
                 item {
                     val breakdownTitle = if (selectedType == TransactionType.INCOME)
-                        "Top Income Sources" else "Top Expenditure Categories"
+                        "Top Income Sources" else "Top Expenditure"
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -295,7 +295,9 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
                     Spacer(Modifier.height(8.dp))
                     AnimatedProgressBar(
                         progress = percentage,
-                        color = amountColor
+                        color = if (type == TransactionType.INCOME)
+                            MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.error
                     )
                 }
                 if (index < breakdown.size - 1) {
