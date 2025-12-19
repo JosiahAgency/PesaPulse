@@ -44,7 +44,7 @@ import com.example.cashia.ui.screens.AnalyticsScreen
 import com.example.cashia.ui.screens.DashboardScreen
 import com.example.cashia.ui.screens.TransactionScreen
 import com.example.cashia.ui.screens.formatAmount
-import com.example.cashia.ui.theme.CashiaTheme
+import com.example.cashia.ui.theme.PesaPulseTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -71,8 +71,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkTheme by remember { mutableStateOf(true) }
 
-            CashiaTheme(darkTheme = isDarkTheme) {
-                CashiaApp(
+            PesaPulseTheme(darkTheme = isDarkTheme) {
+                PesaPulseApp(
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = { isDarkTheme = !isDarkTheme }
                 )
@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
-fun CashiaApp(
+fun PesaPulseApp(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {

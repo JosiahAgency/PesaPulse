@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,8 @@ fun AnalyticsScreen() {
     val viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
+
+    val state = viewModel.state
     val transactions = viewModel.state.allTransactions
 
     var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
@@ -85,7 +88,6 @@ fun AnalyticsScreen() {
 
     var startDate by remember { mutableStateOf(LocalDate.now().minusMonths(1).withDayOfMonth(1)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
-
     var topNCount by remember { mutableIntStateOf(5) }
 
     LaunchedEffect(selectedScope) {
@@ -121,66 +123,70 @@ fun AnalyticsScreen() {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-    ) {
-        LazyColumn(
+    ) { innerPadding ->
+        PullToRefreshBox(
+            isRefreshing = state.isLoading,
+            onRefresh = { viewModel.fetchTransactions() },
             modifier = Modifier
-                .fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(innerPadding)
+                .fillMaxSize()
         ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    AnalysisScopeSelector(selectedScope, onScopeChange = { selectedScope = it })
-                    TransactionTypeSelector(selectedType, onTypeChange = { selectedType = it })
-                    AdjustableDateRangeDisplay(
-                        startDate = startDate,
-                        endDate = endDate,
-                        onStartDateSelected = { newDate ->
-                            startDate = newDate
-                            selectedScope = TimeScope.CUSTOM
-                        },
-                        onEndDateSelected = { newDate ->
-                            endDate = newDate
-                            selectedScope = TimeScope.CUSTOM
-                        }
-                    )
-                }
-            }
-            item {
-                val breakdownTitle = when (selectedType) {
-                    TransactionType.INCOME -> "Top Income Sources"
-                    TransactionType.EXPENSE -> "Top Expenditure Categories"
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            breakdownTitle,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Text(
-                            "Percentages are relative to the total ${selectedType.name.lowercase()} Period",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        AnalysisScopeSelector(selectedScope, onScopeChange = { selectedScope = it })
+                        TransactionTypeSelector(selectedType, onTypeChange = { selectedType = it })
+                        AdjustableDateRangeDisplay(
+                            startDate = startDate,
+                            endDate = endDate,
+                            onStartDateSelected = { newDate ->
+                                startDate = newDate
+                                selectedScope = TimeScope.CUSTOM
+                            },
+                            onEndDateSelected = { newDate ->
+                                endDate = newDate
+                                selectedScope = TimeScope.CUSTOM
+                            }
                         )
                     }
-                    ItemCountSelector(
-                        currentCount = topNCount,
-                        onCountChange = { topNCount = it }
-                    )
                 }
+                item {
+                    val breakdownTitle = if (selectedType == TransactionType.INCOME)
+                        "Top Income Sources" else "Top Expenditure Categories"
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (filteredTransactions.isEmpty()) {
-                    EmptyAnalyticsState("No transactions to break down")
-                } else {
-                    TopBreakdownList(filteredTransactions, selectedType, n = topNCount)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                breakdownTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "Relative to total ${selectedType.name.lowercase()} in Period",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        ItemCountSelector(
+                            currentCount = topNCount,
+                            onCountChange = { topNCount = it }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (filteredTransactions.isEmpty()) {
+                        EmptyAnalyticsState("No transactions to break down")
+                    } else {
+                        TopBreakdownList(filteredTransactions, selectedType, n = topNCount)
+                    }
                 }
             }
         }
@@ -406,6 +412,7 @@ fun AnalysisScopeSelector(selectedScope: TimeScope, onScopeChange: (TimeScope) -
                     label = {
                         Text(
                             scope.name.lowercase().replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelSmall,
                             color = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },

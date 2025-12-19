@@ -1,10 +1,12 @@
 package com.example.cashia.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,15 +70,14 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
     val totalIncome = state.totalIncome
     val totalExpenses = state.totalExpenses
     val latestBalance = state.latestBalance
-    val transactions = state.allTransactions
 
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredTransactions = transactions.filter {
-        it.recipient.contains(searchQuery, ignoreCase = true) || it.id.contains(
-            searchQuery,
-            ignoreCase = true
-        )
+    val filteredTransactions = remember(searchQuery, state.allTransactions) {
+        state.allTransactions.filter {
+            it.recipient.contains(searchQuery, ignoreCase = true) ||
+                    it.id.contains(searchQuery, ignoreCase = true)
+        }
     }
 
     val groupedTransactions = remember(filteredTransactions) {
@@ -87,198 +89,216 @@ fun TransactionScreen(onNavigateBack: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        LazyColumn(
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        PullToRefreshBox(
+            isRefreshing = state.isLoading,
+            onRefresh = {
+                viewModel.fetchTransactions()
+            },
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
         ) {
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AttachMoney,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column {
-                        Text(
-                            text = "Your Transactions",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onBackground
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AttachMoney,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            text = state.currentMonth,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column {
+                            Text(
+                                text = "Your Transactions",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = state.currentMonth,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
-            }
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                item {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp)
+                            .padding(vertical = 16.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = null,
-                                tint = balanceColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    "Running Balance",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                                Text(
-                                    text = "Ksh ${formatAmount(latestBalance)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = balanceColor
-                                )
-                            }
-                        }
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = 0.2f
-                            )
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.TrendingDown,
+                                    imageVector = Icons.Default.AccountBalanceWallet,
                                     contentDescription = null,
-                                    tint = expenseColor,
+                                    tint = balanceColor,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = "Expenses",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        "Running Balance",
+                                        style = MaterialTheme.typography.labelMedium
                                     )
                                     Text(
-                                        text = "Ksh ${formatAmount(totalExpenses)}",
+                                        text = "Ksh ${formatAmount(latestBalance)}",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = expenseColor
+                                        color = balanceColor
                                     )
                                 }
                             }
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                    alpha = 0.2f
+                                )
+                            )
+
                             Row(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.TrendingUp,
-                                    contentDescription = "Income",
-                                    tint = incomeColor,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "Income",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+
+                                    Icon(
+                                        imageVector = Icons.Default.TrendingDown,
+                                        contentDescription = null,
+                                        tint = expenseColor,
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                    Text(
-                                        text = "Ksh ${formatAmount(totalIncome)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = incomeColor
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Expenses",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Ksh ${formatAmount(totalExpenses)}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = expenseColor
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.TrendingUp,
+                                        contentDescription = "Income",
+                                        tint = incomeColor,
+                                        modifier = Modifier.size(20.dp)
                                     )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Income",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Ksh ${formatAmount(totalIncome)}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = incomeColor
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search Transactions...") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults
-                        .colors(
+                item {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search Transactions...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = 0.4f
-                            ),
-                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
-                        )
-                )
-            }
-            if (transactions.isEmpty()) {
-                item {
-                    Text(
-                        text = if (searchQuery.isNotBlank()) "No matching transactions"
-                        else "No transactions available",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                     )
                 }
-            } else if (groupedTransactions.isEmpty() && searchQuery.isNotBlank()) {
-                item {
-                    Text(
-                        "No matching transactions found.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                groupedTransactions.forEach { (date, dailyTransactions) ->
-                    stickyHeader {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.background,
-                            shadowElevation = 1.dp
-                        ) {
-                            Text(
-                                text = date.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
+                if (state.allTransactions.isEmpty() && !state.isLoading) {
+                    item {
+                        EmptyStateMessage("No transactions available. Swipe down to refresh.")
                     }
-                    items(items = dailyTransactions, key = { it.id }) { tx ->
-                        TransactionItem(tx)
+                } else if (groupedTransactions.isEmpty() && searchQuery.isNotBlank()) {
+                    item {
+                        EmptyStateMessage("No matching transactions found.")
+                    }
+                } else {
+                    groupedTransactions.forEach { (date, dailyTransactions) ->
+                        stickyHeader {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shadowElevation = 4.dp,
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Text(
+                                    text = date.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(8.dp)
+
+                                )
+                            }
+                        }
+                        items(items = dailyTransactions, key = { it.id }) { tx ->
+                            TransactionItem(tx)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun EmptyStateMessage(message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = message, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

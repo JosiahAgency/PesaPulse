@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowCircleDown
 import androidx.compose.material.icons.filled.ArrowCircleUp
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -27,9 +28,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.models.MpesaTransactions
@@ -44,53 +48,69 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
-
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
-
     val viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val transactions = viewModel.state.allTransactions
-    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
+    val state = viewModel.state
 
-    val summaryData by remember(selectedDate, selectedScope, transactions) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+
+        lifecycleOwner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onPermissionGranted()
+            }
+        })
+    }
+
+    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
+    val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
         derivedStateOf {
             viewModel.calculateSummary(selectedDate, selectedScope)
         }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
+        containerColor = MaterialTheme.colorScheme.background, floatingActionButton = {
             if (selectedDate != today) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         selectedDate = today
-                    }, icon = {
+                    },
+                    icon = {
                         Icon(Icons.Default.Today, contentDescription = "Today")
 
-                    }, text = {
+                    },
+                    text = {
                         Text("Today", fontWeight = FontWeight.SemiBold)
                     },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             }
-        }
-    ) {
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        }) { padding ->
+        PullToRefreshBox(
+            isRefreshing = state.isLoading, onRefresh = {
+                viewModel.fetchTransactions()
+            }, modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            item {
-                TimeScopedSummaryCard(selectedScope, { selectedScope = it }, summaryData)
-            }
-            item {
-                WeeklySpendingChart(transactions, selectedDate, { selectedDate = it })
-            }
-            item {
-                DailyTransactions(transactions, selectedDate, { selectedDate = it })
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    TimeScopedSummaryCard(selectedScope, { selectedScope = it }, summaryData)
+                }
+                item {
+                    WeeklySpendingChart(state.allTransactions, selectedDate, { selectedDate = it })
+                }
+                item {
+                    DailyTransactions(state.allTransactions, selectedDate, { selectedDate = it })
+                }
             }
         }
     }
@@ -98,9 +118,7 @@ fun DashboardScreen() {
 
 @Composable
 fun TimeScopedSummaryCard(
-    scope: TimeScope,
-    onScopeChange: (TimeScope) -> Unit,
-    summaryData: SummaryData
+    scope: TimeScope, onScopeChange: (TimeScope) -> Unit, summaryData: SummaryData
 ) {
     val income = summaryData.income
     val expenses = summaryData.expenses
@@ -110,28 +128,18 @@ fun TimeScopedSummaryCard(
     val monthDayFormatter = DateTimeFormatter.ofPattern("dd MMM")
     val fullDateFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
 
-    val dateDisplay = when (scope) {
-        TimeScope.DAY -> {
-            "Summary for ${startDate.format(fullDateFormatter)}"
-        }
-
-        TimeScope.WEEK -> {
-            val start = startDate.format(monthDayFormatter)
-            val end = endDate.format(fullDateFormatter)
-            "Weekly Summary: $start - $end"
-        }
-
-        TimeScope.MONTH -> {
-            val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
-            "Monthly Summary: ${startDate.format(monthYearFormatter)}"
-        }
-
-        TimeScope.CUSTOM -> {
-            "Summary for ${startDate.format(fullDateFormatter)}"
-        }
+    val dateDisplay = if (scope == TimeScope.DAY) {
+        "Summary for ${startDate.format(fullDateFormatter)}"
+    } else if (scope == TimeScope.WEEK) {
+        val start = startDate.format(monthDayFormatter)
+        val end = endDate.format(fullDateFormatter)
+        "Weekly Summary: $start - $end"
+    } else if (scope == TimeScope.MONTH) {
+        val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+        "Monthly Summary: ${startDate.format(monthYearFormatter)}"
+    } else {
+        "Summary for ${startDate.format(fullDateFormatter)}"
     }
-
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -147,7 +155,7 @@ fun TimeScopedSummaryCard(
                     .background(MaterialTheme.colorScheme.background),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TimeScope.entries.forEach { currentScope ->
+                TimeScope.entries.filter { it != TimeScope.CUSTOM }.forEach { currentScope ->
                     val isSelected = currentScope == scope
                     Text(
                         text = currentScope.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -160,8 +168,7 @@ fun TimeScopedSummaryCard(
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { onScopeChange(currentScope) }
                             .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .padding(vertical = 8.dp)
-                    )
+                            .padding(vertical = 8.dp))
                 }
             }
 
@@ -268,8 +275,7 @@ fun DailyTransactions(
     val formatter = DateTimeFormatter.ISO_LOCAL_DATE
     val today = LocalDate.now()
 
-    val days = (0 until 30)
-        .map { today.minusDays(it.toLong()) }.reversed()
+    val days = (0 until 30).map { today.minusDays(it.toLong()) }.reversed()
 
     val selectedPageIndex = days.indexOf(selectedDate).coerceIn(0, days.lastIndex)
 
