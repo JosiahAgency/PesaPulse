@@ -14,12 +14,12 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/cashia_logo_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Cashia">
+        android:theme="@style/Theme.PesaPulse">
         <activity
             android:name="com.example.cashia.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Cashia">
+            android:theme="@style/Theme.PesaPulse">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -47,6 +48,13 @@ fun FullMonthCalendar(
     onDateSelected: (LocalDate) -> Unit
 ) {
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
+
+    LaunchedEffect(selectedDate) {
+        val selectedYearMonth = YearMonth.from(selectedDate)
+        if (currentMonth != selectedYearMonth) {
+            currentMonth = selectedYearMonth
+        }
+    }
 
     val monthGrid = remember(currentMonth) { generateMonthGrid(currentMonth) }
     val monthTitle = currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() } +
@@ -104,6 +112,10 @@ fun FullMonthCalendar(
         }
         Spacer(Modifier.height(4.dp))
 
+        val transactionsByDate = remember(allTransactions) {
+            allTransactions.groupBy { it.date }
+        }
+
         monthGrid.forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -114,9 +126,10 @@ fun FullMonthCalendar(
                         Box(modifier = Modifier.size(40.dp))
                     } else {
                         val isSelected = day == selectedDate
-                        val dayTransactions = allTransactions.filter { tx ->
-                            LocalDate.parse(tx.date, DateTimeFormatter.ISO_LOCAL_DATE) == day
-                        }
+
+                        val dayString = day.toString()
+                        val dayTransactions = transactionsByDate[dayString] ?: emptyList()
+
                         val hasIncome = dayTransactions.any { it.type == "income" }
                         val hasExpense = dayTransactions.any { it.type == "expense" }
 

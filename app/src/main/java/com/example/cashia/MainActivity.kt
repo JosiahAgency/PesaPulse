@@ -29,19 +29,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.cashia.models.AccountsModel
+import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AnalyticsScreen
 import com.example.cashia.ui.screens.DashboardScreen
 import com.example.cashia.ui.screens.TransactionScreen
-import com.example.cashia.ui.theme.CashiaTheme
+import com.example.cashia.ui.screens.formatAmount
+import com.example.cashia.ui.theme.PesaPulseTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -68,8 +71,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkTheme by remember { mutableStateOf(true) }
 
-            CashiaTheme(darkTheme = isDarkTheme) {
-                CashiaApp(
+            PesaPulseTheme(darkTheme = isDarkTheme) {
+                PesaPulseApp(
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = { isDarkTheme = !isDarkTheme }
                 )
@@ -81,24 +84,31 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
-fun CashiaApp(
+fun PesaPulseApp(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val paths = listOf(
         AppDestinations.Transactions,
         AppDestinations.Dashboard,
         AppDestinations.Analytics,
     )
+    val viewModel: TransactionsViewModel = viewModel(
+        factory = TransactionsViewModel.provideFactory(context)
+    )
+    val state = viewModel.state
+    val latestBalance = state.latestBalance
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Welcome !",
+                        "MPesa Balance: Ksh ${formatAmount(latestBalance)}",
                         fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -168,7 +178,7 @@ fun CashiaApp(
                 TransactionScreen { navController.popBackStack() }
             }
             composable(AppDestinations.Dashboard.route) {
-                DashboardScreen { route -> navController.navigate(route) }
+                DashboardScreen()
             }
             composable(AppDestinations.Analytics.route) {
                 AnalyticsScreen()
