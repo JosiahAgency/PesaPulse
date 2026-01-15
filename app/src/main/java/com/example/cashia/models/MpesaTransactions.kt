@@ -50,7 +50,6 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
 
         fun formatTime(timeStr: String): String = timeStr.uppercase().trim()
 
-        // Using a "When" style check for cleaner flow
         return when {
             regexSentTo.find(message) != null -> {
                 val match = regexSentTo.find(message)!!
