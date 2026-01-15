@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -95,18 +96,18 @@ fun PesaPulseApp(
         AppDestinations.Dashboard,
         AppDestinations.Analytics,
     )
-    val viewModel: TransactionsViewModel = viewModel(
+    val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val state = viewModel.state
-    val latestBalance = state.latestBalance
+    val state = sharedViewModel.state
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "MPesa Balance: Ksh ${formatAmount(latestBalance)}",
-                        fontWeight = FontWeight.Bold,
+                        "PesaPulse",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.tertiary
                     )
@@ -175,14 +176,18 @@ fun PesaPulseApp(
 
         ) {
             composable(AppDestinations.Transactions.route) {
-                TransactionScreen { navController.popBackStack() }
+                TransactionScreen(
+                    viewModel = sharedViewModel,
+                    onNavigateBack = { navController.popBackStack() })
             }
             composable(AppDestinations.Dashboard.route) {
-                DashboardScreen()
+                DashboardScreen(viewModel = sharedViewModel)
             }
             composable(AppDestinations.Analytics.route) {
                 AnalyticsScreen()
             }
         }
+
     }
 }
+

@@ -55,16 +55,10 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TransactionScreen(onNavigateBack: () -> Unit) {
-    val context = LocalContext.current
-
+fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composable () -> Unit) {
     val incomeColor = MaterialTheme.colorScheme.tertiary
     val expenseColor = MaterialTheme.colorScheme.error
     val balanceColor = MaterialTheme.colorScheme.primary
-
-    val viewModel: TransactionsViewModel = viewModel(
-        factory = TransactionsViewModel.provideFactory(context)
-    )
     val state = viewModel.state
 
     val totalIncome = state.totalIncome
