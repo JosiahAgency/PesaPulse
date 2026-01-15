@@ -363,7 +363,7 @@ fun TransactionItem(tx: MpesaTransactions) {
                 horizontalArrangement = Arrangement.End,
             ) {
                 Text(
-                    text = tx.date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                    text = "${tx.date.format(DateTimeFormatter.ofPattern(" dd MMM yyyy "))} • ${tx.time}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

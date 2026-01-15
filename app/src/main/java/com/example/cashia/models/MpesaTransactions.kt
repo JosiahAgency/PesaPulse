@@ -5,23 +5,23 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private val regexSentTo = Regex(
-    """([A-Z0-9]+)\s+Confirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
 )
 private val regexPaidTo = Regex(
-    """([A-Z0-9]+)\s+Confirmed\.\s*Ksh([\d,]+\.\d{2})\s+paid\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+paid\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
 )
 private val regexAirtime = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+Ksh([\d,]+(?:\.\d{2})?)\s+of\s+airtime\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+Ksh([\d,]+(?:\.\d{2})?)\s+of\s+airtime\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
 )
 private val regexReceived = Regex(
-    """([A-Z0-9]+)\s+Confirmed\.\s*You\s+have\s+received\s+Ksh([\d,]+(?:\.\d{2})?)\s+from\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*You\s+have\s+received\s+Ksh([\d,]+(?:\.\d{2})?)\s+from\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
 )
 private val regexWithdraw = Regex(
-    """([A-Z0-9]+)\s+Confirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+.*?\s*Withdraw\s+Ksh([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s*Withdraw\s+Ksh([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
     RegexOption.IGNORE_CASE
 )
 private val balanceRegex =
@@ -33,7 +33,8 @@ data class MpesaTransactions(
     val recipient: String,
     val date: String,
     val type: String,
-    val balance: Double
+    val balance: Double,
+    val time: String,
 )
 
 fun parseMpesaMessage(message: String): MpesaTransactions? {
@@ -47,70 +48,78 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
             return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
         }
 
+        fun formatTime(timeStr: String): String = timeStr.uppercase().trim()
+
         // Using a "When" style check for cleaner flow
         return when {
             regexSentTo.find(message) != null -> {
                 val match = regexSentTo.find(message)!!
-                val (id, amount, recipient, date) = match.destructured
+                val (id, amount, recipient, date, time) = match.destructured
                 MpesaTransactions(
                     id.trim(),
                     amount.replace(",", "").toDouble(),
                     recipient.trim(),
                     parseDate(date),
                     "expense",
-                    balance
+                    balance,
+                    formatTime(time)
                 )
             }
 
             regexPaidTo.find(message) != null -> {
                 val match = regexPaidTo.find(message)!!
-                val (id, amount, recipient, date) = match.destructured
+                val (id, amount, recipient, date, time) = match.destructured
                 MpesaTransactions(
                     id.trim(),
                     amount.replace(",", "").toDouble(),
                     recipient.trim(),
                     parseDate(date),
                     "expense",
-                    balance
+                    balance,
+                    formatTime(time)
                 )
             }
 
             regexAirtime.find(message) != null -> {
                 val match = regexAirtime.find(message)!!
-                val (id, amount, date) = match.destructured
+                val (id, amount, date, time) = match.destructured
                 MpesaTransactions(
                     id.trim(),
                     amount.replace(",", "").toDouble(),
-                    "Airtime",
+                    "Safaricom Airtime",
                     parseDate(date),
                     "expense",
-                    balance
+                    balance,
+                    formatTime(time)
+
                 )
             }
 
             regexWithdraw.find(message) != null -> {
                 val match = regexWithdraw.find(message)!!
-                val (id, date, amount, recipient) = match.destructured
+                val (id, date, time, amount, recipient) = match.destructured
                 MpesaTransactions(
                     id.trim(),
                     amount.replace(",", "").toDouble(),
                     recipient.trim(),
                     parseDate(date),
                     "expense",
-                    balance
+                    balance,
+                    formatTime(time)
                 )
             }
 
             regexReceived.find(message) != null -> {
                 val match = regexReceived.find(message)!!
-                val (id, amount, recipient, date) = match.destructured
+                val (id, amount, recipient, date, time) = match.destructured
                 MpesaTransactions(
                     id.trim(),
                     amount.replace(",", "").toDouble(),
                     recipient.trim(),
                     parseDate(date),
                     "income",
-                    balance
+                    balance,
+                    formatTime(time)
                 )
             }
 
