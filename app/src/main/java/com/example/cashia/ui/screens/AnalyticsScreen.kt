@@ -5,8 +5,10 @@ import android.widget.DatePicker
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +23,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowCircleDown
+import androidx.compose.material.icons.filled.ArrowCircleUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -36,9 +42,14 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -156,6 +167,20 @@ fun AnalyticsScreen() {
                     }
                 }
                 item {
+                    AnalyticsSummaryHeader(
+                        totalAmount = filteredTransactions.sumOf { it.amount },
+                        transactionCount = filteredTransactions.size,
+                        type = selectedType
+                    )
+                }
+
+                if (filteredTransactions.isNotEmpty()) {
+                    item {
+                        QuickInsightCard(filteredTransactions)
+                    }
+                }
+
+                item {
                     val breakdownTitle = if (selectedType == TransactionType.INCOME)
                         "Top Income Sources" else "Top Expenditure"
 
@@ -182,6 +207,7 @@ fun AnalyticsScreen() {
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
+
                     if (filteredTransactions.isEmpty()) {
                         EmptyAnalyticsState("No transactions to break down")
                     } else {
@@ -193,6 +219,101 @@ fun AnalyticsScreen() {
     }
 }
 
+@Composable
+fun AnalyticsSummaryHeader(totalAmount: Double, transactionCount: Int, type: TransactionType) {
+    val color =
+        if (type == TransactionType.INCOME) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Total ${type.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color
+                )
+                Text(
+                    text = "Ksh ${formatAmount(totalAmount)}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = color
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Surface(
+                    shape = CircleShape,
+                    color = color.copy(alpha = 0.2f),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = transactionCount.toString(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = color
+                        )
+                    }
+                }
+                Text(
+                    text = "Transactions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickInsightCard(transactions: List<MpesaTransactions>) {
+    val largest = transactions.maxByOrNull { it.amount } ?: return
+    val isIncome = largest.type == "income"
+    val label = if (isIncome) "Largest amount received" else "Largest single spend"
+    val iconColor =
+        if (isIncome) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, iconColor.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isIncome) Icons.Default.ArrowCircleDown else Icons.Default.ArrowCircleUp,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Column(modifier = Modifier.padding(5.dp)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Ksh ${formatAmount(largest.amount)} to ${largest.recipient}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun EmptyAnalyticsState(message: String) {
@@ -239,10 +360,13 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
             }
 
             topBreakdown.forEachIndexed { index, entry ->
-                val percentage = (entry.value / totalAmount).toFloat()
+                val percentageRaw = (entry.value / totalAmount)
+                val percentageDisplay = (percentageRaw * 100).roundToInt()
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable {}
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Row(
@@ -255,19 +379,24 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
                             modifier = Modifier.weight(1f, fill = false),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.size(32.dp)
+
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(
+                                        color = if (type == TransactionType.INCOME)
+                                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                        shape = CircleShape
+                                    ), contentAlignment = Alignment.Center
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        "#${index + 1}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Text(
+                                    (index + 1).toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
                             }
                             Spacer(Modifier.width(12.dp))
                             Column {
@@ -279,7 +408,7 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "${(percentage * 100).roundToInt()}% of total",
+                                    text = "$percentageDisplay% of Total",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -294,7 +423,7 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
                     }
                     Spacer(Modifier.height(8.dp))
                     AnimatedProgressBar(
-                        progress = percentage,
+                        progress = percentageRaw.toFloat(),
                         color = if (type == TransactionType.INCOME)
                             MaterialTheme.colorScheme.tertiary
                         else MaterialTheme.colorScheme.error
@@ -400,8 +529,6 @@ fun AnimatedProgressBar(progress: Float, color: Color) {
 fun AnalysisScopeSelector(selectedScope: TimeScope, onScopeChange: (TimeScope) -> Unit) {
     val selectedColor = MaterialTheme.colorScheme.primary
     Column {
-        Text("Select Period", style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.height(4.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -442,8 +569,6 @@ fun TransactionTypeSelector(
     onTypeChange: (TransactionType) -> Unit
 ) {
     Column {
-        Text("Transaction Type", style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)

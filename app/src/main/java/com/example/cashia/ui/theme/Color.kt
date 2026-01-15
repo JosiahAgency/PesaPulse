@@ -2,11 +2,18 @@ package com.example.cashia.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Define your custom colors using the new corporate theme's feel
-val CorporateBlue900 = Color(0xFF0D47A1) // Very deep navy
-val CorporateBlue600 = Color(0xFF1E88E5) // Standard blue
-val Gray500 = Color(0xFF9E9E9E)          // Mid-tone neutral gray
+// Brand Colors
+val NavyPrimary = Color(0xFF003366)      // Professional & Trustworthy
+val NavyLight = Color(0xFF5C85AD)        // For Dark Mode Primary
 
-val SuccessGreen = Color(0xFF4CAF50)     // For 'Success' or 'Go' actions
-val WarningOrange = Color(0xFFFF9800)    // For 'Warning' status
-val ErrorRed = Color(0xFFF44336)         // For 'Error' or 'Stop' status
+// Functional Colors (High Contrast)
+val IncomeGreen = Color(0xFF1B5E20)     // Deep Green for Light Mode (WCAG compliant)
+val IncomeGreenDark = Color(0xFF81C784) // Lighter Green for Dark Mode
+val ExpenseRed = Color(0xFFB71C1C)      // Deep Red for Light Mode
+val ExpenseRedDark = Color(0xFFE57373)  // Lighter Red for Dark Mode
+
+// Neutral/Surface Colors
+val OffWhite = Color(0xFFF8F9FA)        // Cleaner background
+val Charcoal = Color(0xFF121212)        // True Dark Mode background
+val CardGrayLight = Color(0xFFF1F3F4)   // Very light gray for cards
+val CardGrayDark = Color(0xFF242424)    // Elevated surface in dark mode

@@ -27,14 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.SummaryData
@@ -46,13 +44,10 @@ import java.time.format.DateTimeFormatter
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen() {
-    val context = LocalContext.current
+fun DashboardScreen(viewModel: TransactionsViewModel) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
-    val viewModel: TransactionsViewModel = viewModel(
-        factory = TransactionsViewModel.provideFactory(context)
-    )
+
     val state = viewModel.state
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -65,7 +60,7 @@ fun DashboardScreen() {
         })
     }
 
-    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
+    var selectedScope by remember { mutableStateOf(TimeScope.WEEK) }
     val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
         derivedStateOf {
             viewModel.calculateSummary(selectedDate, selectedScope)
@@ -103,7 +98,12 @@ fun DashboardScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    TimeScopedSummaryCard(selectedScope, { selectedScope = it }, summaryData)
+                    TimeScopedSummaryCard(
+                        selectedScope,
+                        { selectedScope = it },
+                        summaryData,
+                        state.latestBalance
+                    )
                 }
                 item {
                     FullMonthCalendar(state.allTransactions, selectedDate, { selectedDate = it })
@@ -118,7 +118,10 @@ fun DashboardScreen() {
 
 @Composable
 fun TimeScopedSummaryCard(
-    scope: TimeScope, onScopeChange: (TimeScope) -> Unit, summaryData: SummaryData
+    scope: TimeScope,
+    onScopeChange: (TimeScope) -> Unit,
+    summaryData: SummaryData,
+    currentBalance: Double
 ) {
     val income = summaryData.income
     val expenses = summaryData.expenses
@@ -138,7 +141,9 @@ fun TimeScopedSummaryCard(
         val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
         "Monthly Summary: ${startDate.format(monthYearFormatter)}"
     } else {
-        "Summary for ${startDate.format(fullDateFormatter)}"
+        val start = startDate.format(monthDayFormatter)
+        val end = endDate.format(fullDateFormatter)
+        "Weekly Summary: $start - $end"
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -171,19 +176,38 @@ fun TimeScopedSummaryCard(
                             .padding(vertical = 8.dp))
                 }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
 
-            Column {
-                Text(
-                    "${scope.name.lowercase().replaceFirstChar { it.uppercase() }} Overview",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = dateDisplay,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                )
+                Column {
+                    Text(
+                        "${scope.name.lowercase().replaceFirstChar { it.uppercase() }} Overview",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = dateDisplay,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "Current Balance", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Ksh ${formatAmount(currentBalance)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
