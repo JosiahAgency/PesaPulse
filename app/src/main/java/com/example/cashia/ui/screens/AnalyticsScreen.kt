@@ -11,10 +11,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,16 +44,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,14 +60,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
@@ -76,6 +80,8 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Calendar
@@ -103,32 +109,30 @@ fun AnalyticsScreen() {
 
     LaunchedEffect(selectedScope) {
         if (selectedScope != TimeScope.CUSTOM) {
-            val start = when (selectedScope) {
-                TimeScope.DAY -> today
-                TimeScope.WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-                TimeScope.MONTH -> today.withDayOfMonth(1)
-                else -> today // Should not happen but handles exhaustive check
-            }
-            val end = when (selectedScope) {
-                TimeScope.DAY -> today
-                TimeScope.WEEK -> today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
-                TimeScope.MONTH -> today.with(TemporalAdjusters.lastDayOfMonth())
-                else -> today // Should not happen but handles exhaustive check
+            val (start, end) = when (selectedScope) {
+                TimeScope.DAY -> today to today
+                TimeScope.WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)) to today.with(
+                    TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY)
+                )
+
+                TimeScope.MONTH -> today.withDayOfMonth(1) to today.with(TemporalAdjusters.lastDayOfMonth())
+                else -> startDate to endDate
             }
             startDate = start
             endDate = end
         }
     }
 
-    val filteredTransactions = remember(transactions, selectedType, startDate, endDate) {
+    val startTs = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val endTs =
+        endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    val filteredTransactions = remember(transactions, selectedType, startTs, endTs) {
         transactions.filter { tx ->
-            val date = LocalDate.parse(tx.date, DateTimeFormatter.ISO_LOCAL_DATE)
-            val isDateInRange = !date.isBefore(startDate) && !date.isAfter(endDate)
-            val isTypeMatch = when (selectedType) {
-                TransactionType.INCOME -> tx.type == "income"
-                TransactionType.EXPENSE -> tx.type == "expense"
-            }
+            val isDateInRange = tx.timestamp in startTs..endTs
+            val isTypeMatch = tx.type == selectedType.name.lowercase()
             isDateInRange && isTypeMatch
+
         }
     }
 
@@ -137,7 +141,7 @@ fun AnalyticsScreen() {
     ) { innerPadding ->
         PullToRefreshBox(
             isRefreshing = state.isLoading,
-            onRefresh = { viewModel.fetchTransactions() },
+            onRefresh = { viewModel.refreshFromSms() },
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
@@ -149,9 +153,25 @@ fun AnalyticsScreen() {
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        AnalysisScopeSelector(selectedScope, onScopeChange = { selectedScope = it })
-                        TransactionTypeSelector(selectedType, onTypeChange = { selectedType = it })
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TransactionTypeSelector(
+                                selectedType,
+                                onTypeChange = { selectedType = it })
+                            VerticalDivider(
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .padding(horizontal = 4.dp)
+                            )
+                            AnalysisScopeSelector(
+                                selectedScope,
+                                onScopeChange = { selectedScope = it })
+                        }
                         AdjustableDateRangeDisplay(
                             startDate = startDate,
                             endDate = endDate,
@@ -173,6 +193,9 @@ fun AnalyticsScreen() {
                         type = selectedType
                     )
                 }
+//                item {
+//                    TrendChart(transactions = filteredTransactions, type = selectedType)
+//                }
 
                 if (filteredTransactions.isNotEmpty()) {
                     item {
@@ -360,7 +383,7 @@ fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionTyp
             }
 
             topBreakdown.forEachIndexed { index, entry ->
-                val percentageRaw = (entry.value / totalAmount)
+                val percentageRaw = if (totalAmount > 0) (entry.value / totalAmount) else 0.0
                 val percentageDisplay = (percentageRaw * 100).roundToInt()
 
                 Column(
@@ -708,5 +731,181 @@ fun AdjustableDateRangeDisplay(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun TrendChart(
+    transactions: List<MpesaTransactions>,
+    type: TransactionType,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    // Use slightly transparent base colors so the selected one pops
+    val baseColor = if (type == TransactionType.INCOME)
+        MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+    val unselectedColor = baseColor.copy(alpha = 0.5f)
+
+    var selectedKey by remember { mutableStateOf<String?>(null) }
+
+    // --- Data Preparation (Same as before) ---
+    val groupedData = remember(transactions) {
+        val daily = transactions.groupBy { it.date }
+            .mapValues { it.value.sumOf { tx -> tx.amount } }
+
+        if (daily.size > 31) {
+            transactions.groupBy { it.date.substring(0, 7) }
+                .mapValues { it.value.sumOf { tx -> tx.amount } }
+                .toSortedMap()
+        } else {
+            daily.toSortedMap()
+        }
+    }
+
+    val keysList = remember(groupedData) { groupedData.keys.toList() }
+    val maxAmount = remember(groupedData) { (groupedData.values.maxOrNull() ?: 1.0).toFloat() }
+    val yAxisLabels = listOf(maxAmount, maxAmount / 2, 0f)
+
+    OutlinedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Financial Trend", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Tap a bar to see details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(modifier = Modifier.height(24.dp)) // More space for tooltip at top
+
+            Row(modifier = Modifier
+                .height(220.dp)
+                .fillMaxWidth()) {
+                // --- Y-AXIS LABELS ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(end = 8.dp, bottom = 2.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.End
+                ) {
+                    yAxisLabels.forEach {
+                        Text(formatCompactAmount(it.toDouble()), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                // --- MAIN CHART AREA ---
+                // We use BoxWithConstraints to define the boundaries for alignment
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(start = 8.dp)
+                ) {
+                    // Layer 1: Grid Lines (Background)
+                    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                        repeat(3) { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)) }
+                    }
+
+                    // Layer 2: The Bars (Middle)
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        groupedData.forEach { (key, amount) ->
+                            val isSelected = selectedKey == key
+                            // Reserve top 20% space so tooltip doesn't overlap top grid line too much
+                            val barHeightRatio = ((amount.toFloat() / maxAmount) * 0.8f).coerceAtLeast(0.05f)
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(barHeightRatio)
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                    .background(if (isSelected) baseColor else unselectedColor)
+                                    .clickable {
+                                        if (selectedKey != key) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedKey = key
+                                        } else {
+                                            selectedKey = null
+                                        }
+                                    }
+                            )
+                        }
+                    }
+
+                    // Layer 3: The Tooltip Overlay (Top)
+                    // This sits on top of everything and is not constrained by bar width.
+                    selectedKey?.let { key ->
+                        val selectedIndex = keysList.indexOf(key)
+                        val amount = groupedData[key] ?: 0.0
+
+                        // Calculate horizontal position (-1 is start, 0 is center, 1 is end)
+                        val totalItems = keysList.size
+                        val horizontalBias = if (totalItems > 1) {
+                            (selectedIndex.toFloat() / (totalItems - 1)) * 2f - 1f
+                        } else 0f
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.inverseSurface, // Darker background for contrast
+                            shape = RoundedCornerShape(4.dp),
+                            shadowElevation = 4.dp,
+                            // Align horizontally based on index, vertically at the top (-1f)
+                            modifier = Modifier
+                                .align(BiasAlignment(horizontalBias, -1f))
+                                .zIndex(1f) // Ensure it's on top
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                // Small arrow pointing down (optional aesthetic)
+                                // Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.inverseSurface).rotate(45f))
+
+                                Text(
+                                    text = "Ksh ${formatCompactAmount(amount)}",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // --- X-AXIS LABELS (Bottom) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, start = 40.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (keysList.isNotEmpty()) {
+                    Text(formatXLabel(keysList.first()), style = MaterialTheme.typography.labelSmall)
+                    if (keysList.size > 2) {
+                        Text(formatXLabel(keysList[keysList.size / 2]), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(formatXLabel(keysList.last()), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+fun formatCompactAmount(amount: Double): String {
+    return when {
+        amount >= 1_000_000 -> "${(amount / 1_000_000).toInt()}M"
+        amount >= 1_000 -> "${(amount / 1_000).toInt()}k"
+        else -> amount.toInt().toString()
+    }
+}
+
+fun formatXLabel(key: String): String {
+    return if (key.length > 7) {
+        val date = LocalDate.parse(key)
+        date.format(DateTimeFormatter.ofPattern("dd MMM"))
+    } else {
+        val yearMonth = java.time.YearMonth.parse(key)
+        yearMonth.format(DateTimeFormatter.ofPattern("MMM yy"))
     }
 }

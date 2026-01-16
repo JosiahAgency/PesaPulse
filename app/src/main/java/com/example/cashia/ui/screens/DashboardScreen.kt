@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -47,17 +48,17 @@ import java.time.format.DateTimeFormatter
 fun DashboardScreen(viewModel: TransactionsViewModel) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
-
     val state = viewModel.state
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(lifecycleOwner) {
-
-        lifecycleOwner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.onPermissionGranted()
             }
-        })
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     var selectedScope by remember { mutableStateOf(TimeScope.WEEK) }
@@ -88,7 +89,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
         }) { padding ->
         PullToRefreshBox(
             isRefreshing = state.isLoading, onRefresh = {
-                viewModel.fetchTransactions()
+                viewModel.refreshFromSms()
             }, modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -108,8 +109,23 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 item {
                     FullMonthCalendar(state.allTransactions, selectedDate, { selectedDate = it })
                 }
+                val transactionsForDay = state.allTransactions.filter {
+                    LocalDate.parse(it.date) == selectedDate
+                }
                 item {
-                    DailyTransactions(state.allTransactions, selectedDate, { selectedDate = it })
+                    Text(
+                        text = selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (transactionsForDay.isEmpty()) {
+                    item { EmptyStateMessage("No Transactions On This Day") }
+                } else {
+                    // Use 'items' directly in the main LazyColumn
+                    items(transactionsForDay, key = { it.id }) { tx ->
+                        TransactionItem(tx)
+                    }
                 }
             }
         }

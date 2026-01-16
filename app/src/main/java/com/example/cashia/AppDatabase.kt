@@ -1,0 +1,30 @@
+package com.example.cashia
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import com.example.cashia.daos.TransactionDao
+import com.example.cashia.models.MpesaTransactions
+
+@Database(entities = [MpesaTransactions::class], version = 1)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun transactionDao(): TransactionDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "pesa_pulse_db"
+                ).build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}

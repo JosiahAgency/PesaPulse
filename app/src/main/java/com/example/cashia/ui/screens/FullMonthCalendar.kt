@@ -60,6 +60,13 @@ fun FullMonthCalendar(
     val monthTitle = currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() } +
             " " + currentMonth.year
 
+    val incomeDates = remember(allTransactions) {
+        allTransactions.filter { it.type == "income" }.map { it.date }.toSet()
+    }
+    val expenseDates = remember(allTransactions) {
+        allTransactions.filter { it.type == "expense" }.map { it.date }.toSet()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,10 +118,10 @@ fun FullMonthCalendar(
             }
         }
         Spacer(Modifier.height(4.dp))
-
-        val transactionsByDate = remember(allTransactions) {
-            allTransactions.groupBy { it.date }
-        }
+//
+//        val transactionsByDate = remember(allTransactions) {
+//            allTransactions.groupBy { it.date }
+//        }
 
         monthGrid.forEach { week ->
             Row(
@@ -126,19 +133,15 @@ fun FullMonthCalendar(
                         Box(modifier = Modifier.size(40.dp))
                     } else {
                         val isSelected = day == selectedDate
-
-                        val dayString = day.toString()
-                        val dayTransactions = transactionsByDate[dayString] ?: emptyList()
-
-                        val hasIncome = dayTransactions.any { it.type == "income" }
-                        val hasExpense = dayTransactions.any { it.type == "expense" }
+                        val dayIsoString = day.toString()
+                        val hasIncome = incomeDates.contains(dayIsoString)
+                        val hasExpense = expenseDates.contains(dayIsoString)
 
                         val backgroundColor = when {
                             isSelected -> MaterialTheme.colorScheme.primary
-                            dayTransactions.isNotEmpty() -> MaterialTheme.colorScheme.surfaceVariant.copy(
+                            hasIncome || hasExpense -> MaterialTheme.colorScheme.primaryContainer.copy(
                                 alpha = 0.3f
                             )
-
                             else -> Color.Transparent
                         }
 

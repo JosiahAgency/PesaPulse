@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -67,17 +68,21 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
 
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredTransactions = remember(searchQuery, state.allTransactions) {
-        state.allTransactions.filter {
-            it.recipient.contains(searchQuery, ignoreCase = true) ||
-                    it.id.contains(searchQuery, ignoreCase = true)
+    val filteredTransactions by remember(searchQuery, state.allTransactions) {
+        derivedStateOf {
+            state.allTransactions.filter {
+                it.recipient.contains(searchQuery, ignoreCase = true) ||
+                        it.id.contains(searchQuery, ignoreCase = true)
+            }
         }
     }
 
-    val groupedTransactions = remember(filteredTransactions) {
-        filteredTransactions
-            .groupBy { LocalDate.parse(it.date) }
-            .toSortedMap(compareByDescending { it })
+    val groupedTransactions by remember(filteredTransactions) {
+        derivedStateOf {
+            filteredTransactions
+                .groupBy { LocalDate.parse(it.date) }
+                .toSortedMap(compareByDescending { it })
+        }
     }
 
     Scaffold(
@@ -86,7 +91,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
         PullToRefreshBox(
             isRefreshing = state.isLoading,
             onRefresh = {
-                viewModel.fetchTransactions()
+                viewModel.refreshFromSms()
             },
             modifier = Modifier
                 .padding(innerPadding)

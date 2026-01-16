@@ -8,8 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.AppDatabase
 import com.example.cashia.Utility.SmsRepository
 import com.example.cashia.Utility.TimeScope
+import com.example.cashia.Utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -36,6 +38,9 @@ data class SummaryData(
 )
 
 class TransactionsViewModel(private val context: Context) : ViewModel() {
+    private val database = AppDatabase.getDatabase(context)
+    private val dao = database.transactionDao()
+
     var state by mutableStateOf(TransactionState())
         private set
 
@@ -44,60 +49,59 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
 
     init {
-        fetchTransactions()
+        observeDatabase()
+        refreshFromSms()
     }
 
     fun onPermissionGranted() {
-        if (state.allTransactions.isEmpty()) {
-            fetchTransactions()
+        refreshFromSms()
+    }
+
+    private fun observeDatabase() {
+        viewModelScope.launch {
+            dao.getAllTransactions().collect { transactions ->
+                updateStateWith(transactions)
+            }
         }
     }
 
-    fun fetchTransactions() {
+    fun refreshFromSms() {
         viewModelScope.launch(Dispatchers.IO) {
             state = state.copy(isLoading = true)
             try {
-                val messages = SmsRepository.fetchMpesaMessages(context)
-                val parsedTransactions = messages.mapNotNull { parseMpesaMessage(it) }
-
-                transactionsByDate = parsedTransactions.groupBy {
-                    LocalDate.parse(it.date, formatter)
-                }
-
-                val now = LocalDate.now()
-                val monthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-
-                val currentMonthTransactions = parsedTransactions.filter { tx ->
-                    val date = LocalDate.parse(tx.date, formatter)
-                    date.year == now.year && date.monthValue == now.monthValue
-                }
-
-                val latestBalance = currentMonthTransactions
-                    .maxByOrNull { LocalDate.parse(it.date, formatter) }
-                    ?.balance ?: 0.0
-
-                val totalIncome = currentMonthTransactions
-                    .filter { it.type == "income" }
-                    .sumOf { it.amount }
-
-                val totalExpenses = currentMonthTransactions
-                    .filter { it.type == "expense" }
-                    .sumOf { it.amount }
-
-                state = state.copy(
-                    allTransactions = parsedTransactions,
-                    latestBalance = latestBalance,
-                    totalIncome = totalIncome,
-                    totalExpenses = totalExpenses,
-                    currentMonth = "$monthName ${now.year}",
-                    isLoading = false
-                )
+                syncTransactions(context, database)
             } catch (e: Exception) {
-                Log.e("PesaPulse Error", "Error fetching", e)
+                Log.e("PesaPulse", "Sync failed", e)
             } finally {
                 state = state.copy(isLoading = false)
             }
         }
+    }
+
+    private fun updateStateWith(transactions: List<MpesaTransactions>) {
+        val now = LocalDate.now()
+        val currentMonthTransactions = transactions.filter {
+            val date = LocalDate.parse(it.date)
+            date.year == now.year && date.monthValue == now.monthValue
+        }
+        transactionsByDate = transactions.groupBy { LocalDate.parse(it.date) }
+
+        state = state.copy(
+            allTransactions = transactions,
+            latestBalance = currentMonthTransactions.firstOrNull()?.balance ?: 0.0,
+            totalIncome = currentMonthTransactions.filter { it.type == "income" }
+                .sumOf { it.amount },
+            totalExpenses = currentMonthTransactions.filter { it.type == "expense" }
+                .sumOf { it.amount },
+            currentMonth = "${
+                now.month.getDisplayName(
+                    TextStyle.FULL,
+                    Locale.getDefault()
+                )
+            } ${now.year}",
+            isLoading = false
+
+        )
     }
 
     companion object {
@@ -114,31 +118,26 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
-        val startDate = when (scope) {
-            TimeScope.DAY -> selectedDate
-            TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-            TimeScope.MONTH -> selectedDate.withDayOfMonth(1)
-            TimeScope.CUSTOM -> selectedDate
+        val (startDate, enDate) = when (scope) {
+            TimeScope.DAY -> selectedDate to selectedDate
+            TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)) to selectedDate.with(
+                TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)
+            )
+
+            TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
+            TimeScope.CUSTOM -> selectedDate to selectedDate
         }
 
-        val endDate = when (scope) {
-            TimeScope.DAY -> selectedDate
-            TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
-            TimeScope.MONTH -> selectedDate.with(TemporalAdjusters.lastDayOfMonth())
-            TimeScope.CUSTOM -> selectedDate
+        val filtered = state.allTransactions.filter {
+            val d = LocalDate.parse(it.date)
+            !d.isBefore(startDate) && !d.isAfter(enDate)
         }
 
-        var totalIncome = 0.0
-        var totalExpenses = 0.0
-
-        var current = startDate
-        while (!current.isAfter(endDate)) {
-            transactionsByDate[current]?.forEach { tx ->
-                if (tx.type == "income") totalIncome += tx.amount
-                else if (tx.type == "expense") totalExpenses += tx.amount
-            }
-            current = current.plusDays(1)
-        }
-        return SummaryData(totalIncome, totalExpenses, startDate, endDate)
+        return SummaryData(
+            income = filtered.filter { it.type == "income" }.sumOf { it.amount },
+            expenses = filtered.filter { it.type == "expense" }.sumOf { it.amount },
+            startDate = startDate,
+            endDate = enDate
+        )
     }
 }
