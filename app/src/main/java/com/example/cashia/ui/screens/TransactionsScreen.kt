@@ -1,6 +1,8 @@
 package com.example.cashia.ui.screens
 
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,12 +19,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ArrowCircleDown
-import androidx.compose.material.icons.filled.ArrowCircleUp
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +35,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -43,10 +45,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import java.text.NumberFormat
@@ -61,10 +61,14 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
     val expenseColor = MaterialTheme.colorScheme.error
     val balanceColor = MaterialTheme.colorScheme.primary
     val state = viewModel.state
+    var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val totalIncome = state.totalIncome
     val totalExpenses = state.totalExpenses
     val latestBalance = state.latestBalance
+    val totalFees = remember(state.allTransactions) {
+        state.allTransactions.sumOf { it.transactionCost }
+    }
 
     var searchQuery by remember { mutableStateOf("") }
 
@@ -88,6 +92,17 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
+        selectedTransaction?.let { tx ->
+            TransactionDetailDialog(
+                tx = tx,
+                onDismiss = { selectedTransaction = null },
+                onEdit = { /* Handle Edit logic */ },
+                onDelete = {
+//                    viewModel.deleteTransaction(it)
+//                    selectedTransaction = null
+                }
+            )
+        }
         PullToRefreshBox(
             isRefreshing = state.isLoading,
             onRefresh = {
@@ -146,24 +161,55 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
                                 .padding(20.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.AccountBalanceWallet,
-                                    contentDescription = null,
-                                    tint = balanceColor,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        "Running Balance",
-                                        style = MaterialTheme.typography.labelMedium
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountBalanceWallet,
+                                        contentDescription = null,
+                                        tint = balanceColor,
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                    Text(
-                                        text = "Ksh ${formatAmount(latestBalance)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = balanceColor
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            "Running Balance",
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                        Text(
+                                            text = "Ksh ${formatAmount(latestBalance)}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = balanceColor
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+
+                                    Icon(
+                                        imageVector = Icons.Default.TrendingDown,
+                                        contentDescription = null,
+                                        tint = expenseColor,
+                                        modifier = Modifier.size(20.dp)
                                     )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Total Transactions Cost",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Ksh ${formatAmount(totalFees)}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = expenseColor
+                                        )
+                                    }
                                 }
                             }
                             HorizontalDivider(
@@ -280,7 +326,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
                             }
                         }
                         items(items = dailyTransactions, key = { it.id }) { tx ->
-                            TransactionItem(tx)
+                            TransactionItem(tx, onClick = { selectedTransaction = tx })
                         }
                     }
                 }
@@ -302,17 +348,17 @@ fun EmptyStateMessage(message: String) {
 }
 
 @Composable
-fun TransactionItem(tx: MpesaTransactions) {
-
+fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit) {
     val isIncome = tx.type == "income"
     val dataColor = if (isIncome) {
         MaterialTheme.colorScheme.tertiary
     } else {
         MaterialTheme.colorScheme.error
     }
-
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -373,6 +419,109 @@ fun TransactionItem(tx: MpesaTransactions) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun TransactionDetailDialog(
+    tx: MpesaTransactions,
+    onDismiss: () -> Unit,
+    onEdit: (MpesaTransactions) -> Unit,
+    onDelete: (MpesaTransactions) -> Unit
+) {
+    val isIncome = tx.type == "income"
+    val typeColor =
+        if (isIncome) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+    val typeIcon = if (isIncome) Icons.Default.TrendingUp else Icons.Default.TrendingDown
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = typeIcon,
+                contentDescription = null,
+                tint = typeColor,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = if (isIncome) "Income Received" else "Payment Sent",
+                style = MaterialTheme.typography.headlineSmall,
+                color = typeColor
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Transaction ID", tx.id)
+                DetailRow(if (isIncome) "Sender" else "Recepient", tx.recipient)
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                DetailRow(
+                    label = "Amount",
+                    value = "${if (isIncome) "+" else "-"} Ksh ${formatAmount(tx.amount)}",
+                    isBold = true,
+                    valueColor = typeColor
+                )
+                if (!isIncome) {
+                    DetailRow("Transaction Cost", " - Ksh ${formatAmount(tx.transactionCost)}")
+                }
+                val total = if (tx.type == "expense") tx.amount + tx.transactionCost else tx.amount
+                DetailRow(
+                    label = if (isIncome) "Net Gain" else "Total Cost",
+                    value = "${if (isIncome) "+" else "-"} Ksh ${formatAmount(total)}",
+                    isBold = true,
+                    valueColor = typeColor
+                )
+                HorizontalDivider()
+                DetailRow("Date", tx.date)
+                DetailRow("Time", tx.time)
+                DetailRow("Balance After ", "Ksh ${formatAmount(tx.balance)}")
+            }
+        },
+        confirmButton = {
+//            TextButton(onClick = { onEdit(tx) }) {
+//                Text("Edit")
+//            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) {
+                    Text("Close")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun DetailRow(
+    label: String,
+    value: String,
+    isBold: Boolean = false,
+    valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+) {
+    Row() {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = value,
+                style = if (isBold) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isBold) FontWeight.ExtraBold else FontWeight.Normal,
+                color = valueColor,
+                modifier = Modifier.weight(1.2f, fill = false)
+            )
         }
     }
 }

@@ -26,6 +26,7 @@ data class TransactionState(
     val latestBalance: Double = 0.0,
     val totalIncome: Double = 0.0,
     val totalExpenses: Double = 0.0,
+    val totalTransactionCost: Double = 0.0,
     val currentMonth: String = "",
     val isLoading: Boolean = true
 )
@@ -90,9 +91,9 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             allTransactions = transactions,
             latestBalance = currentMonthTransactions.firstOrNull()?.balance ?: 0.0,
             totalIncome = currentMonthTransactions.filter { it.type == "income" }
-                .sumOf { it.amount },
+                .sumOf { it.amount + it.transactionCost },
             totalExpenses = currentMonthTransactions.filter { it.type == "expense" }
-                .sumOf { it.amount },
+                .sumOf { it.amount + it.transactionCost },
             currentMonth = "${
                 now.month.getDisplayName(
                     TextStyle.FULL,
@@ -100,7 +101,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 )
             } ${now.year}",
             isLoading = false
-
         )
     }
 
@@ -123,7 +123,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)) to selectedDate.with(
                 TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)
             )
-
             TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
             TimeScope.CUSTOM -> selectedDate to selectedDate
         }
@@ -132,10 +131,11 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             val d = LocalDate.parse(it.date)
             !d.isBefore(startDate) && !d.isAfter(enDate)
         }
-
         return SummaryData(
-            income = filtered.filter { it.type == "income" }.sumOf { it.amount },
-            expenses = filtered.filter { it.type == "expense" }.sumOf { it.amount },
+            income = filtered.filter { it.type == "income" }
+                .sumOf { it.amount + it.transactionCost },
+            expenses = filtered.filter { it.type == "expense" }
+                .sumOf { it.amount + it.transactionCost },
             startDate = startDate,
             endDate = enDate
         )

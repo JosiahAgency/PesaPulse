@@ -49,6 +49,8 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
     val state = viewModel.state
+    var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
+
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -87,6 +89,17 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 )
             }
         }) { padding ->
+        selectedTransaction?.let { tx ->
+            TransactionDetailDialog(
+                tx = tx,
+                onDismiss = { selectedTransaction = null },
+                onEdit = { /* Handle Edit logic */ },
+                onDelete = {
+//                    viewModel.deleteTransaction(it)
+//                    selectedTransaction = null
+                }
+            )
+        }
         PullToRefreshBox(
             isRefreshing = state.isLoading, onRefresh = {
                 viewModel.refreshFromSms()
@@ -122,9 +135,8 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 if (transactionsForDay.isEmpty()) {
                     item { EmptyStateMessage("No Transactions On This Day") }
                 } else {
-                    // Use 'items' directly in the main LazyColumn
                     items(transactionsForDay, key = { it.id }) { tx ->
-                        TransactionItem(tx)
+                        TransactionItem(tx, onClick = { selectedTransaction = tx })
                     }
                 }
             }
@@ -293,70 +305,6 @@ fun SummaryItem(label: String, amount: Double, color: Color, icon: ImageVector) 
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-        }
-    }
-}
-
-@Composable
-fun DailyTransactions(
-    allTransactions: List<MpesaTransactions>,
-    selectedDate: LocalDate,
-    onDateChange: (LocalDate) -> Unit
-) {
-    val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-    val today = LocalDate.now()
-
-    val days = (0 until 30).map { today.minusDays(it.toLong()) }.reversed()
-
-    val selectedPageIndex = days.indexOf(selectedDate).coerceIn(0, days.lastIndex)
-
-    val pagerState = rememberPagerState(initialPage = selectedPageIndex)
-
-    LaunchedEffect(selectedDate) {
-        val page = days.indexOf(selectedDate)
-        if (page != pagerState.currentPage && page != -1) {
-            pagerState.animateScrollToPage(page)
-        }
-    }
-
-    Column(
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text(
-            text = selectedDate.format(
-                DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")
-            ),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        val transactionsForDay = allTransactions.filter {
-            LocalDate.parse(it.date, formatter) == selectedDate
-        }
-        if (transactionsForDay.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "No Transactions On This Day",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.heightIn(max = 400.dp)
-            ) {
-                items(transactionsForDay) { tx ->
-                    TransactionItem(tx)
-                }
-            }
-
         }
     }
 }

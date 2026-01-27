@@ -99,7 +99,6 @@ fun PesaPulseApp(
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val state = sharedViewModel.state
     Scaffold(
         topBar = {
             TopAppBar(
@@ -113,8 +112,8 @@ fun PesaPulseApp(
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface, // Clean background
-                    titleContentColor = MaterialTheme.colorScheme.primary, // Brand color for text
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
                     actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 actions = {
@@ -167,6 +166,7 @@ fun PesaPulseApp(
                         )
                     )
                 }
+
             }
         }) { innerPadding ->
         NavHost(
