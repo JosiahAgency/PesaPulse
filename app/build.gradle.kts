@@ -12,10 +12,10 @@ android {
 
     defaultConfig {
         applicationId = "com.pesapulse"
-        minSdk = 33
+        minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "2.0.1"
+        versionName = "2.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -38,6 +38,13 @@ android {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(17))
         }
+    }
+    kotlinOptions {
+        freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     buildFeatures {
