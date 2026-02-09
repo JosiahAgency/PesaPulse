@@ -72,6 +72,10 @@ import com.example.cashia.Utility.TimeScope
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.SummaryData
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
+import com.example.cashia.ui.screens.AllTransactions.TransactionDetailDialog
+import com.example.cashia.ui.screens.AllTransactions.TransactionItem
+import com.example.cashia.ui.screens.AllTransactions.formatAmount
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -165,7 +169,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                     )
                 }
                 item {
-                    FullMonthCalendar(state.allTransactions, selectedDate, { selectedDate = it })
+                    WeeklyCalendar(state.allTransactions, selectedDate) { selectedDate = it }
                 }
                 val transactionsForDay = state.allTransactions.filter {
                     LocalDate.parse(it.date) == selectedDate

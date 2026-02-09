@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,9 +63,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
-import com.example.cashia.ui.screens.AnalyticsScreen
+import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
+import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
+import com.example.cashia.ui.screens.CalendarScreen
 import com.example.cashia.ui.screens.DashboardScreen
-import com.example.cashia.ui.screens.TransactionScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
 
@@ -115,10 +115,11 @@ fun PesaPulseApp(
     val context = LocalContext.current
     val navController = rememberNavController()
     val paths = listOf(
-        AppDestinations.Transactions,
         AppDestinations.Dashboard,
+        AppDestinations.Calendar,
         AppDestinations.Analytics,
-    )
+        AppDestinations.Transactions,
+        )
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -171,19 +172,21 @@ fun PesaPulseApp(
                 modifier = Modifier.padding(innerPadding)
 
             ) {
+                composable(AppDestinations.Dashboard.route) {
+                    DashboardScreen(viewModel = sharedViewModel)
+                }
+                composable(AppDestinations.Calendar.route) {
+                    CalendarScreen(viewModel = sharedViewModel)
+                }
+                composable(AppDestinations.Analytics.route) {
+                    AnalyticsScreen()
+                }
                 composable(AppDestinations.Transactions.route) {
                     TransactionScreen(
                         viewModel = sharedViewModel,
                         onNavigateBack = { navController.popBackStack() })
                 }
-                composable(AppDestinations.Dashboard.route) {
-                    DashboardScreen(viewModel = sharedViewModel)
-                }
-                composable(AppDestinations.Analytics.route) {
-                    AnalyticsScreen()
-                }
             }
-
         }
     }
 }

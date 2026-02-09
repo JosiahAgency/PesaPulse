@@ -1,4 +1,4 @@
-package com.example.cashia.ui.screens
+package com.example.cashia.ui.screens.AllTransactions
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -16,13 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
@@ -41,7 +42,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -64,7 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.ui.screens.Analytics.formatCompactAmount
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -101,7 +102,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
 
     Scaffold(
         containerColor = Color.Transparent,
-    ) { innerPadding ->
+    ) { padding ->
         selectedTransaction?.let { tx ->
             TransactionDetailDialog(
                 tx = tx,
@@ -118,7 +119,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
                 viewModel.refreshFromSms()
             },
             modifier = Modifier
-                .padding(innerPadding)
+                .padding()
                 .fillMaxSize()
         ) {
             LazyColumn(
@@ -165,51 +166,94 @@ fun CompactTransactionSummary(balance: Double, income: Double, expenses: Double)
     val colorScheme = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
-        color = colorScheme.surface.copy(alpha = 0.4f),
-        border = BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.05f))
+        color = colorScheme.surface.copy(alpha = 0.3f),
+        border = BorderStroke(1.dp, colorScheme.onSurface.copy(alpha = 0.1f))
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SummarySmallItem("Income", income, MaterialTheme.colorScheme.tertiary)
-            Surface(
-                color = colorScheme.primary.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("BALANCE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-                    Text("Ksh ${formatAmount(balance)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colorScheme.primary
+            SummarySmallItem(
+                "Income",
+                income,
+                MaterialTheme.colorScheme.tertiary,
+                icon = Icons.Default.TrendingUp
+            )
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colorScheme.primary.copy(alpha = 0.08f))
+                    .border(
+                        0.5.dp,
+                        colorScheme.primary.copy(alpha = 0.2f),
+                        RoundedCornerShape(20.dp)
                     )
-                }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "BALANCE",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = "Ksh ${formatAmount(balance)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black, // Consistent with dashboard headers
+                    color = colorScheme.onSurface
+                )
             }
-            SummarySmallItem("Expenses", expenses, MaterialTheme.colorScheme.error)
+            SummarySmallItem(
+                "Expenses", expenses, colorScheme.error, icon = Icons.Default.TrendingDown,
+                alignEnd = true
+            )
         }
     }
 }
 
 @Composable
-fun SummarySmallItem(label: String, amount: Double, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun SummarySmallItem(
+    label: String, amount: Double, color: Color, icon: ImageVector,
+    alignEnd: Boolean = false
+) {
+    Column(
+        horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (!alignEnd) Icon(
+                icon,
+                null,
+                tint = color.copy(alpha = 0.6f),
+                modifier = Modifier.size(12.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Bold
+            )
+            if (alignEnd) Icon(
+                icon,
+                null,
+                tint = color.copy(alpha = 0.6f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
         Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            "Ksh ${formatAmount(amount)}",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
+            text = formatCompactAmount(amount), // Use compact for small items
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Black,
             color = color
         )
     }
@@ -280,6 +324,7 @@ fun ModernStickyHeader(date: LocalDate) {
         )
     }
 }
+
 @Composable
 fun EmptyStateMessage(message: String) {
     Column(
@@ -459,9 +504,8 @@ fun TransactionDetailDialog(
                     text = "${if (isIncome) "+" else "-"} Ksh ${formatAmount(total)}",
                     style = MaterialTheme.typography.displaySmall.copy(
                         fontWeight = FontWeight.Black,
-                        brush = if (isIncome) null else primaryGradient()
                     ),
-                    color = if (isIncome) colorScheme.tertiary else Color.Unspecified
+                    color = if (isIncome) colorScheme.tertiary else colorScheme.error
                 )
                 Column(
                     modifier = Modifier
