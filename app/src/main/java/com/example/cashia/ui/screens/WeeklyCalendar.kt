@@ -47,20 +47,6 @@ fun WeeklyCalendar(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
-    LaunchedEffect(pagerState.currentPage) {
-        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
-            val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
-
-            if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
-                val targetDate = if (newMonth == YearMonth.now()) {
-                    LocalDate.now()
-                } else {
-                    newMonth.atDay(1)
-                }
-                onDateSelected(targetDate)
-            }
-        }
-    }
     LaunchedEffect(selectedDate) {
         val today = LocalDate.now()
         val startOfTodayWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
