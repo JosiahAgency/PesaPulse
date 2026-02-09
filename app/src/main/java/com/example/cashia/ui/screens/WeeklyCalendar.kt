@@ -31,6 +31,7 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.temporal.TemporalAdjusters
 
 @Composable
@@ -46,8 +47,20 @@ fun WeeklyCalendar(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
+    LaunchedEffect(pagerState.currentPage) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
+            val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
 
-    // Sync pager with selectedDate changes from external sources (like the full calendar)
+            if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
+                val targetDate = if (newMonth == YearMonth.now()) {
+                    LocalDate.now()
+                } else {
+                    newMonth.atDay(1)
+                }
+                onDateSelected(targetDate)
+            }
+        }
+    }
     LaunchedEffect(selectedDate) {
         val today = LocalDate.now()
         val startOfTodayWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))

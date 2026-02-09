@@ -60,6 +60,23 @@ fun FullMonthCalendar(
     var currentMonth = remember(pagerState.currentPage) {
         YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
     }
+    LaunchedEffect(pagerState.currentPage) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
+            val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
+
+            // Only update if the currently selected date isn't already in the new month
+            // This prevents overwriting a specific day selection when just clicking within the month
+            if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
+                // Default to the 1st of the month (or today if swiping back to the current month)
+                val targetDate = if (newMonth == YearMonth.now()) {
+                    LocalDate.now()
+                } else {
+                    newMonth.atDay(1)
+                }
+                onDateSelected(targetDate)
+            }
+        }
+    }
     LaunchedEffect(selectedDate) {
         val targetMonth = YearMonth.from(selectedDate)
         val currentPagerMonth =

@@ -420,7 +420,7 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit) {
                         fontWeight = FontWeight.Black,
                         fontFeatureSettings = "tnum" // Tabular figures for alignment
                     ),
-                    color = if (isIncome) colorScheme.tertiary else colorScheme.onSurface
+                    color = accentColor
                 )
                 Text(
                     text = "Ksh",

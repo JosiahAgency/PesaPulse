@@ -119,7 +119,7 @@ fun PesaPulseApp(
         AppDestinations.Calendar,
         AppDestinations.Analytics,
         AppDestinations.Transactions,
-        )
+    )
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -226,6 +226,8 @@ fun GlassNavigationBar(
     val currentRoute = navBackStackEntry?.destination?.route
     val colorScheme = MaterialTheme.colorScheme
 
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
     Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 20.dp)
@@ -253,12 +255,16 @@ fun GlassNavigationBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .clickable {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
+                            if (!selected) {
+                                // Trigger tactile feedback
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         },
                     contentAlignment = Alignment.Center

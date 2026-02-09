@@ -98,10 +98,6 @@ fun ModernTypeSelector(
         Row(modifier = Modifier.fillMaxSize()) {
             items.forEachIndexed { index, type ->
                 val isSelected = index == selectedIndex
-                val typeColor = when (type) {
-                    TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
-                    TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-                }
 
                 val textColor by animateColorAsState(
                     targetValue = if (isSelected)

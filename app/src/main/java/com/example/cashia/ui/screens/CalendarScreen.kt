@@ -143,16 +143,17 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    TransactionFrequencyCard(state.allTransactions, selectedDate) {
-                        selectedDate = it
-                    }
+                    FinancialOverviewCards(state.allTransactions, selectedDate) { selectedDate = it }
                 }
                 item {
                     FullMonthCalendar(state.allTransactions, selectedDate) { selectedDate = it }
                 }
                 item {
-                    FinancialOverviewCards(state.allTransactions, selectedDate) { selectedDate = it }
+                    TransactionFrequencyCard(state.allTransactions, selectedDate) {
+                        selectedDate = it
+                    }
                 }
+
                 val transactionsForDay = state.allTransactions.filter {
                     LocalDate.parse(it.date) == selectedDate
                 }

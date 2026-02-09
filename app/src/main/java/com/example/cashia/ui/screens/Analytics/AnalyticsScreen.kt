@@ -56,8 +56,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
@@ -307,25 +309,36 @@ fun SummaryAmountHeader(
                     }
                 }
                 Surface(
-                    shape = CircleShape,
                     color = color.copy(alpha = 0.15f),
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(12.dp)), // Slightly rounder for a modern look
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp), // Prevents text from touching the edges
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = transactionCount.toString(),
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = color
+                            fontWeight = FontWeight.Black, // "Pulse" branding weight
+                            color = color,
+                            lineHeight = 24.sp
                         )
+
                         Text(
-                            text = "Transactions",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = color.copy(alpha = 0.7f)
+                            text = "Transactions", // Refined label for small spaces
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 0.5.sp,
+                                fontSize = 9.sp // Smaller specific size for the 64dp box
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = color.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }

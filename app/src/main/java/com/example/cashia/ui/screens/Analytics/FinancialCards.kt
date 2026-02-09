@@ -47,18 +47,25 @@ fun FinancialOverviewCards(
     transactions: List<MpesaTransactions>, selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit
 ) {
-    val selectedDateStr = selectedDate.toString()
-    val dailyTransactions = remember(transactions, selectedDateStr) {
-        transactions.filter { it.date == selectedDateStr }
+    val selectedMonth = selectedDate.month
+    val selectedYear = selectedDate.year
+
+    val monthlyTransactions = remember(transactions, selectedMonth, selectedYear) {
+        transactions.filter {
+            val date = LocalDate.parse(it.date)
+            date.month == selectedMonth && date.year == selectedYear
+        }
     }
 
-    val income = dailyTransactions.filter { it.type == "income" }.sumOf { it.amount }
-    val expense = dailyTransactions.filter { it.type == "expense" }.sumOf { it.amount }
-    val netFlow = income - expense
+    // 3. Calculate Monthly Sums
+    val monthlyIncome = monthlyTransactions.filter { it.type == "income" }.sumOf { it.amount }
+    val monthlyExpense = monthlyTransactions.filter { it.type == "expense" }.sumOf { it.amount }
+    val monthlyNetFlow = monthlyIncome - monthlyExpense
+
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "DAILY TOTALS: ${selectedDate.format(DateTimeFormatter.ofPattern("dd MMM"))}",
+            text = "${selectedDate.month.name} ${selectedDate.year} SUMMARY",
             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
             fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -72,30 +79,30 @@ fun FinancialOverviewCards(
             SmallMetricCard(
                 modifier = Modifier.weight(1f),
                 title = "Income",
-                amount = income,
+                amount = monthlyIncome,
                 icon = Icons.Default.TrendingUp,
                 color = MaterialTheme.colorScheme.tertiary,
-                isSelected = income > 0
+                isSelected = monthlyIncome > 0
             )
 
             // Expense Card
             SmallMetricCard(
                 modifier = Modifier.weight(1f),
                 title = "Expenses",
-                amount = expense,
+                amount = monthlyExpense,
                 icon = Icons.Default.TrendingDown,
                 color = MaterialTheme.colorScheme.error,
-                isSelected = expense > 0
+                isSelected = monthlyExpense > 0
             )
 
             // Net Flow Card
             SmallMetricCard(
                 modifier = Modifier.weight(1f),
                 title = "Net",
-                amount = netFlow,
-                icon = if (netFlow >= 0) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                color = if (netFlow >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
-                isSelected = dailyTransactions.isNotEmpty()
+                amount = monthlyNetFlow,
+                icon = if (monthlyNetFlow >= 0) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                color = if (monthlyNetFlow >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                isSelected = monthlyTransactions.isNotEmpty()
             )
         }
     }
@@ -122,11 +129,6 @@ fun SmallMetricCard(
             modifier = Modifier
                 .fillMaxSize()
                 .background(color.copy(alpha = backgroundAlpha))
-                .border(
-                    width = 1.dp,
-                    color = color.copy(alpha = borderAlpha),
-                    shape = RoundedCornerShape(24.dp)
-                )
                 .clickable {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     // Optional: Add logic to filter main list by this type
@@ -180,60 +182,3 @@ fun SmallMetricCard(
         }
     }
 }
-//@Composable
-//fun SmallMetricCard(
-//    modifier: Modifier = Modifier,
-//    title: String,
-//    amount: Double,
-//    icon: ImageVector,
-//    color: Color,
-//    isSelected: Boolean = false
-//) {
-//    val haptic = LocalHapticFeedback.current
-//
-//    // Dynamic border to highlight if there is data for this date
-//    val borderAlpha by animateFloatAsState(if (isSelected) 0.4f else 0.05f, label = "border")
-//    val backgroundAlpha by animateFloatAsState(if (isSelected) 0.12f else 0.04f, label = "bg")
-//    GlassySurface(modifier = modifier) {
-//        Box(
-//            modifier = Modifier
-//                .fillMaxSize()
-//                .background(color.copy(alpha = backgroundAlpha))
-//                .border(
-//                    width = 1.dp,
-//                    color = color.copy(alpha = borderAlpha),
-//                    shape = RoundedCornerShape(24.dp)
-//                )
-//                .clickable {
-//                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-//                    // Optional: Add logic to filter main list by this type
-//                }
-//                .padding(12.dp)
-//        ) {
-//        Column(
-//            modifier = Modifier.padding(12.dp),
-//            horizontalAlignment = Alignment.Start
-//        ) {
-//            Icon(
-//                imageVector = icon,
-//                contentDescription = null,
-//                tint = color,
-//                modifier = Modifier.size(20.dp)
-//            )
-//            Spacer(Modifier.height(8.dp))
-//            Text(
-//                text = title,
-//                style = MaterialTheme.typography.labelSmall,
-//                color = MaterialTheme.colorScheme.onSurfaceVariant
-//            )
-//            Text(
-//                text = formatAmount(amount),
-//                style = MaterialTheme.typography.titleMedium,
-//                fontWeight = FontWeight.Bold,
-//                color = color,
-//                maxLines = 1,
-//                overflow = TextOverflow.Ellipsis
-//            )
-//        }
-//    }
-//}
