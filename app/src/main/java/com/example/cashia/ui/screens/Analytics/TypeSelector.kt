@@ -39,13 +39,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.TransactionType
 
 
 @Composable
 fun ModernTypeSelector(
+    hapticFeedback: HapticFeedback,
     selectedType: TransactionType,
     onTypeChange: (TransactionType) -> Unit
 ) {
@@ -115,7 +118,10 @@ fun ModernTypeSelector(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
-                        ) { onTypeChange(type) },
+                        ) {
+                            onTypeChange(type)
+                            PesaActions.playClick(hapticFeedback)
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Row(

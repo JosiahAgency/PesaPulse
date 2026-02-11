@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens.Analytics
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,30 +8,26 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.screens.AllTransactions.formatAmount
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 
 @Composable
-fun QuickInsightsRow(transactions: List<MpesaTransactions>, type: TransactionType) {
+fun QuickInsightsRow(
+    transactions: List<MpesaTransactions>,
+    type: TransactionType
+) {
     val largest = transactions.maxByOrNull { it.amount }
     val average =
         if (transactions.isNotEmpty()) transactions.sumOf { it.amount } / transactions.size else 0.0
@@ -80,9 +77,15 @@ fun InsightCard(
     subtitle: String,
     color: Color
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
+
     GlassySurface(modifier = modifier) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .padding(16.dp)
+                .clickable {
+                    PesaActions.playClick(hapticFeedback )
+                }
         ) {
             Text(
                 text = title,

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class AppDestinations(val route: String, val label: String, val icon: ImageVector) {
@@ -14,4 +15,7 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
         AppDestinations("transactions", "Transactions", Icons.Default.MonetizationOn)
 
     object Calendar : AppDestinations("calendar", "Calendar", Icons.Default.CalendarMonth)
+
+    object Settings : AppDestinations("settings", "Settings", Icons.Default.Settings)
+
 }

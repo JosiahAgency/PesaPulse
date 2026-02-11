@@ -48,6 +48,13 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
     private val formatter = DateTimeFormatter.ISO_LOCAL_DATE
 
+    var isBalanceVisible by mutableStateOf(false)
+        private set
+
+    fun toggleBalanceVisibility() {
+        isBalanceVisible = !isBalanceVisible
+    }
+
 
     init {
         observeDatabase()

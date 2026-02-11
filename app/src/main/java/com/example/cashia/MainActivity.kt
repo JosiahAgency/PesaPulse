@@ -17,17 +17,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,7 +49,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,18 +64,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
 import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.CalendarScreen
-import com.example.cashia.ui.screens.DashboardScreen
+import com.example.cashia.ui.screens.Dashboard.DashboardScreen
+import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
 
 class MainActivity : ComponentActivity() {
 
-    private val PERMISSIONS_REQUEST_CODE = 100
+    private val permissionRequestCode = 100
     private val permissionsToRequest = arrayOf(
         Manifest.permission.READ_SMS,
     )
@@ -88,7 +93,7 @@ class MainActivity : ComponentActivity() {
                 ) != PackageManager.PERMISSION_GRANTED
             }) {
             ActivityCompat.requestPermissions(
-                this, permissionsToRequest, PERMISSIONS_REQUEST_CODE
+                this, permissionsToRequest, permissionRequestCode
             )
         }
         enableEdgeToEdge()
@@ -120,6 +125,7 @@ fun PesaPulseApp(
         AppDestinations.Analytics,
         AppDestinations.Transactions,
     )
+    val haptic = LocalHapticFeedback.current
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -148,14 +154,18 @@ fun PesaPulseApp(
                                 )
                             )
                         },
+                        windowInsets = WindowInsets.statusBars,
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent,
                         ),
                         actions = {
-                            IconButton(onClick = onToggleTheme) {
+                            IconButton(onClick = {
+                                PesaActions.playClick(haptic)
+                                navController.navigate("settings")
+                            }) {
                                 Icon(
-                                    imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
-                                    contentDescription = "Theme",
+                                    imageVector = AppDestinations.Settings.icon,
+                                    contentDescription = AppDestinations.Settings.label,
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
@@ -164,7 +174,7 @@ fun PesaPulseApp(
                 }
             },
             bottomBar = {
-                GlassNavigationBar(navController, paths)
+                GlassNavigationBar(haptic, navController, paths)
             }) { innerPadding ->
             NavHost(
                 navController = navController,
@@ -185,6 +195,12 @@ fun PesaPulseApp(
                     TransactionScreen(
                         viewModel = sharedViewModel,
                         onNavigateBack = { navController.popBackStack() })
+                }
+                composable(AppDestinations.Settings.route) {
+                    SettingsScreen(
+                        isDarkTheme = isDarkTheme,
+                        onToggleTheme = onToggleTheme
+                    )
                 }
             }
         }
@@ -219,6 +235,7 @@ fun BackgroundGlow(color: Color) {
 
 @Composable
 fun GlassNavigationBar(
+    haptic: HapticFeedback,
     navController: NavController,
     paths: List<AppDestinations>
 ) {
@@ -226,11 +243,10 @@ fun GlassNavigationBar(
     val currentRoute = navBackStackEntry?.destination?.route
     val colorScheme = MaterialTheme.colorScheme
 
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-
     Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 20.dp)
+            .navigationBarsPadding()
             .fillMaxWidth()
             .height(72.dp),
         shape = RoundedCornerShape(28.dp),
@@ -256,8 +272,7 @@ fun GlassNavigationBar(
                         .fillMaxHeight()
                         .clickable {
                             if (!selected) {
-                                // Trigger tactile feedback
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.startDestinationId) {
                                         saveState = true

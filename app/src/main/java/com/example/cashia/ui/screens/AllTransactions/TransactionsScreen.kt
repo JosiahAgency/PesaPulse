@@ -55,7 +55,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.screens.Analytics.formatCompactAmount
@@ -73,15 +77,20 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composable () -> Unit) {
+fun TransactionScreen(
+    viewModel: TransactionsViewModel,
+    onNavigateBack: @Composable () -> Unit
+) {
     val state = viewModel.state
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
-    val context = LocalContext.current
+    LocalContext.current
+    val hapticFeedback = LocalHapticFeedback.current
+
 
     var searchQuery by remember { mutableStateOf("") }
 
     val colorScheme = MaterialTheme.colorScheme
-    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
+    if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
 
     val filteredTransactions by remember(searchQuery, state.allTransactions) {
         derivedStateOf {
@@ -105,6 +114,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
     ) { padding ->
         selectedTransaction?.let { tx ->
             TransactionDetailDialog(
+                hapticFeedback,
                 tx = tx,
                 onDismiss = { selectedTransaction = null },
                 onEdit = { /* Handle Edit logic */ },
@@ -143,7 +153,7 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
                 }
                 if (state.allTransactions.isEmpty() && !state.isLoading) {
                     item {
-                        EmptyStateMessage("No History Found")
+                        EmptyStateMessage("No History Found", hapticFeedback)
                     }
                 } else {
                     groupedTransactions.forEach { (date, dailyTransactions) ->
@@ -152,7 +162,11 @@ fun TransactionScreen(viewModel: TransactionsViewModel, onNavigateBack: @Composa
                         }
 
                         items(items = dailyTransactions, key = { it.id }) { tx ->
-                            TransactionItem(tx, onClick = { selectedTransaction = tx })
+                            TransactionItem(
+                                tx,
+                                onClick = { selectedTransaction = tx },
+                                hapticFeedback
+                            )
                         }
                     }
                 }
@@ -326,11 +340,14 @@ fun ModernStickyHeader(date: LocalDate) {
 }
 
 @Composable
-fun EmptyStateMessage(message: String) {
+fun EmptyStateMessage(message: String, hapticFeedback: HapticFeedback) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 80.dp),
+            .padding(vertical = 80.dp)
+            .clickable {
+                PesaActions.playClick(hapticFeedback)
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -359,7 +376,7 @@ fun EmptyStateMessage(message: String) {
 }
 
 @Composable
-fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit) {
+fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit, hapticFeedback: HapticFeedback) {
     val isIncome = tx.type.lowercase() == "income"
     val colorScheme = MaterialTheme.colorScheme
 
@@ -371,7 +388,10 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(20.dp))
-            .clickable { onClick() },
+            .clickable {
+                onClick()
+                PesaActions.playClick(hapticFeedback)
+            },
         shape = RoundedCornerShape(28.dp),
         color = colorScheme.surface.copy(alpha = glassAlpha),
         border = BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)),
@@ -437,6 +457,7 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit) {
 
 @Composable
 fun TransactionDetailDialog(
+    hapticFeedback: HapticFeedback,
     tx: MpesaTransactions,
     onDismiss: () -> Unit,
     onEdit: (MpesaTransactions) -> Unit,
@@ -449,12 +470,17 @@ fun TransactionDetailDialog(
         if (isIncome) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
     val headerBg = accentColor.copy(alpha = 0.1f)
     val total = if (!isIncome) tx.amount + tx.transactionCost else tx.amount
+    val clipboard = LocalClipboardManager.current
+
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(10.dp)
+                .clickable {
+                    PesaActions.playClick(hapticFeedback)
+                },
             shape = RoundedCornerShape(28.dp),
             color = colorScheme.surface.copy(alpha = 1f),
             border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
@@ -490,6 +516,17 @@ fun TransactionDetailDialog(
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = tx.recipient,
+                    modifier = Modifier
+                        .clickable {
+                            PesaActions.playClick(hapticFeedback)
+                            PesaActions.copyToClipboard(
+                                context,
+                                clipboard,
+                                hapticFeedback,
+                                if (isIncome) "Source" else "Recepient",
+                                tx.recipient
+                            )
+                        },
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
                     textAlign = TextAlign.Center
                 )
@@ -555,6 +592,7 @@ fun TransactionDetailDialog(
 
                     Button(
                         onClick = {
+                            PesaActions.playClick(hapticFeedback)
                             Toast.makeText(
                                 context,
                                 "Feature coming soon! Josiah is still polishing the pulse. ✨",

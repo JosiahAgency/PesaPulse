@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,6 +70,7 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
     val today = LocalDate.now()
     val state = viewModel.state
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
+    val hapticFeedback = LocalHapticFeedback.current
 
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -84,11 +85,6 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
     }
 
     var selectedScope by remember { mutableStateOf(TimeScope.WEEK) }
-    val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
-        derivedStateOf {
-            viewModel.calculateSummary(selectedDate, selectedScope)
-        }
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background, floatingActionButton = {
@@ -122,6 +118,7 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
         }) { padding ->
         selectedTransaction?.let { tx ->
             TransactionDetailDialog(
+                hapticFeedback,
                 tx = tx,
                 onDismiss = { selectedTransaction = null },
                 onEdit = { /* Handle Edit logic */ },
@@ -143,7 +140,9 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    FinancialOverviewCards(state.allTransactions, selectedDate) { selectedDate = it }
+                    FinancialOverviewCards(state.allTransactions, selectedDate) {
+                        selectedDate = it
+                    }
                 }
                 item {
                     FullMonthCalendar(state.allTransactions, selectedDate) { selectedDate = it }
@@ -206,10 +205,10 @@ fun CalendarScreen(viewModel: TransactionsViewModel) {
                     }
                 }
                 if (transactionsForDay.isEmpty()) {
-                    item { EmptyStateMessage("No Transactions On This Day") }
+                    item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
                 } else {
                     items(transactionsForDay, key = { it.id }) { tx ->
-                        TransactionItem(tx, onClick = { selectedTransaction = tx })
+                        TransactionItem(tx, onClick = { selectedTransaction = tx },hapticFeedback)
                     }
                 }
             }
@@ -251,13 +250,13 @@ fun TransactionFrequencyCard(
         Triple(topIncome, topExpense, monthlyTransactions.size)
     }
 
-    val (topIncome, topExpense, totalCount) = frequencyData
+    val (topIncome, topExpense, _) = frequencyData
 
-    val selectedDateStr = selectedDate.toString()
-    val activeDayIncome = monthlyTransactions.count {
+    selectedDate.toString()
+    monthlyTransactions.count {
         it.second == selectedDate && it.first.type == "income"
     }
-    val activeDayExpense = monthlyTransactions.count {
+    monthlyTransactions.count {
         it.second == selectedDate && it.first.type == "expense"
     }
 

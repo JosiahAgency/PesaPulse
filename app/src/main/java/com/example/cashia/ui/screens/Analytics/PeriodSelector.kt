@@ -13,16 +13,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.cashia.Utility.TimeScope
+import com.example.cashia.Utility.PesaActions
 import java.time.LocalDate
 
 
 @Composable
 fun GlassyPeriodSelector(
-    selectedScope: TimeScope,
-    onScopeChange: (TimeScope) -> Unit,
+    hapticFeedback: HapticFeedback,
     startDate: LocalDate,
     endDate: LocalDate,
     onStartDateSelected: (LocalDate) -> Unit,
@@ -43,6 +43,7 @@ fun GlassyPeriodSelector(
                     label = "From",
                     date = startDate,
                     onClick = {
+                        PesaActions.playClick(hapticFeedback)
                         showDatePicker(
                             context,
                             startDate,
@@ -63,6 +64,7 @@ fun GlassyPeriodSelector(
                     label = "To",
                     date = endDate,
                     onClick = {
+                        PesaActions.playClick(hapticFeedback)
                         showDatePicker(
                             context,
                             startDate,

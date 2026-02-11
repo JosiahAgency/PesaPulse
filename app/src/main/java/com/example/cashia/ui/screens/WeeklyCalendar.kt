@@ -25,20 +25,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.temporal.TemporalAdjusters
 
 @Composable
 fun WeeklyCalendar(
+    hapticFeedback: HapticFeedback,
     allTransactions: List<MpesaTransactions>,
     selectedDate: LocalDate,
-    onDateSelected: (LocalDate) -> Unit
+    onDateSelected: (LocalDate) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
 
@@ -80,7 +82,8 @@ fun WeeklyCalendar(
         Column(modifier = Modifier.padding(vertical = 12.dp)) {
             androidx.compose.foundation.pager.HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
             ) { page ->
                 val weekOffset = (page - initialPage).toLong()
                 val startOfWeek = LocalDate.now()
@@ -104,7 +107,8 @@ fun WeeklyCalendar(
                             isToday = isToday,
                             hasIncome = incomeDates.contains(date.toString()),
                             hasExpense = expenseDates.contains(date.toString()),
-                            onDateSelected = onDateSelected
+                            onDateSelected = onDateSelected,
+                            hapticFeedback
                         )
                     }
                 }
@@ -120,7 +124,8 @@ fun WeeklyDayItem(
     isToday: Boolean,
     hasIncome: Boolean,
     hasExpense: Boolean,
-    onDateSelected: (LocalDate) -> Unit
+    onDateSelected: (LocalDate) -> Unit,
+    hapticFeedback: HapticFeedback
 ) {
     val dayName = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
 
@@ -130,7 +135,9 @@ fun WeeklyDayItem(
             .clip(RoundedCornerShape(16.dp))
             .clickable { onDateSelected(date) }
             .then(
-                if (isSelected) Modifier.background(primaryGradient())
+                if (isSelected) Modifier
+                    .background(primaryGradient())
+                    .clickable { PesaActions.playClick(hapticFeedback) }
                 else if (isToday) Modifier.border(
                     1.dp,
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),

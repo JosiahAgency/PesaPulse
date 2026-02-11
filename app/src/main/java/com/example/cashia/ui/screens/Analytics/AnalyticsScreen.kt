@@ -2,19 +2,13 @@ package com.example.cashia.ui.screens.Analytics
 
 import android.app.DatePickerDialog
 import android.content.Context
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,19 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -49,18 +36,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
@@ -84,6 +70,7 @@ fun AnalyticsScreen() {
     val viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
+    val hapticFeedback = LocalHapticFeedback.current
 
     val state = viewModel.state
     val transactions = viewModel.state.allTransactions
@@ -123,7 +110,7 @@ fun AnalyticsScreen() {
         }
     }
 
-    val allFilteredTransactions = remember(transactions, startTs, endTs) {
+    remember(transactions, startTs, endTs) {
         transactions.filter { tx -> tx.timestamp in startTs..endTs }
     }
     val colorScheme = MaterialTheme.colorScheme
@@ -163,8 +150,7 @@ fun AnalyticsScreen() {
                         ) {
 
                             GlassyPeriodSelector(
-                                selectedScope = selectedScope,
-                                onScopeChange = { selectedScope = it },
+                                hapticFeedback,
                                 startDate = startDate,
                                 endDate = endDate,
                                 onStartDateSelected = {
@@ -177,6 +163,7 @@ fun AnalyticsScreen() {
                                 }
                             )
                             ModernTypeSelector(
+                                hapticFeedback,
                                 selectedType = selectedType,
                                 onTypeChange = { selectedType = it }
                             )
@@ -185,6 +172,7 @@ fun AnalyticsScreen() {
                 }
                 item {
                     SummaryAmountHeader(
+                        hapticFeedback,
                         totalAmount = filteredTransactions.sumOf { it.amount },
                         transactionCount = filteredTransactions.size,
                         type = selectedType,
@@ -246,6 +234,7 @@ fun DateColumn(label: String, date: LocalDate, onClick: () -> Unit) {
 
 @Composable
 fun SummaryAmountHeader(
+    hapticFeedback: HapticFeedback,
     totalAmount: Double,
     transactionCount: Int,
     type: TransactionType,
@@ -265,6 +254,9 @@ fun SummaryAmountHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
+                .clickable {
+                    PesaActions.playClick(hapticFeedback)
+                }
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -347,105 +339,6 @@ fun SummaryAmountHeader(
     }
 }
 
-
-@Composable
-fun TopBreakdownList(transactions: List<MpesaTransactions>, type: TransactionType, n: Int) {
-    val amountColor = when (type) {
-        TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
-        TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-    }
-
-    val breakdown = remember(transactions) {
-        transactions.groupBy { it.recipient }
-            .mapValues { entry -> entry.value.sumOf { it.amount } }
-            .entries.sortedByDescending { it.value }
-    }
-
-    val totalAmount = remember(breakdown) { breakdown.sumOf { it.value } }
-    val topBreakdown = breakdown.take(n)
-
-    GlassySurface {
-        Column(Modifier.padding(vertical = 8.dp)) {
-            topBreakdown.forEachIndexed { index, entry ->
-                val percentageRaw = if (totalAmount > 0) (entry.value / totalAmount) else 0.0
-                val percentageDisplay = (percentageRaw * 100).roundToInt()
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { }
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f, fill = false),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Rank badge
-                            Surface(
-                                shape = CircleShape,
-                                color = amountColor.copy(alpha = 0.15f),
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        (index + 1).toString(),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = amountColor
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.width(12.dp))
-
-                            Column {
-                                Text(
-                                    text = entry.key,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "$percentageDisplay% of total",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = formatAmount(entry.value),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = amountColor
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    AnimatedProgressBar(
-                        progress = percentageRaw.toFloat(),
-                        color = amountColor
-                    )
-                }
-
-                if (index < topBreakdown.size - 1) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        thickness = 0.5.dp
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun GlassySurface(
     modifier: Modifier = Modifier,
@@ -462,58 +355,6 @@ fun GlassySurface(
         shadowElevation = 2.dp
     ) {
         content()
-    }
-}
-
-@Composable
-fun AnimatedProgressBar(progress: Float, color: Color) {
-    val animatedProgress = remember { Animatable(0f) }
-
-    LaunchedEffect(progress) {
-        animatedProgress.animateTo(
-            targetValue = progress,
-            animationSpec = tween(durationMillis = 600, easing = LinearOutSlowInEasing)
-        )
-    }
-
-    LinearProgressIndicator(
-        progress = { animatedProgress.value },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(6.dp)
-            .clip(RoundedCornerShape(3.dp)),
-        color = color,
-        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        strokeCap = StrokeCap.Round
-    )
-}
-
-@Composable
-fun EmptyAnalyticsState(message: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                RoundedCornerShape(16.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                Icons.Default.BarChart,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
