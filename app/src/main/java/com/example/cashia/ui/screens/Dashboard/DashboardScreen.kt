@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -72,6 +74,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
     val state = viewModel.state
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
     val hapticFeedback = LocalHapticFeedback.current
+    var isListExpanded by remember { mutableStateOf(true) }
 
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
     val startOfWeek = selectedDate.with(
@@ -188,6 +191,23 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+//                item {
+//                    Row() {
+//                        Text(
+//                            text = "${PesaActions.getGreeting()},",
+//                            style = MaterialTheme.typography.bodyLarge,
+//                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+//                        )
+////                        Text(
+////                            text = "Josiah",
+////                            style = MaterialTheme.typography.bodyLarge.copy(
+////                                brush = primaryGradient() // Use your brand gradient for the name
+////                            )
+////                        )
+//                    }
+//
+//                }
+
                 item {
                     TimeScopedSummaryCard(
                         selectedScope,
@@ -220,6 +240,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                                 .clickable {
                                     PesaActions.playClick(hapticFeedback)
+                                    isListExpanded = !isListExpanded
                                 }
                         ) {
                             Box(
@@ -234,11 +255,16 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 1.2.sp
                                 ),
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = if (isListExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                contentDescription = if (isListExpanded) "Collapse" else "Expand",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-
-                        // A subtle divider that fades out to the right
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(0.4f)
@@ -255,13 +281,17 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                         )
                     }
                 }
-                if (transactionsForScope.isEmpty()) {
-                    item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
-                } else {
+                if (transactionsForScope.isNotEmpty() && isListExpanded) {
                     items(transactionsForScope, key = { it.id }) { tx ->
                         TransactionItem(tx, onClick = { selectedTransaction = tx }, hapticFeedback)
                     }
+                } else if (transactionsForScope.isEmpty() && isListExpanded) {
+                    item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
+                } else {
+                    item {
+                    }
                 }
+
             }
         }
     }

@@ -143,7 +143,6 @@ fun AnalyticsScreen() {
                         border = BorderStroke(
                             0.6.dp, glassBorder
                         ),
-                        shadowElevation = 10.dp,
                     ) {
                         Column(
                             Modifier.padding(20.dp),
@@ -353,7 +352,6 @@ fun GlassySurface(
         shape = RoundedCornerShape(20.dp),
         color = colorScheme.surface.copy(alpha = glassAlpha),
         border = BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)),
-        shadowElevation = 2.dp
     ) {
         content()
     }

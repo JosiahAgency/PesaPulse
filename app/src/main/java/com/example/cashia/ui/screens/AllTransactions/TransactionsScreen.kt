@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.TrendingDown
 import androidx.compose.material.icons.rounded.TrendingUp
@@ -86,7 +88,7 @@ fun TransactionScreen(
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
     LocalContext.current
     val hapticFeedback = LocalHapticFeedback.current
-
+    var collapsedDates by remember { mutableStateOf(setOf<LocalDate>()) }
 
     var searchQuery by remember { mutableStateOf("") }
 
@@ -158,16 +160,49 @@ fun TransactionScreen(
                     }
                 } else {
                     groupedTransactions.forEach { (date, dailyTransactions) ->
+                        val isCollapsed = collapsedDates.contains(date)
                         stickyHeader {
-                            ModernStickyHeader(date)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.9f))
+                                    .padding(vertical = 12.dp, horizontal = 4.dp)
+                                    .clickable {
+                                        PesaActions.playClick(hapticFeedback)
+                                        collapsedDates = if (isCollapsed) {
+                                            collapsedDates - date
+                                        } else {
+                                            collapsedDates + date
+                                        }
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = date.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM"))
+                                        .uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.5.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                                Icon(
+                                    imageVector = if (isCollapsed) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                )
+                            }
                         }
-
-                        items(items = dailyTransactions, key = { it.id }) { tx ->
-                            TransactionItem(
-                                tx,
-                                onClick = { selectedTransaction = tx },
-                                hapticFeedback
-                            )
+                        if (!isCollapsed) {
+                            items(items = dailyTransactions, key = { it.id }) { tx ->
+                                TransactionItem(
+                                    tx,
+                                    onClick = { selectedTransaction = tx },
+                                    hapticFeedback
+                                )
+                            }
                         }
                     }
                 }
@@ -276,6 +311,7 @@ fun SummarySmallItem(
 
 @Composable
 fun ModernSearchBar(query: String, onQueryChange: (String) -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -303,7 +339,10 @@ fun ModernSearchBar(query: String, onQueryChange: (String) -> Unit) {
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
+                    IconButton(onClick = {
+                        PesaActions.playClick(haptic)
+                        onQueryChange("")
+                    }) {
                         Icon(Icons.Rounded.Close, null, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -317,25 +356,6 @@ fun ModernSearchBar(query: String, onQueryChange: (String) -> Unit) {
             ),
             singleLine = true,
             modifier = Modifier.fillMaxSize()
-        )
-    }
-}
-
-@Composable
-fun ModernStickyHeader(date: LocalDate) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.9f))
-            .padding(vertical = 12.dp)
-    ) {
-        Text(
-            text = date.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM")).uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.5.sp
-            ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
     }
 }

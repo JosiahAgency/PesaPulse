@@ -88,7 +88,6 @@ fun TimeScopedSummaryCard(
         border = BorderStroke(
             0.6.dp, glassBorder
         ),
-        shadowElevation = 10.dp,
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SegmentedControl(

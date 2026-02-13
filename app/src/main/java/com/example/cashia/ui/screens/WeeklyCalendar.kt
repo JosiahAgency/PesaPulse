@@ -32,7 +32,6 @@ import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 
@@ -45,22 +44,22 @@ fun WeeklyCalendar(
 ) {
     rememberCoroutineScope()
 
+    val today = remember { LocalDate.now() }
     val initialPage = 500
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
-    val firstDay = PesaTimeConfiguration.firstDayOfWeek
-    val startOfWeek = selectedDate.with(
-        TemporalAdjusters.previousOrSame(firstDay)
-    )
-    startOfWeek.plusDays(6)
+
 
     LaunchedEffect(selectedDate) {
-        LocalDate.now()
+        val firstDay = PesaTimeConfiguration.firstDayOfWeek
+
+        val anchorWeekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
+        val targetWeekStart = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
 
         val weeksDiff =
-            java.time.temporal.ChronoUnit.WEEKS.between(startOfWeek, startOfWeek)
+            java.time.temporal.ChronoUnit.WEEKS.between(anchorWeekStart, targetWeekStart)
                 .toInt()
         val targetPage = initialPage + weeksDiff
 
@@ -90,7 +89,11 @@ fun WeeklyCalendar(
                     .fillMaxWidth()
             ) { page ->
                 val weekOffset = (page - initialPage).toLong()
-                val startOfWeek = startOfWeek
+                val startOfWeek = PesaTimeConfiguration.firstDayOfWeek
+
+                val weekStart = today
+                    .with(TemporalAdjusters.previousOrSame(startOfWeek))
+                    .plusWeeks(weekOffset)
 
                 Row(
                     modifier = Modifier
@@ -99,7 +102,7 @@ fun WeeklyCalendar(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     (0..6).forEach { dayOffset ->
-                        val date = startOfWeek.plusDays(dayOffset.toLong())
+                        val date = weekStart.plusDays(dayOffset.toLong())
                         val isSelected = date == selectedDate
                         val isToday = date == LocalDate.now()
 

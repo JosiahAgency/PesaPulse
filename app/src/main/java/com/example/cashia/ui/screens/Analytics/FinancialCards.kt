@@ -131,7 +131,6 @@ fun SmallMetricCard(
                 .background(color.copy(alpha = backgroundAlpha))
                 .clickable {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    // Optional: Add logic to filter main list by this type
                 }
                 .padding(12.dp)
         ) {

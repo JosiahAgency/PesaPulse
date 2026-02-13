@@ -2,6 +2,7 @@ package com.example.cashia.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,7 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CalendarViewWeek
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -54,6 +57,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
@@ -76,45 +80,112 @@ fun SettingsScreen(
     if (showDayPicker) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showDayPicker = false }) {
             Surface(
-                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(32.dp), // More rounded for modern feel
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+                tonalElevation = 8.dp,
+                border = BorderStroke(
+                    0.5.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Header with Icon
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.CalendarViewWeek,
+                            null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
                     Text(
-                        "Select First Day",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp)
+                        "Week Starts On",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    LazyColumn {
-                        items(PesaTimeConfiguration.daysOfWeek) { day ->
+
+                    Text(
+                        "Transactions will be grouped starting from this day.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
+                    val sortedDays = remember(PesaTimeConfiguration.firstDayOfWeek) {
+                        val allDays = java.time.DayOfWeek.entries.toMutableList()
+                        val selected = PesaTimeConfiguration.firstDayOfWeek
+
+                        allDays.remove(selected)
+                        allDays.add(0, selected)
+                        allDays
+                    }
+
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(sortedDays) { day ->
                             val isSelected = PesaTimeConfiguration.firstDayOfWeek == day
+
+                            val backgroundColor = if (isSelected)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            else
+                                Color.Transparent
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(backgroundColor)
                                     .clickable {
+                                        PesaActions.playClick(haptic) // Add haptic feedback
                                         PesaTimeConfiguration.firstDayOfWeek = day
                                         showDayPicker = false
                                     }
-                                    .padding(16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    day.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    text = day.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        brush = if (isSelected) primaryGradient() else null,
+                                    ),
+                                    color = if (!isSelected) MaterialTheme.colorScheme.onSurface else Color.Unspecified
                                 )
+
                                 if (isSelected) {
                                     Icon(
-                                        Icons.Rounded.Check,
-                                        null,
-                                        tint = MaterialTheme.colorScheme.primary
+                                        imageVector = Icons.Rounded.CheckCircle, // Using a filled check for more weight
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }

@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
 
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         if (permissionsToRequest.any {
@@ -151,10 +151,9 @@ fun PesaPulseApp(
                     TopAppBar(
                         title = {
                             Text(
-                                "PESAPULSE",
-                                style = MaterialTheme.typography.labelLarge.copy(
+                                PesaActions.getGreeting(),
+                                style = MaterialTheme.typography.bodyLarge.copy(
                                     fontWeight = FontWeight.Black,
-                                    letterSpacing = 4.sp,
                                     brush = primaryGradient(),
                                 )
                             )

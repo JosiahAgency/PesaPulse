@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.example.cashia.ui.screens.AllTransactions.formatAmount
 import java.time.DayOfWeek
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -42,6 +43,14 @@ object PesaActions {
         playSuccess(haptic)
         Toast.makeText(context, "$label Copied", Toast.LENGTH_SHORT).show()
     }
+
+    fun getGreeting(): String {
+        return when (LocalTime.now().hour) {
+            in 0..11 -> "Good Morning"
+            in 12..16 -> "Good Afternoon"
+            else -> "Good Evening"
+        }
+    }
 }
 
 object PesaTimeConfiguration {
@@ -49,7 +58,6 @@ object PesaTimeConfiguration {
     var datePattern: String = "dd MMM yyyy"
 
     var firstDayOfWeek by mutableStateOf(DayOfWeek.SUNDAY)
-    val daysOfWeek = DayOfWeek.entries
 
     const val CURRENCY = "KES"
 

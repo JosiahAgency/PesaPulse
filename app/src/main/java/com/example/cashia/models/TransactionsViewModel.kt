@@ -9,12 +9,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
-import com.example.cashia.Utility.SmsRepository
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -127,9 +126,14 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
         val (startDate, enDate) = when (scope) {
             TimeScope.DAY -> selectedDate to selectedDate
-            TimeScope.WEEK -> selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)) to selectedDate.with(
-                TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY)
-            )
+            TimeScope.WEEK -> {
+                val firstDayOfWeek = PesaTimeConfiguration.firstDayOfWeek
+                val startOfWeek =
+                    selectedDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+                val end = startOfWeek.plusDays(6)
+                startOfWeek to end
+            }
+
             TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
             TimeScope.CUSTOM -> selectedDate to selectedDate
         }
