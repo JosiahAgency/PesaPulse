@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
 
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
         if (permissionsToRequest.any {
@@ -164,7 +166,7 @@ fun PesaPulseApp(
                         actions = {
                             IconButton(onClick = {
                                 PesaActions.playClick(haptic)
-                                navController.navigate("settings"){
+                                navController.navigate("settings") {
                                     launchSingleTop = true
                                     popUpTo(navController.graph.startDestinationId) {
                                         saveState = true
