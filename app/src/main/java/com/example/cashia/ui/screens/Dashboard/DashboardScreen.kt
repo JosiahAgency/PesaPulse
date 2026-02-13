@@ -90,6 +90,42 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
         }
     }
 
+    val transactionsForScope = remember(state.allTransactions, selectedDate, selectedScope) {
+        state.allTransactions.filter { transaction ->
+            val txDate = LocalDate.parse(transaction.date)
+
+            when (selectedScope) {
+                TimeScope.DAY -> {
+                    txDate == selectedDate
+                }
+                TimeScope.WEEK -> {
+                    // Find the Monday and Sunday of the week containing selectedDate
+                    val startOfWeek = selectedDate.with(java.time.DayOfWeek.MONDAY)
+                    val endOfWeek = selectedDate.with(java.time.DayOfWeek.SUNDAY)
+                    !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
+                }
+                TimeScope.MONTH -> {
+                    // Check if month and year match
+                    txDate.month == selectedDate.month && txDate.year == selectedDate.year
+                }
+                else -> txDate == selectedDate
+            }
+        }.sortedByDescending { it.date } // Keep newest at the top
+    }
+
+    val scopeLabel = remember(selectedDate, selectedScope) {
+        when (selectedScope) {
+            TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+            TimeScope.WEEK -> {
+                val start = selectedDate.with(java.time.DayOfWeek.MONDAY)
+                val end = selectedDate.with(java.time.DayOfWeek.SUNDAY)
+                "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} - ${end.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))}"
+            }
+            TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+            else -> ""
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background, floatingActionButton = {
             if (selectedDate != today) {
@@ -161,9 +197,6 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                         selectedDate
                     ) { selectedDate = it }
                 }
-                val transactionsForDay = state.allTransactions.filter {
-                    LocalDate.parse(it.date) == selectedDate
-                }
                 item {
                     Column(
                         modifier = Modifier
@@ -187,8 +220,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
-                                    .uppercase(),
+                                text = scopeLabel.uppercase(),
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 1.2.sp
@@ -214,10 +246,10 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                         )
                     }
                 }
-                if (transactionsForDay.isEmpty()) {
+                if (transactionsForScope.isEmpty()) {
                     item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
                 } else {
-                    items(transactionsForDay, key = { it.id }) { tx ->
+                    items(transactionsForScope, key = { it.id }) { tx ->
                         TransactionItem(tx, onClick = { selectedTransaction = tx }, hapticFeedback)
                     }
                 }

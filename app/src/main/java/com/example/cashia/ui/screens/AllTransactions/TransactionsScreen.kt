@@ -427,7 +427,7 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit, hapticFeedback: 
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${tx.time} • ${tx.type.replaceFirstChar { it.uppercase() }}",
+                    text = "${tx.displayDate} • ${tx.displayTime} • ${tx.type.replaceFirstChar { it.uppercase() }}",
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Medium

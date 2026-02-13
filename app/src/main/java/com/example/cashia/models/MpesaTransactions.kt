@@ -3,8 +3,10 @@ package com.example.cashia.models
 import android.util.Log
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.example.cashia.Utility.PesaTimeConfiguration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -46,7 +48,23 @@ data class MpesaTransactions(
     val balance: Double,
     val time: String,
     val timestamp: Long,
-)
+) {
+    val displayTime: String
+        get() = try {
+            val storedTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+            storedTime.format(PesaTimeConfiguration.getTimeFormatter())
+        } catch (e: Exception) {
+            time
+        }
+
+    val displayDate: String
+        get() = try {
+            val storedDate = LocalDate.parse(date)
+            storedDate.format(PesaTimeConfiguration.getDateFormatter())
+        } catch (e: Exception) {
+            date
+        }
+}
 
 fun parseMpesaMessage(message: String): MpesaTransactions? {
     try {
@@ -91,19 +109,46 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
             regexAirtime.find(message) != null -> {
                 val match = regexAirtime.find(message)!!
                 val (id, amount, date, time) = match.destructured
-                buildTransaction(id, amount, "Safaricom Airtime", date, time, "expense", balance, transactionCost)
+                buildTransaction(
+                    id,
+                    amount,
+                    "Safaricom Airtime",
+                    date,
+                    time,
+                    "expense",
+                    balance,
+                    transactionCost
+                )
             }
 
             regexWithdraw.find(message) != null -> {
                 val match = regexWithdraw.find(message)!!
                 val (id, date, time, amount, recipient) = match.destructured
-                buildTransaction(id, amount, recipient, date, time, "expense", balance, transactionCost)
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
+                    "expense",
+                    balance,
+                    transactionCost
+                )
             }
 
             regexReceived.find(message) != null -> {
                 val match = regexReceived.find(message)!!
                 val (id, amount, recipient, date, time) = match.destructured
-                buildTransaction(id, amount, recipient, date, time, "income", balance, transactionCost)
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
+                    "income",
+                    balance,
+                    transactionCost
+                )
             }
 
             else -> null
@@ -126,8 +171,14 @@ private fun buildTransaction(
 ): MpesaTransactions {
     val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
     val formattedDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
-    val formattedTime = timeStr.uppercase().trim()
     val cleanRecipient = recipient.trim().removeSuffix(".")
+    val cleanTime = timeStr.uppercase().trim().replace(".", "")
+    val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+    val standardizedTime = try {
+        LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
+    } catch (e: Exception) {
+        cleanTime
+    }
     return MpesaTransactions(
         id = id.trim(),
         amount = amountStr.replace(",", "").toDouble(),
@@ -136,8 +187,8 @@ private fun buildTransaction(
         date = formattedDate,
         type = type,
         balance = balance,
-        time = formattedTime,
-        timestamp = convertToTimestamp(formattedDate, formattedTime)
+        time = standardizedTime,
+        timestamp = convertToTimestamp(formattedDate, standardizedTime)
     )
 }
 

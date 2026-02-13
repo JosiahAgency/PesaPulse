@@ -6,6 +6,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 enum class TimeScope {
     DAY, WEEK, MONTH, CUSTOM
@@ -35,6 +37,18 @@ object PesaActions {
         playSuccess(haptic)
         Toast.makeText(context, "$label Copied", Toast.LENGTH_SHORT).show()
     }
+}
 
+object PesaTimeConfiguration {
+    var use24HrsFormat: Boolean = true
+    var datePattern: String = "dd MMM yyyy"
 
+    fun getTimeFormatter(): DateTimeFormatter {
+        val pattern = if (use24HrsFormat) "HH:mm" else "h:mm a"
+        return DateTimeFormatter.ofPattern(pattern, Locale.US)
+    }
+
+    fun getDateFormatter(): DateTimeFormatter {
+        return DateTimeFormatter.ofPattern(datePattern, Locale.US)
+    }
 }

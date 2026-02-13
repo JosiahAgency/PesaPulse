@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,7 +60,9 @@ import com.example.cashia.ui.theme.primaryGradient
 @Composable
 fun SettingsScreen(
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    use24HourFormat: Boolean,
+    onToggle24Hour: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -91,6 +94,16 @@ fun SettingsScreen(
                     onCheckedChange = {
                         PesaActions.playClick(haptic)
                         onToggleTheme()
+                    }
+                )
+                SettingsToggleItem(
+                    label = "24-Hour Format",
+                    subtitle = "Toggle between 12h (AM/PM) and 24h Time Format",
+                    icon = Icons.Rounded.Schedule, // Import this
+                    checked = use24HourFormat,
+                    onCheckedChange = {
+                        PesaActions.playClick(haptic)
+                        onToggle24Hour()
                     }
                 )
             }

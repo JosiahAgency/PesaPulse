@@ -65,6 +65,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.models.PesaViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
@@ -129,6 +130,8 @@ fun PesaPulseApp(
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
+    val viewModel: PesaViewModel = viewModel()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -161,7 +164,14 @@ fun PesaPulseApp(
                         actions = {
                             IconButton(onClick = {
                                 PesaActions.playClick(haptic)
-                                navController.navigate("settings")
+                                navController.navigate("settings"){
+                                    launchSingleTop = true
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    restoreState = true
+                                }
+
                             }) {
                                 Icon(
                                     imageVector = AppDestinations.Settings.icon,
@@ -199,7 +209,9 @@ fun PesaPulseApp(
                 composable(AppDestinations.Settings.route) {
                     SettingsScreen(
                         isDarkTheme = isDarkTheme,
-                        onToggleTheme = onToggleTheme
+                        onToggleTheme = onToggleTheme,
+                        use24HourFormat = viewModel.use24HourFormat,
+                        onToggle24Hour = { viewModel.toggleTimeFormat() }
                     )
                 }
             }
@@ -271,7 +283,7 @@ fun GlassNavigationBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .clickable {
-                            if (!selected) {
+                            if (currentRoute != screen.route) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.startDestinationId) {
