@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -54,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.ui.theme.primaryGradient
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +71,55 @@ fun SettingsScreen(
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { getAppVersion(context) }
+    var showDayPicker by remember { mutableStateOf(false) }
+
+    if (showDayPicker) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showDayPicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Select First Day",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    LazyColumn {
+                        items(PesaTimeConfiguration.daysOfWeek) { day ->
+                            val isSelected = PesaTimeConfiguration.firstDayOfWeek == day
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        PesaTimeConfiguration.firstDayOfWeek = day
+                                        showDayPicker = false
+                                    }
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    day.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -105,6 +158,17 @@ fun SettingsScreen(
                         PesaActions.playClick(haptic)
                         onToggle24Hour()
                     }
+                )
+                SettingsActionItem(
+                    label = "First Day of Week",
+                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
+                        .replaceFirstChar { it.uppercase() },
+                    icon = Icons.Rounded.CalendarMonth,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        showDayPicker = true
+                    },
+                    isExpanded = false
                 )
             }
         }

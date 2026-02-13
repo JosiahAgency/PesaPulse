@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.screens.Analytics.formatCompactAmount
@@ -218,7 +219,7 @@ fun CompactTransactionSummary(balance: Double, income: Double, expenses: Double)
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    text = "Ksh ${formatAmount(balance)}",
+                    text = PesaTimeConfiguration.formatCurrency(balance),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black, // Consistent with dashboard headers
                     color = colorScheme.onSurface
@@ -443,7 +444,7 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit, hapticFeedback: 
                     color = accentColor
                 )
                 Text(
-                    text = "Ksh",
+                    text = PesaTimeConfiguration.CURRENCY,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
@@ -538,7 +539,11 @@ fun TransactionDetailDialog(
                 Spacer(Modifier.height(15.dp))
 
                 Text(
-                    text = "${if (isIncome) "+" else "-"} Ksh ${formatAmount(total)}",
+                    text = "${if (isIncome) "+" else "-"} ${
+                        PesaTimeConfiguration.formatCurrency(
+                            total
+                        )
+                    }",
                     style = MaterialTheme.typography.displaySmall.copy(
                         fontWeight = FontWeight.Black,
                     ),
@@ -557,8 +562,8 @@ fun TransactionDetailDialog(
                     DetailRow("REFERENCE", tx.id)
                     DetailRow("TIMESTAMP", "${tx.time}, ${tx.date}")
                     if (!isIncome) {
-                        DetailRow("SUBTOTAL", "Ksh ${formatAmount(tx.amount)}")
-                        DetailRow("FEES", "Ksh ${formatAmount(tx.transactionCost)}")
+                        DetailRow("SUBTOTAL", PesaTimeConfiguration.formatCurrency(tx.amount))
+                        DetailRow("FEES", PesaTimeConfiguration.formatCurrency(tx.transactionCost))
                     }
                     Box(
                         Modifier
@@ -569,7 +574,7 @@ fun TransactionDetailDialog(
 
                     DetailRow(
                         "BALANCE AFTER TRANSACTION",
-                        "Ksh ${formatAmount(tx.balance)}",
+                        PesaTimeConfiguration.formatCurrency(tx.balance),
                         isBold = true
                     )
                 }

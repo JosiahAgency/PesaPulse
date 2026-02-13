@@ -29,6 +29,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
@@ -42,21 +43,24 @@ fun WeeklyCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    rememberCoroutineScope()
 
     val initialPage = 500
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
+    val firstDay = PesaTimeConfiguration.firstDayOfWeek
+    val startOfWeek = selectedDate.with(
+        TemporalAdjusters.previousOrSame(firstDay)
+    )
+    startOfWeek.plusDays(6)
+
     LaunchedEffect(selectedDate) {
-        val today = LocalDate.now()
-        val startOfTodayWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-        val startOfSelectedWeek =
-            selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+        LocalDate.now()
 
         val weeksDiff =
-            java.time.temporal.ChronoUnit.WEEKS.between(startOfTodayWeek, startOfSelectedWeek)
+            java.time.temporal.ChronoUnit.WEEKS.between(startOfWeek, startOfWeek)
                 .toInt()
         val targetPage = initialPage + weeksDiff
 
@@ -86,9 +90,7 @@ fun WeeklyCalendar(
                     .fillMaxWidth()
             ) { page ->
                 val weekOffset = (page - initialPage).toLong()
-                val startOfWeek = LocalDate.now()
-                    .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-                    .plusWeeks(weekOffset)
+                val startOfWeek = startOfWeek
 
                 Row(
                     modifier = Modifier

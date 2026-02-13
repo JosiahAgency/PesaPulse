@@ -31,12 +31,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
@@ -60,14 +60,16 @@ fun FullMonthCalendar(
     var currentMonth = remember(pagerState.currentPage) {
         YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
     }
+    val firstDay = PesaTimeConfiguration.firstDayOfWeek
+    val dayLabels = remember(firstDay) {
+        (0..6).map { firstDay.plus(it.toLong()) }
+            .map { it.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() } }
+    }
+
     LaunchedEffect(pagerState.currentPage) {
         androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
             val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
-
-            // Only update if the currently selected date isn't already in the new month
-            // This prevents overwriting a specific day selection when just clicking within the month
             if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
-                // Default to the 1st of the month (or today if swiping back to the current month)
                 val targetDate = if (newMonth == YearMonth.now()) {
                     LocalDate.now()
                 } else {
@@ -154,7 +156,7 @@ fun FullMonthCalendar(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
+                dayLabels.forEach { day ->
                     Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                         Text(
                             day,
@@ -175,7 +177,7 @@ fun FullMonthCalendar(
                 modifier = Modifier.fillMaxWidth()
             ) { page ->
                 val monthOfPage = YearMonth.now().plusMonths((page - initialPage).toLong())
-                val monthGrid = remember(monthOfPage) { generateMonthGrid(monthOfPage) }
+                val monthGrid = remember(monthOfPage) { generateMonthGrid(monthOfPage, firstDay) }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     monthGrid.forEach { week ->
@@ -265,23 +267,25 @@ fun IndicatorDot(color: Color) {
     )
 }
 
-fun generateMonthGrid(month: YearMonth): List<List<LocalDate?>> {
-    val firstDay = month.atDay(1)
-    val lastDay = month.atEndOfMonth()
+fun generateMonthGrid(month: YearMonth, firstDayOfWeek: DayOfWeek): List<List<LocalDate?>> {
+    val firstOfMonth = month.atDay(1)
+    val lastOfMonth = month.atEndOfMonth()
 
-    val start = firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-    val end = lastDay.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
+    val gridStart = firstOfMonth.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
 
-    val days = mutableListOf<List<LocalDate?>>()
-    var current = start
+    val lastDayWeekStart = lastOfMonth.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+    val gridEnd = lastDayWeekStart.plusDays(6)
 
-    while (!current.isAfter(end)) {
+    val weeks = mutableListOf<List<LocalDate?>>()
+    var current = gridStart
+
+    while (!current.isAfter(gridEnd)) {
         val week = (0..6).map {
             val day = current.plusDays(it.toLong())
             if (day.monthValue == month.monthValue) day else null
         }
-        days.add(week)
+        weeks.add(week)
         current = current.plusWeeks(1)
     }
-    return days
+    return weeks
 }

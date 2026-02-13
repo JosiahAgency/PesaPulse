@@ -18,9 +18,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.ui.screens.AllTransactions.formatAmount
 
 
 @Composable
@@ -84,7 +84,7 @@ fun InsightCard(
             modifier = Modifier
                 .padding(16.dp)
                 .clickable {
-                    PesaActions.playClick(hapticFeedback )
+                    PesaActions.playClick(hapticFeedback)
                 }
         ) {
             Text(
@@ -94,7 +94,7 @@ fun InsightCard(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Ksh ${formatAmount(amount)}",
+                text = PesaTimeConfiguration.formatCurrency(amount),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = color

@@ -2,10 +2,15 @@ package com.example.cashia.Utility
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import com.example.cashia.ui.screens.AllTransactions.formatAmount
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -40,8 +45,18 @@ object PesaActions {
 }
 
 object PesaTimeConfiguration {
-    var use24HrsFormat: Boolean = true
+    var use24HrsFormat: Boolean = false
     var datePattern: String = "dd MMM yyyy"
+
+    var firstDayOfWeek by mutableStateOf(DayOfWeek.SUNDAY)
+    val daysOfWeek = DayOfWeek.entries
+
+    const val CURRENCY = "KES"
+
+    fun formatCurrency(amount: Double): String {
+        return "$CURRENCY ${formatAmount(amount)}"
+    }
+
 
     fun getTimeFormatter(): DateTimeFormatter {
         val pattern = if (use24HrsFormat) "HH:mm" else "h:mm a"

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
@@ -60,6 +61,7 @@ import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +73,11 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
     val hapticFeedback = LocalHapticFeedback.current
 
+    val firstDay = PesaTimeConfiguration.firstDayOfWeek
+    val startOfWeek = selectedDate.with(
+        TemporalAdjusters.previousOrSame(firstDay)
+    )
+    val endOfWeek = startOfWeek.plusDays(6)
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -98,16 +105,15 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 TimeScope.DAY -> {
                     txDate == selectedDate
                 }
+
                 TimeScope.WEEK -> {
-                    // Find the Monday and Sunday of the week containing selectedDate
-                    val startOfWeek = selectedDate.with(java.time.DayOfWeek.MONDAY)
-                    val endOfWeek = selectedDate.with(java.time.DayOfWeek.SUNDAY)
                     !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
                 }
+
                 TimeScope.MONTH -> {
-                    // Check if month and year match
                     txDate.month == selectedDate.month && txDate.year == selectedDate.year
                 }
+
                 else -> txDate == selectedDate
             }
         }.sortedByDescending { it.date } // Keep newest at the top
@@ -117,10 +123,13 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
         when (selectedScope) {
             TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
             TimeScope.WEEK -> {
-                val start = selectedDate.with(java.time.DayOfWeek.MONDAY)
-                val end = selectedDate.with(java.time.DayOfWeek.SUNDAY)
-                "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} - ${end.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))}"
+                "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM"))} - ${
+                    endOfWeek.format(
+                        DateTimeFormatter.ofPattern("dd MMM yyyy")
+                    )
+                }"
             }
+
             TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
             else -> ""
         }

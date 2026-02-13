@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 
@@ -194,7 +195,7 @@ fun GlassyTrendChart(
                                 .zIndex(1f)
                         ) {
                             Text(
-                                text = "Ksh ${formatCompactAmount(amount)}",
+                                text = PesaTimeConfiguration.formatCurrency(amount),
                                 modifier = Modifier.padding(
                                     horizontal = 12.dp,
                                     vertical = 6.dp

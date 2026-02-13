@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
@@ -273,7 +274,7 @@ fun SummaryAmountHeader(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Ksh ${formatAmount(totalAmount)}",
+                        text = PesaTimeConfiguration.formatCurrency(totalAmount),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.ExtraBold,
                         color = color

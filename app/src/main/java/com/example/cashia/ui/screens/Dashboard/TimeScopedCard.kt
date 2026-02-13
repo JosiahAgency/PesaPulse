@@ -56,9 +56,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.models.SummaryData
-import com.example.cashia.ui.screens.AllTransactions.formatAmount
 import com.example.cashia.ui.theme.primaryGradient
 
 @Composable
@@ -128,9 +128,13 @@ fun TimeScopedSummaryCard(
                     )
                 }
 
-                val balanceText = "Ksh ${formatAmount(currentBalance)}"
+                val balanceText = PesaTimeConfiguration.formatCurrency(currentBalance)
                 Text(
-                    if (isBalanceVisible) balanceText else "Ksh ••••••••",
+                    text = if (isBalanceVisible) {
+                        balanceText
+                    } else {
+                        "${PesaTimeConfiguration.CURRENCY} ••••••••"
+                    },
                     modifier = Modifier.clickable {
                         if (isBalanceVisible) {
                             PesaActions.copyToClipboard(
@@ -319,7 +323,7 @@ fun SummaryItem(label: String, amount: Double, color: Color, icon: ImageVector) 
             )
         }
         Text(
-            text = "Ksh ${formatAmount(amount)}",
+            text = PesaTimeConfiguration.formatCurrency(amount),
             style = MaterialTheme.typography.bodyLarge.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp

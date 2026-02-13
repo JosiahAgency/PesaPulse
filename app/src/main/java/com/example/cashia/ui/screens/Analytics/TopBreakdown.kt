@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.screens.AllTransactions.formatAmount
@@ -146,7 +147,7 @@ fun RecipientProgressRow(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "Ksh ${formatAmount(amount)}",
+                text = PesaTimeConfiguration.formatCurrency(amount),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Black,
                 color = color
