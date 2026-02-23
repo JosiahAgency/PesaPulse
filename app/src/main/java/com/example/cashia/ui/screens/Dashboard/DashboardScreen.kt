@@ -22,14 +22,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -42,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -59,6 +62,7 @@ import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
 import com.example.cashia.ui.screens.AllTransactions.TransactionDetailDialog
 import com.example.cashia.ui.screens.AllTransactions.TransactionItem
+import com.example.cashia.ui.screens.Analytics.GlassySurface
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
@@ -77,17 +81,13 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
     var isListExpanded by remember { mutableStateOf(true) }
 
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
-    val startOfWeek = selectedDate.with(
-        TemporalAdjusters.previousOrSame(firstDay)
-    )
+    val startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
     val endOfWeek = startOfWeek.plusDays(6)
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.onPermissionGranted()
-            }
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.onPermissionGranted()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -95,43 +95,30 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
 
     var selectedScope by remember { mutableStateOf(TimeScope.WEEK) }
     val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
-        derivedStateOf {
-            viewModel.calculateSummary(selectedDate, selectedScope)
-        }
+        derivedStateOf { viewModel.calculateSummary(selectedDate, selectedScope) }
     }
 
     val transactionsForScope = remember(state.allTransactions, selectedDate, selectedScope) {
-        state.allTransactions.filter { transaction ->
-            val txDate = LocalDate.parse(transaction.date)
-
+        state.allTransactions.filter { tx ->
+            val txDate = LocalDate.parse(tx.date)
             when (selectedScope) {
-                TimeScope.DAY -> {
-                    txDate == selectedDate
-                }
-
-                TimeScope.WEEK -> {
-                    !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
-                }
-
-                TimeScope.MONTH -> {
-                    txDate.month == selectedDate.month && txDate.year == selectedDate.year
-                }
-
+                TimeScope.DAY -> txDate == selectedDate
+                TimeScope.WEEK -> !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
+                TimeScope.MONTH -> txDate.month == selectedDate.month && txDate.year == selectedDate.year
                 else -> txDate == selectedDate
             }
-        }.sortedByDescending { it.date } // Keep newest at the top
+        }.sortedByDescending { it.date }
     }
 
-    val scopeLabel = remember(selectedDate, selectedScope) {
+    // Human-readable period label used everywhere so stats are always contextualised
+    val periodLabel = remember(selectedDate, selectedScope) {
         when (selectedScope) {
-            TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
-            TimeScope.WEEK -> {
-                "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM"))} - ${
-                    endOfWeek.format(
-                        DateTimeFormatter.ofPattern("dd MMM yyyy")
-                    )
-                }"
-            }
+            TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM"))
+            TimeScope.WEEK -> "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                endOfWeek.format(
+                    DateTimeFormatter.ofPattern("dd MMM yyyy")
+                )
+            }"
 
             TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
             else -> ""
@@ -139,51 +126,36 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background, floatingActionButton = {
+        containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
             if (selectedDate != today) {
                 ExtendedFloatingActionButton(
-                    onClick = {
-                        selectedDate = today
-                    },
-                    icon = {
-                        Icon(Icons.Default.Today, contentDescription = "Today")
-
-                    },
-                    text = {
-                        Text("Today", fontWeight = FontWeight.SemiBold)
-                    },
+                    onClick = { selectedDate = today },
+                    icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
+                    text = { Text("Back to Today", fontWeight = FontWeight.SemiBold) },
                     containerColor = Color.Transparent,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp
-                    ),
+                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(
-                            brush = primaryGradient()
-                        )
+                        .background(brush = primaryGradient())
                 )
             }
-        }) { padding ->
+        }
+    ) { padding ->
         selectedTransaction?.let { tx ->
             TransactionDetailDialog(
-                hapticFeedback,
-                tx = tx,
+                hapticFeedback, tx = tx,
                 onDismiss = { selectedTransaction = null },
-                onEdit = { /* Handle Edit logic */ },
-                onDelete = {
-//                    viewModel.deleteTransaction(it)
-//                    selectedTransaction = null
-                }
+                onEdit = {},
+                onDelete = {}
             )
         }
+
         PullToRefreshBox(
-            isRefreshing = state.isLoading, onRefresh = {
-                viewModel.refreshFromSms()
-            }, modifier = Modifier
+            isRefreshing = state.isLoading,
+            onRefresh = { viewModel.refreshFromSms() },
+            modifier = Modifier
                 .fillMaxSize()
                 .padding()
         ) {
@@ -191,34 +163,28 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-//                item {
-//                    Row() {
-//                        Text(
-//                            text = "${PesaActions.getGreeting()},",
-//                            style = MaterialTheme.typography.bodyLarge,
-//                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-//                        )
-////                        Text(
-////                            text = "Josiah",
-////                            style = MaterialTheme.typography.bodyLarge.copy(
-////                                brush = primaryGradient() // Use your brand gradient for the name
-////                            )
-////                        )
-//                    }
-//
-//                }
 
+                // ── 1. BALANCE HERO — always shows "right now" balance ──────────────
                 item {
-                    TimeScopedSummaryCard(
-                        selectedScope,
-                        { selectedScope = it },
-                        summaryData,
-                        state.latestBalance,
-                        viewModel.isBalanceVisible,
-                        viewModel::toggleBalanceVisibility,
-                        hapticFeedback
+                    BalanceHeroCard(
+                        balance = state.latestBalance,
+                        isVisible = viewModel.isBalanceVisible,
+                        onToggleVisibility = viewModel::toggleBalanceVisibility
                     )
                 }
+
+                // ── 2. PERIOD SCOPE SELECTOR + SUMMARY — clearly labelled ───────────
+                item {
+                    PeriodSummaryCard(
+                        selectedScope = selectedScope,
+                        onScopeChange = { selectedScope = it },
+                        periodLabel = periodLabel,
+                        summaryData = summaryData,
+                        hapticFeedback = hapticFeedback
+                    )
+                }
+
+                // ── 3. WEEKLY CALENDAR ────────────────────────────────────────────
                 item {
                     WeeklyCalendar(
                         hapticFeedback,
@@ -226,73 +192,329 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                         selectedDate
                     ) { selectedDate = it }
                 }
+
+                // ── 4. TRANSACTION LIST HEADER — period label repeated so ──────────
+                //    user knows exactly which transactions they're seeing
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                .clickable {
-                                    PesaActions.playClick(hapticFeedback)
-                                    isListExpanded = !isListExpanded
-                                }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(brush = primaryGradient(), shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = scopeLabel.uppercase(),
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.2.sp
-                                ),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(
-                                imageVector = if (isListExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                contentDescription = if (isListExpanded) "Collapse" else "Expand",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
+                    TransactionListHeader(
+                        periodLabel = periodLabel,
+                        count = transactionsForScope.size,
+                        isExpanded = isListExpanded,
+                        onToggle = {
+                            PesaActions.playClick(hapticFeedback)
+                            isListExpanded = !isListExpanded
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.4f)
-                                .height(2.dp)
-                                .padding(top = 4.dp)
-                                .background(
-                                    brush = Brush.horizontalGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
-                        )
-                    }
+                    )
                 }
+
+                // ── 5. TRANSACTIONS ───────────────────────────────────────────────
                 if (transactionsForScope.isNotEmpty() && isListExpanded) {
                     items(transactionsForScope, key = { it.id }) { tx ->
                         TransactionItem(tx, onClick = { selectedTransaction = tx }, hapticFeedback)
                     }
                 } else if (transactionsForScope.isEmpty() && isListExpanded) {
-                    item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
-                } else {
-                    item {
+                    item { EmptyStateMessage("No transactions in this period", hapticFeedback) }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Balance Hero — unambiguous "right now" framing
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun BalanceHeroCard(
+    balance: Double,
+    isVisible: Boolean,
+    onToggleVisibility: () -> Unit
+) {
+    GlassySurface(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 20.dp)
+        ) {
+            Text(
+                text = "CURRENT BALANCE",
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.5.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleVisibility() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (isVisible)
+                        PesaTimeConfiguration.formatCurrency(balance)
+                    else
+                        "••••••",
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                // Live indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            brush = primaryGradient(),
+                            shape = CircleShape
+                        )
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Tap to ${if (isVisible) "hide" else "show"} • as of right now",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Period Summary — every number is labelled with what period it's for
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PeriodSummaryCard(
+    selectedScope: TimeScope,
+    onScopeChange: (TimeScope) -> Unit,
+    periodLabel: String,
+    summaryData: com.example.cashia.models.SummaryData,
+    hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
+) {
+    GlassySurface(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Period scope tabs
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(TimeScope.DAY, TimeScope.WEEK, TimeScope.MONTH).forEach { scope ->
+                    val isSelected = selectedScope == scope
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                PesaActions.playClick(hapticFeedback)
+                                onScopeChange(scope)
+                            },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = when (scope) {
+                                    TimeScope.DAY -> "Day"
+                                    TimeScope.WEEK -> "Week"
+                                    TimeScope.MONTH -> "Month"
+                                    else -> ""
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
-
             }
+
+            // Period label — the key missing piece: user always knows what they're looking at
+            Text(
+                text = periodLabel,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+
+            // Stats row — each stat has its own label
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                PeriodStat(
+                    label = "Money In",
+                    value = PesaTimeConfiguration.formatCurrency(summaryData.income),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    icon = Icons.Default.TrendingUp
+                )
+                // Vertical divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(52.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                )
+                PeriodStat(
+                    label = "Money Out",
+                    value = PesaTimeConfiguration.formatCurrency(summaryData.expenses),
+                    color = MaterialTheme.colorScheme.error,
+                    icon = Icons.Default.TrendingDown,
+                    alignEnd = true
+                )
+            }
+
+            // Net for the period
+            val net = summaryData.income - summaryData.expenses
+            val netPositive = net >= 0
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = (if (netPositive) MaterialTheme.colorScheme.tertiary
+                else MaterialTheme.colorScheme.error).copy(alpha = 0.08f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Net this ${
+                            when (selectedScope) {
+                                TimeScope.DAY -> "day"
+                                TimeScope.WEEK -> "week"
+                                else -> "month"
+                            }
+                        }",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${if (netPositive) "+" else ""}${
+                            PesaTimeConfiguration.formatCurrency(
+                                net
+                            )
+                        }",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = if (netPositive) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeriodStat(
+    label: String,
+    value: String,
+    color: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    alignEnd: Boolean = false
+) {
+    Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (!alignEnd) {
+                Icon(icon, null, tint = color.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+            }
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            if (alignEnd) {
+                Icon(icon, null, tint = color.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = color
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Transaction list header — restates the period so user is never confused
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun TransactionListHeader(
+    periodLabel: String,
+    count: Int,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f))
+            .clickable { onToggle() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = "TRANSACTIONS",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.5.sp
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
+            // Period label beneath so there's zero ambiguity
+            Text(
+                text = "$count result${if (count != 1) "s" else ""} for $periodLabel",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Transaction count badge
+            if (count > 0) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = count.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            Icon(
+                imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

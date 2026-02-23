@@ -441,9 +441,8 @@ fun TransactionItem(tx: MpesaTransactions, onClick: () -> Unit, hapticFeedback: 
                     text = tx.recipient,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.3).sp
                     ),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = accentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -580,7 +579,7 @@ fun TransactionDetailDialog(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     DetailRow("REFERENCE", tx.id)
-                    DetailRow("TIMESTAMP", "${tx.time}, ${tx.date}")
+                    DetailRow("TIMESTAMP", "${tx.displayTime}, ${tx.displayDate}")
                     if (!isIncome) {
                         DetailRow("SUBTOTAL", PesaTimeConfiguration.formatCurrency(tx.amount))
                         DetailRow("FEES", PesaTimeConfiguration.formatCurrency(tx.transactionCost))

@@ -63,19 +63,23 @@ import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.ui.theme.primaryGradient
+import java.time.DayOfWeek
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
+    onToggleTheme: (Boolean) -> Unit,
     use24HourFormat: Boolean,
-    onToggle24Hour: () -> Unit
+    onToggle24Hour: (Boolean) -> Unit,
+    firstDayOfWeek: DayOfWeek,
+    onFirstDayOfWeekChange: (DayOfWeek) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
+
 
     if (showDayPicker) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showDayPicker = false }) {
@@ -131,7 +135,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(16.dp))
 
                     val sortedDays = remember(PesaTimeConfiguration.firstDayOfWeek) {
-                        val allDays = java.time.DayOfWeek.entries.toMutableList()
+                        val allDays = DayOfWeek.entries.toMutableList()
                         val selected = PesaTimeConfiguration.firstDayOfWeek
 
                         allDays.remove(selected)
@@ -157,7 +161,7 @@ fun SettingsScreen(
                                     .background(backgroundColor)
                                     .clickable {
                                         PesaActions.playClick(haptic) // Add haptic feedback
-                                        PesaTimeConfiguration.firstDayOfWeek = day
+                                        onFirstDayOfWeekChange(day)
                                         showDayPicker = false
                                     }
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -211,94 +215,93 @@ fun SettingsScreen(
         item {
             SettingsSection(title = "Appearance") {
                 SettingsToggleItem(
-                    label = "Dark Mode",
-                    subtitle = "Adjust the app's visual theme",
+                    label = "App Theme",
+                    subtitle = "Switch between Light & Dark Modes.",
                     icon = if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
                     checked = isDarkTheme,
                     onCheckedChange = {
                         PesaActions.playClick(haptic)
-                        onToggleTheme()
+                        onToggleTheme(it)
                     }
                 )
-                SettingsToggleItem(
-                    label = "24-Hour Format",
-                    subtitle = "Toggle between 12h (AM/PM) and 24h Time Format",
-                    icon = Icons.Rounded.Schedule, // Import this
-                    checked = use24HourFormat,
-                    onCheckedChange = {
-                        PesaActions.playClick(haptic)
-                        onToggle24Hour()
-                    }
-                )
-                SettingsActionItem(
-                    label = "First Day of Week",
-                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
-                        .replaceFirstChar { it.uppercase() },
-                    icon = Icons.Rounded.CalendarMonth,
-                    onClick = {
-                        PesaActions.playClick(haptic)
-                        showDayPicker = true
-                    },
-                    isExpanded = false
-                )
+//                SettingsToggleItem(
+//                    label = "Use 24-Hour Clock",
+//                    subtitle = "Toggle between 12h (AM/PM) and 24h Time Format",
+//                    icon = Icons.Rounded.Schedule,
+//                    checked = use24HourFormat,
+//                    onCheckedChange = {
+//                        PesaActions.playClick(haptic)
+//                        onToggle24Hour(it)
+//                    }
+//                )
+//                SettingsActionItem(
+//                    label = "Week Start",
+//                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
+//                        .replaceFirstChar { it.uppercase() },
+//                    icon = Icons.Rounded.CalendarMonth,
+//                    onClick = {
+//                        PesaActions.playClick(haptic)
+//                        showDayPicker = true
+//                    },
+//                    isExpanded = false
+//                )
             }
         }
 
         // Security Section
-        item {
-            SettingsSection(title = "Security") {
-                var biometricEnabled by remember { mutableStateOf(false) }
-                SettingsToggleItem(
-                    label = "Biometric Lock",
-                    subtitle = "Require fingerprint to open PesaPulse",
-                    icon = Icons.Rounded.Fingerprint,
-                    checked = biometricEnabled,
-                    onCheckedChange = {
-                        PesaActions.playClick(haptic)
-//                        biometricEnabled = it
-                        Toast.makeText(
-                            context,
-                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                )
-            }
-        }
-
-        // Data Management
-        item {
-            SettingsSection(title = "Data & Storage") {
-                SettingsActionItem(
-                    label = "Sync SMS Transactions",
-                    subtitle = "Manually refresh from inbox",
-                    icon = Icons.Rounded.Sync,
-                    onClick = {
-                        PesaActions.playSuccess(haptic)
-                        Toast.makeText(
-                            context,
-                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    isExpanded = false
-                )
-                SettingsActionItem(
-                    label = "Export Data",
-                    subtitle = "Save transactions as CSV",
-                    icon = Icons.Rounded.IosShare,
-                    onClick = {
-                        PesaActions.playClick(haptic)
-                        Toast.makeText(
-                            context,
-                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    isExpanded = false
-                )
-            }
-        }
+//        item {
+//            SettingsSection(title = "Security") {
+//                var biometricEnabled by remember { mutableStateOf(false) }
+//                SettingsToggleItem(
+//                    label = "Biometric Security",
+//                    subtitle = "Require fingerprint to occess your data",
+//                    icon = Icons.Rounded.Fingerprint,
+//                    checked = biometricEnabled,
+//                    onCheckedChange = {
+//                        PesaActions.playClick(haptic)
+//                        Toast.makeText(
+//                            context,
+//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
+//                            Toast.LENGTH_SHORT
+//                        ).show()
+//                    }
+//                )
+//            }
+//        }
+//
+//        // Data Management
+//        item {
+//            SettingsSection(title = "Data & Storage") {
+//                SettingsActionItem(
+//                    label = "Sync SMS Transactions",
+//                    subtitle = "Manually refresh from inbox",
+//                    icon = Icons.Rounded.Sync,
+//                    onClick = {
+//                        PesaActions.playSuccess(haptic)
+//                        Toast.makeText(
+//                            context,
+//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
+//                            Toast.LENGTH_SHORT
+//                        ).show()
+//                    },
+//                    isExpanded = false
+//                )
+//                SettingsActionItem(
+//                    label = "Export Data",
+//                    subtitle = "Save transactions as CSV",
+//                    icon = Icons.Rounded.IosShare,
+//                    onClick = {
+//                        PesaActions.playClick(haptic)
+//                        Toast.makeText(
+//                            context,
+//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
+//                            Toast.LENGTH_SHORT
+//                        ).show()
+//                    },
+//                    isExpanded = false
+//                )
+//            }
+//        }
 
         // About
         item {

@@ -8,6 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresExtension
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -27,7 +31,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,12 +45,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,11 +72,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.Utility.PesaActions
-import com.example.cashia.models.PesaViewModel
+import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
 import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
+import com.example.cashia.ui.screens.Analytics.ProjectionScreen
 import com.example.cashia.ui.screens.CalendarScreen
 import com.example.cashia.ui.screens.Dashboard.DashboardScreen
 import com.example.cashia.ui.screens.SettingsScreen
@@ -80,59 +87,72 @@ import com.example.cashia.ui.theme.primaryGradient
 class MainActivity : ComponentActivity() {
 
     private val permissionRequestCode = 100
-    private val permissionsToRequest = arrayOf(
-        Manifest.permission.READ_SMS,
-    )
+    private val permissionsToRequest = arrayOf(Manifest.permission.READ_SMS)
 
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-
         if (permissionsToRequest.any {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    it
-                ) != PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
             }) {
-            ActivityCompat.requestPermissions(
-                this, permissionsToRequest, permissionRequestCode
-            )
+            ActivityCompat.requestPermissions(this, permissionsToRequest, permissionRequestCode)
         }
         enableEdgeToEdge()
         setContent {
-            var isDarkTheme by remember { mutableStateOf(true) }
-
-            PesaPulseTheme(darkTheme = isDarkTheme) {
-                PesaPulseApp(
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = { isDarkTheme = !isDarkTheme }
-                )
-            }
+            val settingsViewModel: SettingsViewModel = viewModel()
+            val isDark by settingsViewModel.darkTheme.collectAsState()
+            PesaPulseTheme(darkTheme = isDark) { PesaPulseApp() }
         }
     }
+}
+
+// ── Descriptions shown in the TopAppBar subtitle per screen ──────────────────
+private fun screenSubtitle(route: String?): String = when (route) {
+    AppDestinations.Dashboard.route -> "Your financial pulse, today"
+    AppDestinations.Transactions.route -> "Full transaction history"
+    AppDestinations.Calendar.route -> "Activity across the month"
+    AppDestinations.Analytics.route -> "Breakdown by period & category"
+    AppDestinations.Projections.route -> "30-day balance forecast"
+    else -> ""
+}
+
+private fun screenTitle(route: String?): String = when (route) {
+    AppDestinations.Dashboard.route -> "Home"
+    AppDestinations.Transactions.route -> "History"
+    AppDestinations.Calendar.route -> "Calendar"
+    AppDestinations.Analytics.route -> "Insights"
+    AppDestinations.Projections.route -> "Forecast"
+    else -> "PesaPulse"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
-fun PesaPulseApp(
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
-) {
+fun PesaPulseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
-    val paths = listOf(
+
+    // Bottom nav items — logical flow: Now → Past → Calendar → Insights → Future
+    val navItems = listOf(
         AppDestinations.Dashboard,
+        AppDestinations.Transactions,
         AppDestinations.Calendar,
         AppDestinations.Analytics,
-        AppDestinations.Transactions,
+        AppDestinations.Projections,
     )
+
     val haptic = LocalHapticFeedback.current
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val viewModel: PesaViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val isDark by settingsViewModel.darkTheme.collectAsState()
+    val use24 by settingsViewModel.use24Hour.collectAsState()
+    val firstDay by settingsViewModel.firstDayOfWeek.collectAsState()
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     Box(
         modifier = Modifier
@@ -140,9 +160,11 @@ fun PesaPulseApp(
             .background(MaterialTheme.colorScheme.background)
     ) {
         BackgroundGlow(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
+                // Contextual top bar: title changes per screen with subtitle explaining what the screen does
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -150,33 +172,53 @@ fun PesaPulseApp(
                 ) {
                     TopAppBar(
                         title = {
-                            Text(
-                                PesaActions.getGreeting(),
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    brush = primaryGradient(),
-                                )
-                            )
+                            Column {
+                                AnimatedContent(
+                                    targetState = screenTitle(currentRoute),
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "title"
+                                ) { title ->
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.Black,
+                                            brush = primaryGradient(),
+                                        )
+                                    )
+                                }
+                                AnimatedContent(
+                                    targetState = screenSubtitle(currentRoute),
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "subtitle"
+                                ) { subtitle ->
+                                    if (subtitle.isNotEmpty()) {
+                                        Text(
+                                            text = subtitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.6f
+                                            )
+                                        )
+                                    }
+                                }
+                            }
                         },
                         windowInsets = WindowInsets.statusBars,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                        ),
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                         actions = {
                             IconButton(onClick = {
                                 PesaActions.playClick(haptic)
-                                navController.navigate("settings") {
+                                navController.navigate(AppDestinations.Settings.route) {
                                     launchSingleTop = true
                                     popUpTo(navController.graph.startDestinationId) {
                                         saveState = true
                                     }
                                     restoreState = true
                                 }
-
                             }) {
                                 Icon(
-                                    imageVector = AppDestinations.Settings.icon,
-                                    contentDescription = AppDestinations.Settings.label,
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
@@ -185,16 +227,25 @@ fun PesaPulseApp(
                 }
             },
             bottomBar = {
-                GlassNavigationBar(haptic, navController, paths)
-            }) { innerPadding ->
+                // Only show bottom nav on main screens, not settings
+                if (currentRoute != AppDestinations.Settings.route) {
+                    GlassNavigationBar(haptic, navController, navItems)
+                }
+            }
+        ) { innerPadding ->
             NavHost(
                 navController = navController,
                 startDestination = AppDestinations.Dashboard.route,
                 modifier = Modifier.padding(innerPadding)
-
             ) {
                 composable(AppDestinations.Dashboard.route) {
                     DashboardScreen(viewModel = sharedViewModel)
+                }
+                composable(AppDestinations.Transactions.route) {
+                    TransactionScreen(
+                        viewModel = sharedViewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
                 composable(AppDestinations.Calendar.route) {
                     CalendarScreen(viewModel = sharedViewModel)
@@ -202,17 +253,17 @@ fun PesaPulseApp(
                 composable(AppDestinations.Analytics.route) {
                     AnalyticsScreen()
                 }
-                composable(AppDestinations.Transactions.route) {
-                    TransactionScreen(
-                        viewModel = sharedViewModel,
-                        onNavigateBack = { navController.popBackStack() })
+                composable(AppDestinations.Projections.route) {
+                    ProjectionScreen()
                 }
                 composable(AppDestinations.Settings.route) {
                     SettingsScreen(
-                        isDarkTheme = isDarkTheme,
-                        onToggleTheme = onToggleTheme,
-                        use24HourFormat = viewModel.use24HourFormat,
-                        onToggle24Hour = { viewModel.toggleTimeFormat() }
+                        isDarkTheme = isDark,
+                        onToggleTheme = settingsViewModel::setDarkTheme,
+                        use24HourFormat = use24,
+                        onToggle24Hour = settingsViewModel::setUse24Hour,
+                        firstDayOfWeek = firstDay,
+                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek
                     )
                 }
             }
@@ -232,16 +283,14 @@ fun BackgroundGlow(color: Color) {
                 colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.2f, size.height * 0.15f),
                 radius = size.width * 0.8f
-            ),
-            alpha = 0.4f
+            ), alpha = 0.4f
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.8f, size.height * 0.9f),
                 radius = size.width * 0.6f
-            ),
-            alpha = 0.3f
+            ), alpha = 0.3f
         )
     }
 }
@@ -266,10 +315,7 @@ fun GlassNavigationBar(
         color = colorScheme.surface.copy(
             alpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
         ),
-        border = BorderStroke(
-            0.6.dp,
-            colorScheme.onSurface.copy(alpha = 0.12f)
-        ),
+        border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
         tonalElevation = 0.dp
     ) {
         Row(
@@ -301,25 +347,37 @@ fun GlassNavigationBar(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
+                        // Selected indicator pill
+                        if (selected) {
+                            Box(
+                                modifier = Modifier
+                                    .width(24.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(brush = primaryGradient())
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        } else {
+                            Spacer(Modifier.height(7.dp))
+                        }
+
                         Icon(
                             imageVector = screen.icon,
                             contentDescription = screen.label,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             tint = if (selected)
                                 colorScheme.primary
                             else
-                                colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = screen.label,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             maxLines = 1,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (selected)
-                                Color.Unspecified
-                            else
-                                colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) Color.Unspecified
+                            else colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 brush = if (selected) primaryGradient() else null,
                             )
@@ -330,4 +388,3 @@ fun GlassNavigationBar(
         }
     }
 }
-

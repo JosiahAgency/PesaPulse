@@ -52,7 +52,6 @@ import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.ui.screens.AllTransactions.formatAmount
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -72,15 +71,12 @@ fun AnalyticsScreen() {
         factory = TransactionsViewModel.provideFactory(context)
     )
     val hapticFeedback = LocalHapticFeedback.current
-
     val state = viewModel.state
     val transactions = viewModel.state.allTransactions
 
     var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
-
     val today = LocalDate.now()
-
     var startDate by remember { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
 
@@ -105,61 +101,71 @@ fun AnalyticsScreen() {
 
     val filteredTransactions = remember(transactions, selectedType, startTs, endTs) {
         transactions.filter { tx ->
-            val isDateInRange = tx.timestamp in startTs..endTs
-            val isTypeMatch = tx.type == selectedType.name.lowercase()
-            isDateInRange && isTypeMatch
+            tx.timestamp in startTs..endTs && tx.type == selectedType.name.lowercase()
         }
     }
 
-    remember(transactions, startTs, endTs) {
-        transactions.filter { tx -> tx.timestamp in startTs..endTs }
+    // Human-readable period label displayed on every stat so there's no ambiguity
+    val periodLabel = remember(startDate, endDate, selectedScope) {
+        when (selectedScope) {
+            TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+            TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                endDate.format(
+                    DateTimeFormatter.ofPattern("dd MMM yyyy")
+                )
+            }"
+
+            TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+            TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                endDate.format(
+                    DateTimeFormatter.ofPattern("dd MMM yyyy")
+                )
+            }"
+
+            else -> ""
+        }
     }
+
     val colorScheme = MaterialTheme.colorScheme
     val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
     val glassColor = colorScheme.surface.copy(alpha = glassAlpha)
     val glassBorder = colorScheme.onSurface.copy(alpha = 0.12f)
 
-    Scaffold(
-        containerColor = Color.Transparent,
-    ) { padding ->
+    Scaffold(containerColor = Color.Transparent) { _ ->
         PullToRefreshBox(
             isRefreshing = state.isLoading,
             onRefresh = { viewModel.refreshFromSms() },
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+
+                // ── Controls: period selector + type toggle ───────────────────
                 item {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
                         shape = RoundedCornerShape(28.dp),
                         color = glassColor,
-                        border = BorderStroke(
-                            0.6.dp, glassBorder
-                        ),
+                        border = BorderStroke(0.6.dp, glassBorder),
                     ) {
                         Column(
                             Modifier.padding(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-
                             GlassyPeriodSelector(
                                 hapticFeedback,
                                 startDate = startDate,
                                 endDate = endDate,
                                 onStartDateSelected = {
-                                    startDate = it
-                                    selectedScope = TimeScope.CUSTOM
+                                    startDate = it; selectedScope = TimeScope.CUSTOM
                                 },
                                 onEndDateSelected = {
-                                    endDate = it
-                                    selectedScope = TimeScope.CUSTOM
+                                    endDate = it; selectedScope = TimeScope.CUSTOM
                                 }
                             )
                             ModernTypeSelector(
@@ -170,12 +176,15 @@ fun AnalyticsScreen() {
                         }
                     }
                 }
+
+                // ── Summary header — period label is the first line ───────────
                 item {
                     SummaryAmountHeader(
                         hapticFeedback,
                         totalAmount = filteredTransactions.sumOf { it.amount },
                         transactionCount = filteredTransactions.size,
                         type = selectedType,
+                        periodLabel = periodLabel,          // ← NEW: always shown
                         previousPeriodAmount = calculatePreviousPeriod(
                             transactions,
                             startDate,
@@ -184,6 +193,8 @@ fun AnalyticsScreen() {
                         )
                     )
                 }
+
+                // ── Chart — subtitle says what period ─────────────────────────
                 if (filteredTransactions.isNotEmpty()) {
                     item {
                         GlassyTrendChart(
@@ -192,21 +203,187 @@ fun AnalyticsScreen() {
                         )
                     }
                 }
+
+                // ── Quick insights ────────────────────────────────────────────
                 if (filteredTransactions.isNotEmpty()) {
                     item {
                         QuickInsightsRow(filteredTransactions, selectedType)
                     }
                 }
+
+                // ── Category breakdown ────────────────────────────────────────
                 item {
                     TopBreakdownSection(
                         filteredTransactions = filteredTransactions,
                         selectedType = selectedType
                     )
                 }
+
+                // ── Empty state with helpful guidance ─────────────────────────
+                if (filteredTransactions.isEmpty()) {
+                    item {
+                        InsightsEmptyState(
+                            selectedType = selectedType,
+                            periodLabel = periodLabel
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Summary Amount Header — now takes periodLabel so every number has context
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun SummaryAmountHeader(
+    hapticFeedback: HapticFeedback,
+    totalAmount: Double,
+    transactionCount: Int,
+    type: TransactionType,
+    periodLabel: String,            // ← added
+    previousPeriodAmount: Double
+) {
+    val color = if (type == TransactionType.INCOME)
+        MaterialTheme.colorScheme.tertiary
+    else
+        MaterialTheme.colorScheme.error
+
+    val percentageChange = if (previousPeriodAmount > 0) {
+        ((totalAmount - previousPeriodAmount) / previousPeriodAmount * 100)
+    } else 0.0
+
+    GlassySurface {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .clickable { PesaActions.playClick(hapticFeedback) }
+        ) {
+            // Period label at the top — answers "this data is for WHAT period?"
+            Text(
+                text = periodLabel.uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Total ${type.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = PesaTimeConfiguration.formatCurrency(totalAmount),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = color
+                    )
+
+                    if (percentageChange != 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (percentageChange > 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                contentDescription = null,
+                                tint = if (percentageChange > 0) color else color.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "${if (percentageChange > 0) "+" else ""}${percentageChange.roundToInt()}% vs previous period",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    color = color.copy(alpha = 0.15f),
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = transactionCount.toString(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            color = color,
+                            lineHeight = 24.sp
+                        )
+                        Text(
+                            text = "Transactions",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 0.5.sp,
+                                fontSize = 9.sp
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = color.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty state that tells the user WHY there's nothing and what to try
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun InsightsEmptyState(
+    selectedType: TransactionType,
+    periodLabel: String
+) {
+    GlassySurface(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = if (selectedType == TransactionType.EXPENSE) "💸" else "💰",
+                style = MaterialTheme.typography.displaySmall
+            )
+            Text(
+                text = "No ${selectedType.name.lowercase()} data",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "No ${selectedType.name.lowercase()} transactions found for $periodLabel. Try a different period or switch to ${if (selectedType == TransactionType.EXPENSE) "Income" else "Expenses"}.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared composables (GlassySurface, DateColumn, helpers)
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun DateColumn(label: String, date: LocalDate, onClick: () -> Unit) {
@@ -233,113 +410,6 @@ fun DateColumn(label: String, date: LocalDate, onClick: () -> Unit) {
 }
 
 @Composable
-fun SummaryAmountHeader(
-    hapticFeedback: HapticFeedback,
-    totalAmount: Double,
-    transactionCount: Int,
-    type: TransactionType,
-    previousPeriodAmount: Double
-) {
-    val color = if (type == TransactionType.INCOME)
-        MaterialTheme.colorScheme.tertiary
-    else
-        MaterialTheme.colorScheme.error
-
-    val percentageChange = if (previousPeriodAmount > 0) {
-        ((totalAmount - previousPeriodAmount) / previousPeriodAmount * 100)
-    } else 0.0
-
-    GlassySurface {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .clickable {
-                    PesaActions.playClick(hapticFeedback)
-                }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Total ${
-                            type.name.lowercase().replaceFirstChar { it.uppercase() }
-                        }",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = PesaTimeConfiguration.formatCurrency(totalAmount),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = color
-                    )
-
-                    if (percentageChange != 0.0) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (percentageChange > 0)
-                                    Icons.Default.TrendingUp
-                                else
-                                    Icons.Default.TrendingDown,
-                                contentDescription = null,
-                                tint = if (percentageChange > 0) color else color.copy(alpha = 0.6f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = "${if (percentageChange > 0) "+" else ""}${percentageChange.roundToInt()}% vs last period",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                Surface(
-                    color = color.copy(alpha = 0.15f),
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(12.dp)), // Slightly rounder for a modern look
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp), // Prevents text from touching the edges
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = transactionCount.toString(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black, // "Pulse" branding weight
-                            color = color,
-                            lineHeight = 24.sp
-                        )
-
-                        Text(
-                            text = "Transactions", // Refined label for small spaces
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 0.5.sp,
-                                fontSize = 9.sp // Smaller specific size for the 64dp box
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            color = color.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun GlassySurface(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
@@ -357,7 +427,10 @@ fun GlassySurface(
     }
 }
 
-// Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper functions
+// ─────────────────────────────────────────────────────────────────────────────
+
 fun calculatePreviousPeriod(
     transactions: List<MpesaTransactions>,
     startDate: LocalDate,
@@ -367,33 +440,26 @@ fun calculatePreviousPeriod(
     val periodLength = Period.between(startDate, endDate).days + 1
     val previousStart = startDate.minusDays(periodLength.toLong())
     val previousEnd = startDate.minusDays(1)
-
     val previousStartTs =
         previousStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val previousEndTs =
-        previousEnd.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant()
-            .toEpochMilli()
-
+        previousEnd.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     return transactions.filter { tx ->
         tx.timestamp in previousStartTs..previousEndTs && tx.type == type.name.lowercase()
     }.sumOf { it.amount }
 }
 
-fun formatCompactAmount(amount: Double): String {
-    return when {
-        amount >= 1_000_000 -> "${(amount / 1_000_000).toInt()}M"
-        amount >= 1_000 -> "${(amount / 1_000).toInt()}k"
-        else -> amount.toInt().toString()
-    }
+fun formatCompactAmount(amount: Double): String = when {
+    amount >= 1_000_000 -> "${(amount / 1_000_000).toInt()}M"
+    amount >= 1_000 -> "${(amount / 1_000).toInt()}k"
+    else -> amount.toInt().toString()
 }
 
 fun formatXLabel(key: String): String {
     return if (key.length > 7) {
-        val date = LocalDate.parse(key)
-        date.format(DateTimeFormatter.ofPattern("dd MMM"))
+        LocalDate.parse(key).format(DateTimeFormatter.ofPattern("dd MMM"))
     } else {
-        val yearMonth = YearMonth.parse(key)
-        yearMonth.format(DateTimeFormatter.ofPattern("MMM yy"))
+        YearMonth.parse(key).format(DateTimeFormatter.ofPattern("MMM yy"))
     }
 }
 
@@ -408,22 +474,14 @@ fun showDatePicker(
     val calendar = Calendar.getInstance().apply {
         set(initialDate.year, initialDate.monthValue - 1, initialDate.dayOfMonth)
     }
-
-    val dateSetListener = DatePickerDialog.OnDateSetListener { _, year, month, day ->
-        val newDate = LocalDate.of(year, month + 1, day)
-
-        if (isStart && newDate.isAfter(endDate)) {
-            onDateSelected(endDate)
-        } else if (!isStart && newDate.isBefore(startDate)) {
-            onDateSelected(startDate)
-        } else {
-            onDateSelected(newDate)
-        }
-    }
-
     DatePickerDialog(
         context,
-        dateSetListener,
+        { _, year, month, day ->
+            val newDate = LocalDate.of(year, month + 1, day)
+            if (isStart && newDate.isAfter(endDate)) onDateSelected(endDate)
+            else if (!isStart && newDate.isBefore(startDate)) onDateSelected(startDate)
+            else onDateSelected(newDate)
+        },
         calendar.get(Calendar.YEAR),
         calendar.get(Calendar.MONTH),
         calendar.get(Calendar.DAY_OF_MONTH)

@@ -1,10 +1,8 @@
 package com.example.cashia.ui.screens.Dashboard
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -262,15 +260,6 @@ fun SegmentedControl(
             items.forEachIndexed { index, scope ->
                 val isSelected = index == selectedIndex
 
-                val textColor by animateColorAsState(
-                    targetValue = if (isSelected)
-                        MaterialTheme.colorScheme.onPrimary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(200),
-                    label = "textColor"
-                )
-
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -286,14 +275,8 @@ fun SegmentedControl(
                 ) {
                     Text(
                         text = scope.name.lowercase().replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            shadow = if (isSelected) Shadow(
-                                color = Color.Black.copy(alpha = 0.2f),
-                                offset = Offset(0f, 2f),
-                                blurRadius = 4f
-                            ) else Shadow.None
-                        ),
-                        color = textColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                     )
                 }
