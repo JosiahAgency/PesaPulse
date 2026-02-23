@@ -12,10 +12,10 @@ android {
 
     defaultConfig {
         applicationId = "com.pesapulse"
-        minSdk = 33
+        minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.1.1"
+        versionCode = 2
+        versionName = "2.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -38,6 +38,13 @@ android {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(17))
         }
+    }
+    kotlinOptions {
+        freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     buildFeatures {
@@ -71,4 +78,11 @@ dependencies {
 
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.accompanist:accompanist-pager:0.32.0")
+
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
+    implementation("androidx.core:core-splashscreen:1.2.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 }

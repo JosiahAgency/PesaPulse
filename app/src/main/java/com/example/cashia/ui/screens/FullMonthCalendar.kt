@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,38 +8,41 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.ui.theme.primaryGradient
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 @Composable
@@ -47,154 +51,149 @@ fun FullMonthCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit
 ) {
-    var currentMonth by remember { mutableStateOf(YearMonth.now()) }
+    val coroutineScope = rememberCoroutineScope()
+    val initialPage = 500
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { 1000 }
+    )
+    var currentMonth = remember(pagerState.currentPage) {
+        YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
+    }
+    val firstDay = PesaTimeConfiguration.firstDayOfWeek
+    val dayLabels = remember(firstDay) {
+        (0..6).map { firstDay.plus(it.toLong()) }
+            .map { it.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() } }
+    }
 
+    LaunchedEffect(pagerState.currentPage) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
+            val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
+            if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
+                val targetDate = if (newMonth == YearMonth.now()) {
+                    LocalDate.now()
+                } else {
+                    newMonth.atDay(1)
+                }
+                onDateSelected(targetDate)
+            }
+        }
+    }
     LaunchedEffect(selectedDate) {
-        val selectedYearMonth = YearMonth.from(selectedDate)
-        if (currentMonth != selectedYearMonth) {
-            currentMonth = selectedYearMonth
+        val targetMonth = YearMonth.from(selectedDate)
+        val currentPagerMonth =
+            YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
+
+        if (targetMonth != currentPagerMonth) {
+            val targetPage = initialPage +
+                    ((targetMonth.year - YearMonth.now().year) * 12) +
+                    (targetMonth.monthValue - YearMonth.now().monthValue)
+
+            pagerState.animateScrollToPage(targetPage)
         }
     }
 
-    val monthGrid = remember(currentMonth) { generateMonthGrid(currentMonth) }
+    val colorScheme = MaterialTheme.colorScheme
+    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
+
     val monthTitle = currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() } +
             " " + currentMonth.year
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-            .padding(8.dp)
+    val incomeDates = remember(allTransactions) {
+        allTransactions.filter { it.type == "income" }.map { it.date }.toSet()
+    }
+    val expenseDates = remember(allTransactions) {
+        allTransactions.filter { it.type == "expense" }.map { it.date }.toSet()
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = colorScheme.surface.copy(alpha = glassAlpha),
+        border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
+        tonalElevation = 0.dp
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = {
-                currentMonth = currentMonth.minusMonths(1)
-            }) {
-                Icon(
-                    Icons.Default.KeyboardDoubleArrowLeft,
-                    "Previous Month",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = monthTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            IconButton(onClick = {
-                currentMonth = currentMonth.plusMonths(1)
-            }) {
-                Icon(
-                    Icons.Default.KeyboardDoubleArrowRight,
-                    "Next Month",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
-                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        day,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    coroutineScope.launch {
+                        if (pagerState.currentPage > 0) {
+                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                        }
+                    }
+                }) {
+                    Icon(
+                        Icons.Default.ChevronLeft,
+                        "Prev",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
-
+                Text(
+                    text = monthTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = {
+                    coroutineScope.launch {
+                        if (pagerState.currentPage < pagerState.pageCount - 1) {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
+                    }
+                }) {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        "Next",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        }
-        Spacer(Modifier.height(4.dp))
-
-        val transactionsByDate = remember(allTransactions) {
-            allTransactions.groupBy { it.date }
-        }
-
-        monthGrid.forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                week.forEach { day ->
-                    if (day == null) {
-                        Box(modifier = Modifier.size(40.dp))
-                    } else {
-                        val isSelected = day == selectedDate
+                dayLabels.forEach { day ->
+                    Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            day,
+                            modifier = Modifier.width(40.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
-                        val dayString = day.toString()
-                        val dayTransactions = transactionsByDate[dayString] ?: emptyList()
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) { page ->
+                val monthOfPage = YearMonth.now().plusMonths((page - initialPage).toLong())
+                val monthGrid = remember(monthOfPage) { generateMonthGrid(monthOfPage, firstDay) }
 
-                        val hasIncome = dayTransactions.any { it.type == "income" }
-                        val hasExpense = dayTransactions.any { it.type == "expense" }
-
-                        val backgroundColor = when {
-                            isSelected -> MaterialTheme.colorScheme.primary
-                            dayTransactions.isNotEmpty() -> MaterialTheme.colorScheme.surfaceVariant.copy(
-                                alpha = 0.3f
-                            )
-
-                            else -> Color.Transparent
-                        }
-
-                        val textColor = if (isSelected)
-                            MaterialTheme.colorScheme.onPrimary
-                        else
-                            MaterialTheme.colorScheme.onSurface
-
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(backgroundColor)
-                                .clickable {
-                                    onDateSelected(day)
-                                },
-                            contentAlignment = Alignment.Center
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    monthGrid.forEach { week ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = day.dayOfMonth.toString(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = textColor
+                            week.forEach { day ->
+                                CalendarDayItem(
+                                    day,
+                                    isSelected = day == selectedDate,
+                                    isCurrentMonth = day?.month == monthOfPage.month,
+                                    hasIncome = day != null && incomeDates.contains(day.toString()),
+                                    hasExpense = day != null && expenseDates.contains(day.toString()),
+                                    onDateSelected
                                 )
-
-                                if (hasIncome || hasExpense) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        if (hasExpense) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(4.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (isSelected) Color.White.copy(alpha = 0.7f)
-                                                        else MaterialTheme.colorScheme.error
-                                                    )
-                                            )
-                                        }
-                                        if (hasIncome) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(4.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (isSelected) Color.White
-                                                        else MaterialTheme.colorScheme.tertiary
-                                                    )
-                                            )
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -205,23 +204,88 @@ fun FullMonthCalendar(
     }
 }
 
-fun generateMonthGrid(month: YearMonth): List<List<LocalDate?>> {
-    val firstDay = month.atDay(1)
-    val lastDay = month.atEndOfMonth()
+@Composable
+fun CalendarDayItem(
+    day: LocalDate?,
+    isSelected: Boolean,
+    isCurrentMonth: Boolean,
+    hasIncome: Boolean,
+    hasExpense: Boolean,
+    onDateSelected: (LocalDate) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp) // Slightly larger touch target
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (day != null) {
+            val selectionModifier = if (isSelected) {
+                Modifier.background(brush = primaryGradient(), shape = CircleShape)
+            } else Modifier
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .then(selectionModifier)
+                    .clickable { onDateSelected(day) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = day.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                    color = when {
+                        isSelected -> Color.White
+                        !isCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                )
 
-    val start = firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-    val end = lastDay.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
+                // Status Indicators
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.height(4.dp)
+                ) {
+                    if (hasIncome) IndicatorDot(if (isSelected) Color.White else MaterialTheme.colorScheme.tertiary)
+                    if (hasExpense) IndicatorDot(if (isSelected) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
 
-    val days = mutableListOf<List<LocalDate?>>()
-    var current = start
 
-    while (!current.isAfter(end)) {
+@Composable
+fun IndicatorDot(color: Color) {
+    Box(
+        modifier = Modifier
+            .size(3.dp)
+            .clip(CircleShape)
+            .background(color)
+    )
+}
+
+fun generateMonthGrid(month: YearMonth, firstDayOfWeek: DayOfWeek): List<List<LocalDate?>> {
+    val firstOfMonth = month.atDay(1)
+    val lastOfMonth = month.atEndOfMonth()
+
+    val gridStart = firstOfMonth.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+
+    val lastDayWeekStart = lastOfMonth.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+    val gridEnd = lastDayWeekStart.plusDays(6)
+
+    val weeks = mutableListOf<List<LocalDate?>>()
+    var current = gridStart
+
+    while (!current.isAfter(gridEnd)) {
         val week = (0..6).map {
             val day = current.plusDays(it.toLong())
             if (day.monthValue == month.monthValue) day else null
         }
-        days.add(week)
+        weeks.add(week)
         current = current.plusWeeks(1)
     }
-    return days
+    return weeks
 }

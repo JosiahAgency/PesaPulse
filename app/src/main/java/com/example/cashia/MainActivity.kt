@@ -8,186 +8,383 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresExtension
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.cashia.Utility.PesaActions
+import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
-import com.example.cashia.ui.screens.AnalyticsScreen
-import com.example.cashia.ui.screens.DashboardScreen
-import com.example.cashia.ui.screens.TransactionScreen
-import com.example.cashia.ui.screens.formatAmount
+import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
+import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
+import com.example.cashia.ui.screens.Analytics.ProjectionScreen
+import com.example.cashia.ui.screens.CalendarScreen
+import com.example.cashia.ui.screens.Dashboard.DashboardScreen
+import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
+import com.example.cashia.ui.theme.primaryGradient
 
 class MainActivity : ComponentActivity() {
 
-    private val PERMISSIONS_REQUEST_CODE = 100
-    private val permissionsToRequest = arrayOf(
-        Manifest.permission.READ_SMS,
-    )
+    private val permissionRequestCode = 100
+    private val permissionsToRequest = arrayOf(Manifest.permission.READ_SMS)
 
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
-
         if (permissionsToRequest.any {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    it
-                ) != PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
             }) {
-            ActivityCompat.requestPermissions(
-                this, permissionsToRequest, PERMISSIONS_REQUEST_CODE
-            )
+            ActivityCompat.requestPermissions(this, permissionsToRequest, permissionRequestCode)
         }
         enableEdgeToEdge()
         setContent {
-            var isDarkTheme by remember { mutableStateOf(true) }
-
-            PesaPulseTheme(darkTheme = isDarkTheme) {
-                PesaPulseApp(
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = { isDarkTheme = !isDarkTheme }
-                )
-            }
+            val settingsViewModel: SettingsViewModel = viewModel()
+            val isDark by settingsViewModel.darkTheme.collectAsState()
+            PesaPulseTheme(darkTheme = isDark) { PesaPulseApp() }
         }
     }
+}
+
+// ── Descriptions shown in the TopAppBar subtitle per screen ──────────────────
+private fun screenSubtitle(route: String?): String = when (route) {
+    AppDestinations.Dashboard.route -> "Your financial pulse, today"
+    AppDestinations.Transactions.route -> "Full transaction history"
+    AppDestinations.Calendar.route -> "Activity across the month"
+    AppDestinations.Analytics.route -> "Breakdown by period & category"
+    AppDestinations.Projections.route -> "30-day balance forecast"
+    else -> ""
+}
+
+private fun screenTitle(route: String?): String = when (route) {
+    AppDestinations.Dashboard.route -> "Home"
+    AppDestinations.Transactions.route -> "History"
+    AppDestinations.Calendar.route -> "Calendar"
+    AppDestinations.Analytics.route -> "Insights"
+    AppDestinations.Projections.route -> "Forecast"
+    else -> "PesaPulse"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
-fun PesaPulseApp(
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
-) {
+fun PesaPulseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
-    val paths = listOf(
-        AppDestinations.Transactions,
+
+    // Bottom nav items — logical flow: Now → Past → Calendar → Insights → Future
+    val navItems = listOf(
         AppDestinations.Dashboard,
+        AppDestinations.Transactions,
+        AppDestinations.Calendar,
         AppDestinations.Analytics,
+        AppDestinations.Projections,
     )
+
+    val haptic = LocalHapticFeedback.current
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val state = sharedViewModel.state
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "PesaPulse",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface, // Clean background
-                    titleContentColor = MaterialTheme.colorScheme.primary, // Brand color for text
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                actions = {
-                    IconButton(onClick = onToggleTheme) {
-                        Icon(
-                            if (isDarkTheme) Icons.Default.LightMode
-                            else Icons.Default.DarkMode,
-                            contentDescription = "Toggle Theme"
-                        )
-                    }
-                }
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ) {
-                val currentDestination =
-                    navController.currentBackStackEntryAsState().value?.destination
-                paths.forEach { screen ->
-                    val isSelected = currentDestination?.route == screen.route
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                screen.icon,
-                                contentDescription = screen.label
-                            )
-                        },
-                        label = {
-                            Text(
-                                screen.label,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        selected = isSelected,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val isDark by settingsViewModel.darkTheme.collectAsState()
+    val use24 by settingsViewModel.use24Hour.collectAsState()
+    val firstDay by settingsViewModel.firstDayOfWeek.collectAsState()
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        BackgroundGlow(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                // Contextual top bar: title changes per screen with subtitle explaining what the screen does
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                ) {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                AnimatedContent(
+                                    targetState = screenTitle(currentRoute),
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "title"
+                                ) { title ->
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.Black,
+                                            brush = primaryGradient(),
+                                        )
+                                    )
+                                }
+                                AnimatedContent(
+                                    targetState = screenSubtitle(currentRoute),
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "subtitle"
+                                ) { subtitle ->
+                                    if (subtitle.isNotEmpty()) {
+                                        Text(
+                                            text = subtitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.6f
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimary, // White icon
-                            selectedTextColor = MaterialTheme.colorScheme.primary,   // Blue text
-                            indicatorColor = MaterialTheme.colorScheme.primary,      // Blue circle background
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        windowInsets = WindowInsets.statusBars,
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                        actions = {
+                            IconButton(onClick = {
+                                PesaActions.playClick(haptic)
+                                navController.navigate(AppDestinations.Settings.route) {
+                                    launchSingleTop = true
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    restoreState = true
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    )
+                }
+            },
+            bottomBar = {
+                // Only show bottom nav on main screens, not settings
+                if (currentRoute != AppDestinations.Settings.route) {
+                    GlassNavigationBar(haptic, navController, navItems)
+                }
+            }
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = AppDestinations.Dashboard.route,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(AppDestinations.Dashboard.route) {
+                    DashboardScreen(viewModel = sharedViewModel)
+                }
+                composable(AppDestinations.Transactions.route) {
+                    TransactionScreen(
+                        viewModel = sharedViewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable(AppDestinations.Calendar.route) {
+                    CalendarScreen(viewModel = sharedViewModel)
+                }
+                composable(AppDestinations.Analytics.route) {
+                    AnalyticsScreen()
+                }
+                composable(AppDestinations.Projections.route) {
+                    ProjectionScreen()
+                }
+                composable(AppDestinations.Settings.route) {
+                    SettingsScreen(
+                        isDarkTheme = isDark,
+                        onToggleTheme = settingsViewModel::setDarkTheme,
+                        use24HourFormat = use24,
+                        onToggle24Hour = settingsViewModel::setUse24Hour,
+                        firstDayOfWeek = firstDay,
+                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek
                     )
                 }
             }
-        }) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = AppDestinations.Dashboard.route,
-            modifier = Modifier.padding(innerPadding)
-
-        ) {
-            composable(AppDestinations.Transactions.route) {
-                TransactionScreen(
-                    viewModel = sharedViewModel,
-                    onNavigateBack = { navController.popBackStack() })
-            }
-            composable(AppDestinations.Dashboard.route) {
-                DashboardScreen(viewModel = sharedViewModel)
-            }
-            composable(AppDestinations.Analytics.route) {
-                AnalyticsScreen()
-            }
         }
-
     }
 }
 
+@Composable
+fun BackgroundGlow(color: Color) {
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer(renderEffect = null)
+    ) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(color, Color.Transparent),
+                center = Offset(size.width * 0.2f, size.height * 0.15f),
+                radius = size.width * 0.8f
+            ), alpha = 0.4f
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(color, Color.Transparent),
+                center = Offset(size.width * 0.8f, size.height * 0.9f),
+                radius = size.width * 0.6f
+            ), alpha = 0.3f
+        )
+    }
+}
+
+@Composable
+fun GlassNavigationBar(
+    haptic: HapticFeedback,
+    navController: NavController,
+    paths: List<AppDestinations>
+) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val colorScheme = MaterialTheme.colorScheme
+
+    Surface(
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .navigationBarsPadding()
+            .fillMaxWidth()
+            .height(72.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = colorScheme.surface.copy(
+            alpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
+        ),
+        border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            paths.forEach { screen ->
+                val selected = currentRoute == screen.route
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable {
+                            if (currentRoute != screen.route) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Selected indicator pill
+                        if (selected) {
+                            Box(
+                                modifier = Modifier
+                                    .width(24.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(brush = primaryGradient())
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        } else {
+                            Spacer(Modifier.height(7.dp))
+                        }
+
+                        Icon(
+                            imageVector = screen.icon,
+                            contentDescription = screen.label,
+                            modifier = Modifier.size(22.dp),
+                            tint = if (selected)
+                                colorScheme.primary
+                            else
+                                colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = screen.label,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) Color.Unspecified
+                            else colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                brush = if (selected) primaryGradient() else null,
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,8 +1,15 @@
 package com.example.cashia.models
 
 import android.util.Log
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import com.example.cashia.Utility.PesaTimeConfiguration
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val regexSentTo = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
@@ -27,15 +34,37 @@ private val regexWithdraw = Regex(
 private val balanceRegex =
     """(?:balance|account)\s+is\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
 
+private val costRegex =
+    """(?:Transaction\s+cost|cost),?\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
+
+@Entity(tableName = "MpesaTransactions")
 data class MpesaTransactions(
-    val id: String,
+    @PrimaryKey val id: String,
     val amount: Double,
+    val transactionCost: Double,
     val recipient: String,
     val date: String,
     val type: String,
     val balance: Double,
     val time: String,
-)
+    val timestamp: Long,
+) {
+    val displayTime: String
+        get() = try {
+            val storedTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+            storedTime.format(PesaTimeConfiguration.getTimeFormatter())
+        } catch (e: Exception) {
+            time
+        }
+
+    val displayDate: String
+        get() = try {
+            val storedDate = LocalDate.parse(date)
+            storedDate.format(PesaTimeConfiguration.getDateFormatter())
+        } catch (e: Exception) {
+            date
+        }
+}
 
 fun parseMpesaMessage(message: String): MpesaTransactions? {
     try {
@@ -43,82 +72,82 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
             ?.replace(",", "")
             ?.toDoubleOrNull() ?: 0.0
 
-        fun parseDate(dateStr: String): String {
-            val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
-            return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
-        }
-
-        fun formatTime(timeStr: String): String = timeStr.uppercase().trim()
+        val transactionCost = costRegex.find(message)?.groupValues?.get(1)
+            ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
 
         return when {
             regexSentTo.find(message) != null -> {
                 val match = regexSentTo.find(message)!!
                 val (id, amount, recipient, date, time) = match.destructured
-                MpesaTransactions(
-                    id.trim(),
-                    amount.replace(",", "").toDouble(),
-                    recipient.trim(),
-                    parseDate(date),
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
                     "expense",
                     balance,
-                    formatTime(time)
+                    transactionCost
                 )
             }
 
             regexPaidTo.find(message) != null -> {
                 val match = regexPaidTo.find(message)!!
                 val (id, amount, recipient, date, time) = match.destructured
-                MpesaTransactions(
-                    id.trim(),
-                    amount.replace(",", "").toDouble(),
-                    recipient.trim(),
-                    parseDate(date),
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
                     "expense",
                     balance,
-                    formatTime(time)
+                    transactionCost
                 )
             }
 
             regexAirtime.find(message) != null -> {
                 val match = regexAirtime.find(message)!!
                 val (id, amount, date, time) = match.destructured
-                MpesaTransactions(
-                    id.trim(),
-                    amount.replace(",", "").toDouble(),
+                buildTransaction(
+                    id,
+                    amount,
                     "Safaricom Airtime",
-                    parseDate(date),
+                    date,
+                    time,
                     "expense",
                     balance,
-                    formatTime(time)
-
+                    transactionCost
                 )
             }
 
             regexWithdraw.find(message) != null -> {
                 val match = regexWithdraw.find(message)!!
                 val (id, date, time, amount, recipient) = match.destructured
-                MpesaTransactions(
-                    id.trim(),
-                    amount.replace(",", "").toDouble(),
-                    recipient.trim(),
-                    parseDate(date),
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
                     "expense",
                     balance,
-                    formatTime(time)
+                    transactionCost
                 )
             }
 
             regexReceived.find(message) != null -> {
                 val match = regexReceived.find(message)!!
                 val (id, amount, recipient, date, time) = match.destructured
-                MpesaTransactions(
-                    id.trim(),
-                    amount.replace(",", "").toDouble(),
-                    recipient.trim(),
-                    parseDate(date),
+                buildTransaction(
+                    id,
+                    amount,
+                    recipient,
+                    date,
+                    time,
                     "income",
                     balance,
-                    formatTime(time)
+                    transactionCost
                 )
             }
 
@@ -127,5 +156,51 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
     } catch (e: Exception) {
         Log.e("Transactions", "Parsing error: ${e.message}")
         return null
+    }
+}
+
+private fun buildTransaction(
+    id: String,
+    amountStr: String,
+    recipient: String,
+    dateStr: String,
+    timeStr: String,
+    type: String,
+    balance: Double,
+    cost: Double
+): MpesaTransactions {
+    val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
+    val formattedDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
+    val cleanRecipient = recipient.trim().removeSuffix(".")
+    val cleanTime = timeStr.uppercase().trim().replace(".", "")
+    val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+    val standardizedTime = try {
+        LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
+    } catch (e: Exception) {
+        cleanTime
+    }
+    return MpesaTransactions(
+        id = id.trim(),
+        amount = amountStr.replace(",", "").toDouble(),
+        transactionCost = cost,
+        recipient = cleanRecipient,
+        date = formattedDate,
+        type = type,
+        balance = balance,
+        time = standardizedTime,
+        timestamp = convertToTimestamp(formattedDate, standardizedTime)
+    )
+}
+
+fun convertToTimestamp(dateStr: String, timeStr: String): Long {
+    return try {
+        val dateTimeStr = "$dateStr $timeStr"
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a", Locale.US)
+        LocalDateTime.parse(dateTimeStr, formatter)
+            .atZone(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    } catch (e: Exception) {
+        System.currentTimeMillis()
     }
 }

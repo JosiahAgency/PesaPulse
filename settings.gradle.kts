@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Cashia"
+rootProject.name = "PesaPulse"
 include(":app")
