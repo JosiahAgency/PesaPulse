@@ -91,13 +91,7 @@ fun TopBreakdownSection(
         }
 
         // --- Content Area ---
-        if (filteredTransactions.isEmpty()) {
-            GlassySurface(modifier = Modifier.fillMaxWidth()) {
-                Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("No data for this period", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        } else {
+        if (!filteredTransactions.isEmpty()) {
             GlassySurface {
                 Column(
                     modifier = Modifier.padding(16.dp),

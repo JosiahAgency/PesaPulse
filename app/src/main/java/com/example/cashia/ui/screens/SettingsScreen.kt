@@ -24,19 +24,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CalendarViewWeek
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,8 +56,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.cashia.Utility.BiometricAuthenticator
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 
@@ -70,15 +70,15 @@ import java.time.DayOfWeek
 fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
-    use24HourFormat: Boolean,
-    onToggle24Hour: (Boolean) -> Unit,
-    firstDayOfWeek: DayOfWeek,
     onFirstDayOfWeekChange: (DayOfWeek) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
+    val settingsViewModel: SettingsViewModel = viewModel()
+
+    val biometricAuthenticator = remember { BiometricAuthenticator(context) }
 
 
     if (showDayPicker) {
@@ -248,13 +248,40 @@ fun SettingsScreen(
             }
         }
 
-        // Security Section
-//        item {
-//            SettingsSection(title = "Security") {
-//                var biometricEnabled by remember { mutableStateOf(false) }
+//         Security Section
+        item {
+            SettingsSection(title = "Security") {
+                // Inside SettingsScreen.composable
+                SettingsToggleItem(
+                    label = "App Lock",
+                    subtitle = "Secure your financial data with biometrics or device PIN.",
+                    icon = Icons.Rounded.Fingerprint,
+                    checked = PesaTimeConfiguration.isBiometricEnabled,
+                    onCheckedChange = { enable ->
+                        PesaActions.playClick(haptic)
+                        if (enable) {
+                            val activity = context as? FragmentActivity
+                            activity?.let {
+                                biometricAuthenticator.promptAuthenticator(
+                                    activity = it,
+                                    onSuccess = { settingsViewModel.setBiometric(true) },
+                                    onError = { msg ->
+                                        Toast.makeText(
+                                            context,
+                                            msg,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            }
+                        } else {
+                            settingsViewModel.setBiometric(false)
+                        }
+                    }
+                )
 //                SettingsToggleItem(
-//                    label = "Biometric Security",
-//                    subtitle = "Require fingerprint to occess your data",
+//                    label = "Auto-Lock",
+//                    subtitle = "Require authentication after the app has been in the background. ",
 //                    icon = Icons.Rounded.Fingerprint,
 //                    checked = biometricEnabled,
 //                    onCheckedChange = {
@@ -266,8 +293,8 @@ fun SettingsScreen(
 //                        ).show()
 //                    }
 //                )
-//            }
-//        }
+            }
+        }
 //
 //        // Data Management
 //        item {

@@ -2,6 +2,8 @@ package com.example.cashia.ui.screens.Analytics
 
 import android.app.DatePickerDialog
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +65,7 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Calendar
 import kotlin.math.roundToInt
 
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen() {
@@ -128,8 +131,8 @@ fun AnalyticsScreen() {
 
     val colorScheme = MaterialTheme.colorScheme
     val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
-    val glassColor = colorScheme.surface.copy(alpha = glassAlpha)
-    val glassBorder = colorScheme.onSurface.copy(alpha = 0.12f)
+    colorScheme.surface.copy(alpha = glassAlpha)
+    colorScheme.onSurface.copy(alpha = 0.12f)
 
     Scaffold(containerColor = Color.Transparent) { _ ->
         PullToRefreshBox(
@@ -142,39 +145,33 @@ fun AnalyticsScreen() {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-
-                // ── Controls: period selector + type toggle ───────────────────
                 item {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        color = glassColor,
-                        border = BorderStroke(0.6.dp, glassBorder),
-                    ) {
-                        Column(
-                            Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            GlassyPeriodSelector(
-                                hapticFeedback,
-                                startDate = startDate,
-                                endDate = endDate,
-                                onStartDateSelected = {
-                                    startDate = it; selectedScope = TimeScope.CUSTOM
-                                },
-                                onEndDateSelected = {
-                                    endDate = it; selectedScope = TimeScope.CUSTOM
-                                }
-                            )
-                            ModernTypeSelector(
-                                hapticFeedback,
-                                selectedType = selectedType,
-                                onTypeChange = { selectedType = it }
-                            )
+                    PeriodSelectorCard(
+                        hapticFeedback,
+                        selectedScope,
+                        startDate = startDate,
+                        endDate = endDate,
+                        onScopeChange = { selectedScope = it },
+                        onStartDateSelected = {
+                            startDate = it; selectedScope = TimeScope.CUSTOM
+                        },
+                        onEndDateSelected = {
+                            endDate = it; selectedScope = TimeScope.CUSTOM
                         }
-                    }
+                    )
+                }
+                item {
+                    CashFlowTrendChart(transactions, startDate, endDate)
+                }
+                item {
+                    TypeSelectorCard(
+                        hapticFeedback,
+                        selectedType = selectedType,
+                        onTypeChange = { selectedType = it },
+                        transactions = transactions,
+                        startTs = startTs,
+                        endTs = endTs
+                    )
                 }
 
                 // ── Summary header — period label is the first line ───────────
@@ -184,7 +181,7 @@ fun AnalyticsScreen() {
                         totalAmount = filteredTransactions.sumOf { it.amount },
                         transactionCount = filteredTransactions.size,
                         type = selectedType,
-                        periodLabel = periodLabel,          // ← NEW: always shown
+                        periodLabel = periodLabel,
                         previousPeriodAmount = calculatePreviousPeriod(
                             transactions,
                             startDate,

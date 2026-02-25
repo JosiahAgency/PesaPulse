@@ -7,5 +7,8 @@ data class FinanceProjection(
     val predictedExpenses: Double,
     val predictedNet: Double,
     val predictedBalance: Double,
-    val dailyTrend: List<Pair<LocalDate, Double>>
+    val dailyTrend: List<Pair<LocalDate, Double>>,
+    val projectedDailyNet: Double = 0.0,
+    val estimatedTodayBalance: Double = predictedBalance,
+    val dataQualityNote: String = ""
 )

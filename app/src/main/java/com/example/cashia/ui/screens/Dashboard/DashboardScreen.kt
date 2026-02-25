@@ -167,7 +167,8 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 // ── 1. BALANCE HERO — always shows "right now" balance ──────────────
                 item {
                     BalanceHeroCard(
-                        balance = state.latestBalance,
+                        state.latestBalance,
+                        state.latestBalanceDate,
                         isVisible = viewModel.isBalanceVisible,
                         onToggleVisibility = viewModel::toggleBalanceVisibility
                     )
@@ -226,6 +227,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
 @Composable
 private fun BalanceHeroCard(
     balance: Double,
+    latestBalanceDate: String,
     isVisible: Boolean,
     onToggleVisibility: () -> Unit
 ) {
@@ -270,7 +272,7 @@ private fun BalanceHeroCard(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Tap to ${if (isVisible) "hide" else "show"} • as of right now",
+                text = "Balance as of Lastest Transaction Dated: ${latestBalanceDate}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
             )

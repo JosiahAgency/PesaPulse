@@ -1,156 +1,120 @@
 package com.example.cashia.ui.screens.Analytics
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
-
+import com.example.cashia.models.MpesaTransactions
 
 @Composable
-fun ModernTypeSelector(
-    hapticFeedback: HapticFeedback,
+fun TypeSelectorCard(
+    haptic: HapticFeedback,
     selectedType: TransactionType,
-    onTypeChange: (TransactionType) -> Unit
+    onTypeChange: (TransactionType) -> Unit,
+    transactions: List<MpesaTransactions>,
+    startTs: Long,
+    endTs: Long
 ) {
-    val items = remember { TransactionType.entries }
-    val selectedIndex = items.indexOf(selectedType)
+    val colorScheme = MaterialTheme.colorScheme
+    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
 
-    val animateIndex by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "typePillSelection"
-    )
+    val incomeTotal = remember(transactions, startTs, endTs) {
+        transactions.filter { it.timestamp in startTs..endTs && it.type == "income" }
+            .sumOf { it.amount }
+    }
+    val expenseTotal = remember(transactions, startTs, endTs) {
+        transactions.filter { it.timestamp in startTs..endTs && it.type == "expense" }
+            .sumOf { it.amount }
+    }
 
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-            .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-            .padding(4.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = colorScheme.surface.copy(alpha = glassAlpha),
+        border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
     ) {
-        val maxWidth = maxWidth
-        val itemWidth = maxWidth / items.size
-        val currentType = items[selectedIndex.toInt().coerceIn(items.indices)]
-        val pillColor = when (currentType) {
-            TransactionType.INCOME -> MaterialTheme.colorScheme.tertiary
-            TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
-        }
-
-        Box(
+        Row(
             modifier = Modifier
-                .offset(x = itemWidth * animateIndex)
-                .width(itemWidth)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            pillColor.copy(alpha = 0.8f),
-                            pillColor
-                        )
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-        )
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            listOf(TransactionType.INCOME, TransactionType.EXPENSE).forEach { type ->
+                val isSelected = selectedType == type
+                val typeColor = if (type == TransactionType.INCOME)
+                    colorScheme.tertiary else colorScheme.error
+                val total = if (type == TransactionType.INCOME) incomeTotal else expenseTotal
 
-        Row(modifier = Modifier.fillMaxSize()) {
-            items.forEachIndexed { index, type ->
-                val isSelected = index == selectedIndex
-
-                val textColor by animateColorAsState(
-                    targetValue = if (isSelected)
-                        Color.White
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(200),
-                    label = "typeTextColor"
-                )
-
-                Box(
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isSelected) typeColor.copy(alpha = 0.12f)
+                    else colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    border = BorderStroke(
+                        if (isSelected) 1.5.dp else 0.5.dp,
+                        if (isSelected) typeColor.copy(alpha = 0.4f)
+                        else colorScheme.onSurface.copy(alpha = 0.06f)
+                    ),
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
+                        .clickable {
+                            PesaActions.playClick(haptic)
                             onTypeChange(type)
-                            PesaActions.playClick(hapticFeedback)
-                        },
-                    contentAlignment = Alignment.Center
+                        }
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (isSelected) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Icon(
                                 imageVector = if (type == TransactionType.INCOME)
-                                    Icons.Default.TrendingUp
-                                else
-                                    Icons.Default.TrendingDown,
+                                    Icons.Default.TrendingUp else Icons.Default.TrendingDown,
                                 contentDescription = null,
-                                tint = textColor,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isSelected) typeColor
+                                else colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = type.name.lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) typeColor
+                                else colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
                         }
                         Text(
-                            text = type.name.lowercase().replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                shadow = if (isSelected) Shadow(
-                                    color = Color.Black.copy(alpha = 0.3f),
-                                    offset = Offset(0f, 2f),
-                                    blurRadius = 4f
-                                ) else Shadow.None
-                            ),
-                            color = textColor,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                            text = PesaTimeConfiguration.formatCurrency(total),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isSelected) typeColor
+                            else colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            maxLines = 1
                         )
                     }
                 }

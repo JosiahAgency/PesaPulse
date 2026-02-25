@@ -23,6 +23,8 @@ import java.util.Locale
 data class TransactionState(
     val allTransactions: List<MpesaTransactions> = emptyList(),
     val latestBalance: Double = 0.0,
+    val latestBalanceDate: String = "",
+    val latestBalanceDateParsed: LocalDate = LocalDate.now(),
     val totalIncome: Double = 0.0,
     val totalExpenses: Double = 0.0,
     val totalTransactionCost: Double = 0.0,
@@ -93,9 +95,24 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         }
         transactionsByDate = transactions.groupBy { LocalDate.parse(it.date) }
 
+        val latestBalanceTx = transactions
+            .filter { it.balance > 0.0 }
+            .maxByOrNull { it.timestamp }
+
+        val latestBalance = latestBalanceTx?.balance ?: 0.0
+
+        val latestBalanceDateParsed = latestBalanceTx?.let {
+            try { LocalDate.parse(it.date) } catch (e: Exception) { LocalDate.now() }
+        } ?: LocalDate.now()
+
+        val latestBalanceDate = latestBalanceDateParsed
+            .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+
         state = state.copy(
             allTransactions = transactions,
-            latestBalance = currentMonthTransactions.firstOrNull()?.balance ?: 0.0,
+            latestBalance = latestBalance,
+            latestBalanceDate = latestBalanceDate,
+            latestBalanceDateParsed = latestBalanceDateParsed,
             totalIncome = currentMonthTransactions.filter { it.type == "income" }
                 .sumOf { it.amount + it.transactionCost },
             totalExpenses = currentMonthTransactions.filter { it.type == "expense" }

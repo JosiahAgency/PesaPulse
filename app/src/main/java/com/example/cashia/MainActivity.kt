@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresExtension
@@ -47,6 +46,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,49 +65,93 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.cashia.Utility.BiometricAuthenticator
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
 import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
-import com.example.cashia.ui.screens.Analytics.ProjectionScreen
+import com.example.cashia.ui.screens.ProjectionScreen
 import com.example.cashia.ui.screens.CalendarScreen
 import com.example.cashia.ui.screens.Dashboard.DashboardScreen
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val permissionRequestCode = 100
     private val permissionsToRequest = arrayOf(Manifest.permission.READ_SMS)
+    private var isUnlocked = mutableStateOf(false)
 
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
         if (permissionsToRequest.any {
                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
             }) {
             ActivityCompat.requestPermissions(this, permissionsToRequest, permissionRequestCode)
         }
+        PesaTimeConfiguration.initialize(this)
+
+        if (!PesaTimeConfiguration.isBiometricEnabled) {
+            isUnlocked.value = true
+        } else {
+            authenticateUser()
+        }
         enableEdgeToEdge()
         setContent {
-            val settingsViewModel: SettingsViewModel = viewModel()
-            val isDark by settingsViewModel.darkTheme.collectAsState()
-            PesaPulseTheme(darkTheme = isDark) { PesaPulseApp() }
+            PesaPulseTheme(darkTheme = PesaTimeConfiguration.isDarkTheme) {
+                if (isUnlocked.value) {
+                    PesaPulseApp()
+                } else {
+                    LockPlaceholder()
+                }
+            }
         }
+    }
+
+    private fun authenticateUser() {
+        BiometricAuthenticator(this).promptAuthenticator(
+            activity = this,
+            onSuccess = { isUnlocked.value = true },
+            onError = { error ->
+                // Handle error (e.g., show a "Retry" button)
+            }
+        )
+    }
+
+}
+
+@Composable
+fun LockPlaceholder() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "PesaPulse is Locked",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Black,
+                brush = primaryGradient(),
+            )
+        )
     }
 }
 
-// ── Descriptions shown in the TopAppBar subtitle per screen ──────────────────
 private fun screenSubtitle(route: String?): String = when (route) {
     AppDestinations.Dashboard.route -> "Your financial pulse, today"
     AppDestinations.Transactions.route -> "Full transaction history"
@@ -148,8 +192,6 @@ fun PesaPulseApp() {
     )
     val settingsViewModel: SettingsViewModel = viewModel()
     val isDark by settingsViewModel.darkTheme.collectAsState()
-    val use24 by settingsViewModel.use24Hour.collectAsState()
-    val firstDay by settingsViewModel.firstDayOfWeek.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -260,9 +302,6 @@ fun PesaPulseApp() {
                     SettingsScreen(
                         isDarkTheme = isDark,
                         onToggleTheme = settingsViewModel::setDarkTheme,
-                        use24HourFormat = use24,
-                        onToggle24Hour = settingsViewModel::setUse24Hour,
-                        firstDayOfWeek = firstDay,
                         onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek
                     )
                 }
