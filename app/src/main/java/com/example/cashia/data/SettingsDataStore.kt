@@ -1,3 +1,4 @@
+/*
 package com.example.cashia.data
 
 import android.content.Context
@@ -41,3 +42,4 @@ class SettingsDataStore(private val context: Context) {
         context.dataStore.edit { it[FIRST_DAY_OF_WEEK] = day.name }
     }
 }
+*/

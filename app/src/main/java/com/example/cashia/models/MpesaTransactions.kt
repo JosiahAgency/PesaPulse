@@ -12,195 +12,205 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val regexSentTo = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
-    RegexOption.IGNORE_CASE
+	   """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+	   RegexOption.IGNORE_CASE
 )
 private val regexPaidTo = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+paid\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
-    RegexOption.IGNORE_CASE
+	   """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+paid\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+	   RegexOption.IGNORE_CASE
 )
 private val regexAirtime = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+Ksh([\d,]+(?:\.\d{2})?)\s+of\s+airtime\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
-    RegexOption.IGNORE_CASE
+	   """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+Ksh([\d,]+(?:\.\d{2})?)\s+of\s+airtime\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+	   RegexOption.IGNORE_CASE
 )
 private val regexReceived = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*You\s+have\s+received\s+Ksh([\d,]+(?:\.\d{2})?)\s+from\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
-    RegexOption.IGNORE_CASE
+	   """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*You\s+have\s+received\s+Ksh([\d,]+(?:\.\d{2})?)\s+from\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+	   RegexOption.IGNORE_CASE
 )
 private val regexWithdraw = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s*Withdraw\s+Ksh([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
-    RegexOption.IGNORE_CASE
+	   """([A-Z0-9]+)\s+[Cc]onfirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s*Withdraw\s+Ksh([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
+	   RegexOption.IGNORE_CASE
 )
 private val balanceRegex =
-    """(?:balance|account)\s+is\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
+	   """(?:balance|account)\s+is\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
 
 private val costRegex =
-    """(?:Transaction\s+cost|cost),?\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
+	   """(?:Transaction\s+cost|cost),?\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
 
 @Entity(tableName = "MpesaTransactions")
 data class MpesaTransactions(
-    @PrimaryKey val id: String,
-    val amount: Double,
-    val transactionCost: Double,
-    val recipient: String,
-    val date: String,
-    val type: String,
-    val balance: Double,
-    val time: String,
-    val timestamp: Long,
+	   @PrimaryKey val id: String,
+	   val amount: Double,
+	   val transactionCost: Double,
+	   val recipient: String,
+	   val date: String,
+	   val type: String,
+	   val balance: Double,
+	   val time: String,
+	   val timestamp: Long,
+	   val category: String,
 ) {
-    val displayTime: String
-        get() = try {
-            val storedTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-            storedTime.format(PesaTimeConfiguration.getTimeFormatter())
-        } catch (e: Exception) {
-            time
-        }
-
-    val displayDate: String
-        get() = try {
-            val storedDate = LocalDate.parse(date)
-            storedDate.format(PesaTimeConfiguration.getDateFormatter())
-        } catch (e: Exception) {
-            date
-        }
+	   val displayTime: String
+			get() = try {
+				   val storedTime = LocalTime.parse(
+						time, DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+				   )
+				   storedTime.format(PesaTimeConfiguration.getTimeFormatter())
+			} catch (e: Exception) {
+				   time
+			}
+	   
+	   val displayDate: String
+			get() = try {
+				   val storedDate = LocalDate.parse(date)
+				   storedDate.format(PesaTimeConfiguration.getDateFormatter())
+			} catch (e: Exception) {
+				   date
+			}
 }
 
 fun parseMpesaMessage(message: String): MpesaTransactions? {
-    try {
-        val balance = balanceRegex.find(message)?.groupValues?.get(1)
-            ?.replace(",", "")
-            ?.toDoubleOrNull() ?: 0.0
-
-        val transactionCost = costRegex.find(message)?.groupValues?.get(1)
-            ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-
-        return when {
-            regexSentTo.find(message) != null -> {
-                val match = regexSentTo.find(message)!!
-                val (id, amount, recipient, date, time) = match.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
-                )
-            }
-
-            regexPaidTo.find(message) != null -> {
-                val match = regexPaidTo.find(message)!!
-                val (id, amount, recipient, date, time) = match.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
-                )
-            }
-
-            regexAirtime.find(message) != null -> {
-                val match = regexAirtime.find(message)!!
-                val (id, amount, date, time) = match.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    "Safaricom Airtime",
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
-                )
-            }
-
-            regexWithdraw.find(message) != null -> {
-                val match = regexWithdraw.find(message)!!
-                val (id, date, time, amount, recipient) = match.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
-                )
-            }
-
-            regexReceived.find(message) != null -> {
-                val match = regexReceived.find(message)!!
-                val (id, amount, recipient, date, time) = match.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "income",
-                    balance,
-                    transactionCost
-                )
-            }
-
-            else -> null
-        }
-    } catch (e: Exception) {
-        Log.e("Transactions", "Parsing error: ${e.message}")
-        return null
-    }
+	   try {
+			val balance = balanceRegex.find(message)?.groupValues?.get(1)?.replace(",", "")
+				   ?.toDoubleOrNull() ?: 0.0
+			
+			val transactionCost =
+				   costRegex.find(message)?.groupValues?.get(1)?.replace(",", "")
+						?.toDoubleOrNull() ?: 0.0
+			
+			return when {
+				   regexSentTo.find(message) != null -> {
+						val match = regexSentTo.find(message)!!
+						val (id, amount, recipient, date, time) = match.destructured
+						buildTransaction(
+							   id,
+							   amount,
+							   recipient,
+							   date,
+							   time,
+							   "expense",
+							   balance,
+							   transactionCost,
+							   "cat_uncategorized"
+						)
+				   }
+				   
+				   regexPaidTo.find(message) != null -> {
+						val match = regexPaidTo.find(message)!!
+						val (id, amount, recipient, date, time) = match.destructured
+						buildTransaction(
+							   id,
+							   amount,
+							   recipient,
+							   date,
+							   time,
+							   "expense",
+							   balance,
+							   transactionCost,
+							   "cat_uncategorized"
+						)
+				   }
+				   
+				   regexAirtime.find(message) != null -> {
+						val match = regexAirtime.find(message)!!
+						val (id, amount, date, time) = match.destructured
+						buildTransaction(
+							   id,
+							   amount,
+							   "Safaricom Airtime",
+							   date,
+							   time,
+							   "expense",
+							   balance,
+							   transactionCost,
+							   "cat_uncategorized"
+						)
+				   }
+				   
+				   regexWithdraw.find(message) != null -> {
+						val match = regexWithdraw.find(message)!!
+						val (id, date, time, amount, recipient) = match.destructured
+						buildTransaction(
+							   id,
+							   amount,
+							   recipient,
+							   date,
+							   time,
+							   "expense",
+							   balance,
+							   transactionCost,
+							   "cat_uncategorized"
+						)
+				   }
+				   
+				   regexReceived.find(message) != null -> {
+						val match = regexReceived.find(message)!!
+						val (id, amount, recipient, date, time) = match.destructured
+						buildTransaction(
+							   id,
+							   amount,
+							   recipient,
+							   date,
+							   time,
+							   "income",
+							   balance,
+							   transactionCost,
+							   "cat_uncategorized"
+						)
+				   }
+				   
+				   else -> null
+			}
+	   } catch (e: Exception) {
+			Log.e("Transactions", "Parsing error: ${e.message}")
+			return null
+	   }
 }
 
 private fun buildTransaction(
-    id: String,
-    amountStr: String,
-    recipient: String,
-    dateStr: String,
-    timeStr: String,
-    type: String,
-    balance: Double,
-    cost: Double
+	   id: String,
+	   amountStr: String,
+	   recipient: String,
+	   dateStr: String,
+	   timeStr: String,
+	   type: String,
+	   balance: Double,
+	   cost: Double,
+	   category: String
 ): MpesaTransactions {
-    val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
-    val formattedDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
-    val cleanRecipient = recipient.trim().removeSuffix(".")
-    val cleanTime = timeStr.uppercase().trim().replace(".", "")
-    val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
-    val standardizedTime = try {
-        LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
-    } catch (e: Exception) {
-        cleanTime
-    }
-    return MpesaTransactions(
-        id = id.trim(),
-        amount = amountStr.replace(",", "").toDouble(),
-        transactionCost = cost,
-        recipient = cleanRecipient,
-        date = formattedDate,
-        type = type,
-        balance = balance,
-        time = standardizedTime,
-        timestamp = convertToTimestamp(formattedDate, standardizedTime)
-    )
+	   val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
+	   val formattedDate =
+			LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
+	   val cleanRecipient = recipient.trim().removeSuffix(".")
+	   val cleanTime = timeStr.uppercase().trim().replace(".", "")
+	   val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+	   val standardizedTime = try {
+			LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
+	   } catch (e: Exception) {
+			cleanTime
+	   }
+	   return MpesaTransactions(
+			id = id.trim(),
+			amount = amountStr.replace(",", "").toDouble(),
+			transactionCost = cost,
+			recipient = cleanRecipient,
+			date = formattedDate,
+			type = type,
+			balance = balance,
+			time = standardizedTime,
+			timestamp = convertToTimestamp(formattedDate, standardizedTime),
+			category = category
+	   )
 }
 
 fun convertToTimestamp(dateStr: String, timeStr: String): Long {
-    return try {
-        val dateTimeStr = "$dateStr $timeStr"
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a", Locale.US)
-        LocalDateTime.parse(dateTimeStr, formatter)
-            .atZone(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    } catch (e: Exception) {
-        System.currentTimeMillis()
-    }
+	   return try {
+			val dateTimeStr = "$dateStr $timeStr"
+			val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a", Locale.US)
+			LocalDateTime.parse(dateTimeStr, formatter).atZone(ZoneId.systemDefault())
+				   .toInstant().toEpochMilli()
+	   } catch (e: Exception) {
+			System.currentTimeMillis()
+	   }
 }
+

@@ -21,151 +21,154 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 data class TransactionState(
-    val allTransactions: List<MpesaTransactions> = emptyList(),
-    val latestBalance: Double = 0.0,
-    val latestBalanceDate: String = "",
-    val latestBalanceDateParsed: LocalDate = LocalDate.now(),
-    val totalIncome: Double = 0.0,
-    val totalExpenses: Double = 0.0,
-    val totalTransactionCost: Double = 0.0,
-    val currentMonth: String = "",
-    val isLoading: Boolean = true
+	   val allTransactions: List<MpesaTransactions> = emptyList(),
+	   val latestBalance: Double = 0.0,
+	   val latestBalanceDate: String = "",
+	   val latestBalanceDateParsed: LocalDate = LocalDate.now(),
+	   val totalIncome: Double = 0.0,
+	   val totalExpenses: Double = 0.0,
+	   val totalTransactionCost: Double = 0.0,
+	   val currentMonth: String = "",
+	   val isLoading: Boolean = true
 )
 
 data class SummaryData(
-    val income: Double,
-    val expenses: Double,
-    val startDate: LocalDate,
-    val endDate: LocalDate
+	   val income: Double, val expenses: Double, val startDate: LocalDate, val endDate: LocalDate
 )
 
 class TransactionsViewModel(private val context: Context) : ViewModel() {
-    private val database = AppDatabase.getDatabase(context)
-    private val dao = database.transactionDao()
-
-    var state by mutableStateOf(TransactionState())
-        private set
-
-    private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
-    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-
-    var isBalanceVisible by mutableStateOf(false)
-        private set
-
-    fun toggleBalanceVisibility() {
-        isBalanceVisible = !isBalanceVisible
-    }
-
-
-    init {
-        observeDatabase()
-        refreshFromSms()
-    }
-
-    fun onPermissionGranted() {
-        refreshFromSms()
-    }
-
-    private fun observeDatabase() {
-        viewModelScope.launch {
-            dao.getAllTransactions().collect { transactions ->
-                updateStateWith(transactions)
-            }
-        }
-    }
-
-    fun refreshFromSms() {
-        viewModelScope.launch(Dispatchers.IO) {
-            state = state.copy(isLoading = true)
-            try {
-                syncTransactions(context, database)
-            } catch (e: Exception) {
-                Log.e("PesaPulse", "Sync failed", e)
-            } finally {
-                state = state.copy(isLoading = false)
-            }
-        }
-    }
-
-    private fun updateStateWith(transactions: List<MpesaTransactions>) {
-        val now = LocalDate.now()
-        val currentMonthTransactions = transactions.filter {
-            val date = LocalDate.parse(it.date)
-            date.year == now.year && date.monthValue == now.monthValue
-        }
-        transactionsByDate = transactions.groupBy { LocalDate.parse(it.date) }
-
-        val latestBalanceTx = transactions
-            .filter { it.balance > 0.0 }
-            .maxByOrNull { it.timestamp }
-
-        val latestBalance = latestBalanceTx?.balance ?: 0.0
-
-        val latestBalanceDateParsed = latestBalanceTx?.let {
-            try { LocalDate.parse(it.date) } catch (e: Exception) { LocalDate.now() }
-        } ?: LocalDate.now()
-
-        val latestBalanceDate = latestBalanceDateParsed
-            .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-
-        state = state.copy(
-            allTransactions = transactions,
-            latestBalance = latestBalance,
-            latestBalanceDate = latestBalanceDate,
-            latestBalanceDateParsed = latestBalanceDateParsed,
-            totalIncome = currentMonthTransactions.filter { it.type == "income" }
-                .sumOf { it.amount + it.transactionCost },
-            totalExpenses = currentMonthTransactions.filter { it.type == "expense" }
-                .sumOf { it.amount + it.transactionCost },
-            currentMonth = "${
-                now.month.getDisplayName(
-                    TextStyle.FULL,
-                    Locale.getDefault()
-                )
-            } ${now.year}",
-            isLoading = false
-        )
-    }
-
-    companion object {
-        fun provideFactory(context: Context): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    if (modelClass.isAssignableFrom(TransactionsViewModel::class.java)) {
-                        return TransactionsViewModel(context) as T
-                    }
-                    throw IllegalArgumentException("Unknown ViewModel class")
-                }
-            }
-    }
-
-    fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
-        val (startDate, enDate) = when (scope) {
-            TimeScope.DAY -> selectedDate to selectedDate
-            TimeScope.WEEK -> {
-                val firstDayOfWeek = PesaTimeConfiguration.firstDayOfWeek
-                val startOfWeek =
-                    selectedDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
-                val end = startOfWeek.plusDays(6)
-                startOfWeek to end
-            }
-
-            TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
-            TimeScope.CUSTOM -> selectedDate to selectedDate
-        }
-
-        val filtered = state.allTransactions.filter {
-            val d = LocalDate.parse(it.date)
-            !d.isBefore(startDate) && !d.isAfter(enDate)
-        }
-        return SummaryData(
-            income = filtered.filter { it.type == "income" }
-                .sumOf { it.amount + it.transactionCost },
-            expenses = filtered.filter { it.type == "expense" }
-                .sumOf { it.amount + it.transactionCost },
-            startDate = startDate,
-            endDate = enDate
-        )
-    }
+	   private val database = AppDatabase.getDatabase(context)
+	   private val dao = database.transactionDao()
+	   
+	   var state by mutableStateOf(TransactionState())
+			private set
+	   
+	   private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
+	   private val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+	   
+	   var isBalanceVisible by mutableStateOf(false)
+			private set
+	   
+	   fun toggleBalanceVisibility() {
+			isBalanceVisible = !isBalanceVisible
+	   }
+	   
+	   
+	   init {
+			observeDatabase()
+			refreshFromSms()
+	   }
+	   
+	   fun onPermissionGranted() {
+			refreshFromSms()
+	   }
+	   
+	   private fun observeDatabase() {
+			viewModelScope.launch {
+				   dao.getAllTransactions().collect { transactions ->
+						updateStateWith(transactions)
+				   }
+			}
+	   }
+	   
+	   fun refreshFromSms() {
+			viewModelScope.launch(Dispatchers.IO) {
+				   state = state.copy(isLoading = true)
+				   try {
+						syncTransactions(context, database)
+				   } catch (e: Exception) {
+						Log.e("PesaPulse", "Sync failed", e)
+				   } finally {
+						state = state.copy(isLoading = false)
+				   }
+			}
+	   }
+	   
+	   private fun updateStateWith(transactions: List<MpesaTransactions>) {
+			val now = LocalDate.now()
+			val currentMonthTransactions = transactions.filter {
+				   val date = LocalDate.parse(it.date)
+				   date.year == now.year && date.monthValue == now.monthValue
+			}
+			transactionsByDate = transactions.groupBy { LocalDate.parse(it.date) }
+			
+			val latestBalanceTx =
+				   transactions.filter { it.balance > 0.0 }.maxByOrNull { it.timestamp }
+			
+			val latestBalance = latestBalanceTx?.balance ?: 0.0
+			
+			val latestBalanceDateParsed = latestBalanceTx?.let {
+				   try {
+						LocalDate.parse(it.date)
+				   } catch (e: Exception) {
+						LocalDate.now()
+				   }
+			} ?: LocalDate.now()
+			
+			val latestBalanceDate =
+				   latestBalanceDateParsed.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+			
+			state = state.copy(
+				   allTransactions = transactions,
+				   latestBalance = latestBalance,
+				   latestBalanceDate = latestBalanceDate,
+				   latestBalanceDateParsed = latestBalanceDateParsed,
+				   totalIncome = currentMonthTransactions.filter { it.type == "income" }
+						.sumOf { it.amount + it.transactionCost },
+				   totalExpenses = currentMonthTransactions.filter { it.type == "expense" }
+						.sumOf { it.amount + it.transactionCost },
+				   currentMonth = "${
+						now.month.getDisplayName(
+							   TextStyle.FULL, Locale.getDefault()
+						)
+				   } ${now.year}",
+				   isLoading = false
+			)
+	   }
+	   
+	   companion object {
+			fun provideFactory(context: Context): ViewModelProvider.Factory =
+				   object : ViewModelProvider.Factory {
+						@Suppress("UNCHECKED_CAST")
+						override fun <T : ViewModel> create(modelClass: Class<T>): T {
+							   if (modelClass.isAssignableFrom(TransactionsViewModel::class.java)) {
+									return TransactionsViewModel(context) as T
+							   }
+							   throw IllegalArgumentException("Unknown ViewModel class")
+						}
+				   }
+	   }
+	   
+	   fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
+			val (startDate, enDate) = when (scope) {
+				   TimeScope.DAY -> selectedDate to selectedDate
+				   TimeScope.WEEK -> {
+						val firstDayOfWeek = PesaTimeConfiguration.firstDayOfWeek
+						val startOfWeek = selectedDate.with(
+							   TemporalAdjusters.previousOrSame(firstDayOfWeek)
+						)
+						val end = startOfWeek.plusDays(6)
+						startOfWeek to end
+				   }
+				   
+				   TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(
+						TemporalAdjusters.lastDayOfMonth()
+				   )
+				   
+				   TimeScope.CUSTOM -> selectedDate to selectedDate
+			}
+			
+			val filtered = state.allTransactions.filter {
+				   val d = LocalDate.parse(it.date)
+				   !d.isBefore(startDate) && !d.isAfter(enDate)
+			}
+			return SummaryData(
+				   income = filtered.filter { it.type == "income" }
+						.sumOf { it.amount + it.transactionCost },
+				   expenses = filtered.filter { it.type == "expense" }
+						.sumOf { it.amount + it.transactionCost },
+				   startDate = startDate,
+				   endDate = enDate
+			)
+	   }
 }

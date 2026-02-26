@@ -1,3 +1,4 @@
+/*
 package com.example.cashia.models
 
 import androidx.compose.runtime.getValue
@@ -15,3 +16,4 @@ class PesaViewModel : ViewModel() {
         PesaTimeConfiguration.use24HrsFormat = use24HourFormat
     }
 }
+*/
