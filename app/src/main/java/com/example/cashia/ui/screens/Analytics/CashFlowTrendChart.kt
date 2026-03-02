@@ -2,7 +2,12 @@ package com.example.cashia.ui.screens.Analytics
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,13 +21,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -92,6 +106,9 @@ fun CashFlowTrendChart(
     val expenseColor = MaterialTheme.colorScheme.error
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
+    val onSurface = MaterialTheme.colorScheme.onSurface
+
 
     val maxVal = remember(incomePoints, expensePoints) {
         maxOf(incomePoints.max(), expensePoints.max()) * 1.15f  // 15% headroom
@@ -101,15 +118,27 @@ fun CashFlowTrendChart(
     val xLabels = remember(days) {
         if (days.size <= 5) days
         else {
-            val step = (days.size - 1) / 4
-            (0..4).map { days[it * step] }
+            val step = (days.size - 1) / 4; (0..4).map { days[it * step] }
         }
     }
+
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(allTransactions) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
+    }
+
+    var crosshairX by remember { mutableFloatStateOf(-1f) }
+    var selectedDayIndex by remember { mutableIntStateOf(-1) }
+
+    // Store chart bounds for hit testing
+    var chartLeft by remember { mutableFloatStateOf(0f) }
+    var chartRight by remember { mutableFloatStateOf(0f) }
 
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "Cashflow Trend",
+                text = "Cash Flow Trend",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -125,10 +154,101 @@ fun CashFlowTrendChart(
                 LegendDot(color = expenseColor, label = "Expenses")
             }
             Spacer(Modifier.height(16.dp))
+            // ── Callout box ───────────────────────────────────────────────
+            val selIncome = incomePoints.getOrNull(selectedDayIndex)
+            val selExpense = expensePoints.getOrNull(selectedDayIndex)
+            val selDate = days.getOrNull(selectedDayIndex)
+
+            if (selectedDayIndex >= 0 && selDate != null && selIncome != null && selExpense != null) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            selDate.format(DateTimeFormatter.ofPattern("dd MMM")),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Income",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = incomeColor.copy(alpha = 0.7f))
+                                Text(
+                                    PesaTimeConfiguration.formatCurrency(selIncome.toDouble()),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = incomeColor
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Expenses",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = expenseColor.copy(alpha = 0.7f))
+                                Text(
+                                    PesaTimeConfiguration.formatCurrency(selExpense.toDouble()),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = expenseColor
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                val net = selIncome - selExpense
+                                Text("Net",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = (if (net >= 0) incomeColor else expenseColor).copy(alpha = 0.7f))
+                                Text(
+                                    "${if (net >= 0) "+" else ""}${PesaTimeConfiguration.formatCurrency(net.toDouble())}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (net >= 0) incomeColor else expenseColor
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            } else {
+                Spacer(Modifier.height(52.dp))
+            }
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
+                    .pointerInput(days.size) {
+                        detectTapGestures { offset ->
+                            val n = days.size
+                            if (n < 2) return@detectTapGestures
+                            val chartW = chartRight - chartLeft
+                            val rawIndex = ((offset.x - chartLeft) / chartW * (n - 1))
+                                .toInt().coerceIn(0, n - 1)
+                            selectedDayIndex = if (selectedDayIndex == rawIndex) -1 else rawIndex
+                            crosshairX = if (selectedDayIndex >= 0)
+                                chartLeft + (selectedDayIndex.toFloat() / (n - 1)) * chartW
+                            else -1f
+                        }
+                    }
+                    .pointerInput(days.size) {
+                        detectDragGestures(
+                            onDragEnd = { /* keep selection */ },
+                            onDrag = { change, _ ->
+                                val n = days.size
+                                if (n < 2) return@detectDragGestures
+                                val chartW = chartRight - chartLeft
+                                val rawIndex = ((change.position.x - chartLeft) / chartW * (n - 1))
+                                    .toInt().coerceIn(0, n - 1)
+                                selectedDayIndex = rawIndex
+                                crosshairX = chartLeft + (rawIndex.toFloat() / (n - 1)) * chartW
+                            }
+                        )
+                    }
             ) {
                 val w = size.width
                 val h = size.height
@@ -137,7 +257,13 @@ fun CashFlowTrendChart(
                 val chartW = w - padLeft
                 val chartH = h - padBottom
 
+                chartLeft = padLeft
+                chartRight = w
+
                 val n = days.size
+
+                fun xOf(i: Int) = padLeft + (i.toFloat() / (n - 1).coerceAtLeast(1)) * chartW
+                fun yOf(v: Float) = chartH * (1f - (v / maxVal).coerceIn(0f, 1f))
 
                 // Grid lines (4 horizontal)
                 val gridCount = 4
@@ -149,25 +275,25 @@ fun CashFlowTrendChart(
                         end = Offset(w, y),
                         strokeWidth = 1.dp.toPx()
                     )
+                    val value = (maxVal * i / gridCount).toInt()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        if (value >= 1000) "${value / 1000}k" else value.toString(),
+                        2f,
+                        y + 4.dp.toPx(),
+                        android.graphics.Paint().apply {
+                            color = android.graphics.Color.argb(
+                                100, 128, 128, 128
+                            )
+                            textSize = 9.sp.toPx()
+                        }
+                    )
                 }
 
-                fun xOf(index: Int) =
-                    padLeft + (index.toFloat() / (n - 1).coerceAtLeast(1)) * chartW
-
-                fun yOf(value: Float) = chartH * (1f - (value / maxVal).coerceIn(0f, 1f))
-
-                // Draw filled areas under each line for depth
                 if (n > 1) {
-                    // Income fill
-                    android.graphics.Path().apply {
-                        moveTo(xOf(0), yOf(incomePoints[0]))
-                        for (i in 1 until n) lineTo(xOf(i), yOf(incomePoints[i]))
-                        lineTo(xOf(n - 1), chartH)
-                        lineTo(xOf(0), chartH)
-                        close()
-                    }
+                    val drawN = (n * progress.value).toInt().coerceAtLeast(2)
+
                     drawPath(
-                        path = androidx.compose.ui.graphics.Path().apply {
+                        path = Path().apply {
                             moveTo(xOf(0), yOf(incomePoints[0]))
                             for (i in 1 until n) lineTo(xOf(i), yOf(incomePoints[i]))
                             lineTo(xOf(n - 1), chartH)
@@ -183,7 +309,7 @@ fun CashFlowTrendChart(
 
                     // Expense fill
                     drawPath(
-                        path = androidx.compose.ui.graphics.Path().apply {
+                        path = Path().apply {
                             moveTo(xOf(0), yOf(expensePoints[0]))
                             for (i in 1 until n) lineTo(xOf(i), yOf(expensePoints[i]))
                             lineTo(xOf(n - 1), chartH)
@@ -220,26 +346,70 @@ fun CashFlowTrendChart(
                     }
 
                     // End-point dots
-                    drawCircle(
-                        incomeColor,
-                        radius = 4.dp.toPx(),
-                        center = Offset(xOf(n - 1), yOf(incomePoints.last()))
-                    )
-                    drawCircle(
-                        Color.White,
-                        radius = 2.dp.toPx(),
-                        center = Offset(xOf(n - 1), yOf(incomePoints.last()))
-                    )
-                    drawCircle(
-                        expenseColor,
-                        radius = 4.dp.toPx(),
-                        center = Offset(xOf(n - 1), yOf(expensePoints.last()))
-                    )
-                    drawCircle(
-                        Color.White,
-                        radius = 2.dp.toPx(),
-                        center = Offset(xOf(n - 1), yOf(expensePoints.last()))
-                    )
+                    if (drawN >= n) {
+                        listOf(
+                            incomeColor to incomePoints.last(),
+                            expenseColor to expensePoints.last()
+                        ).forEach { (color, v) ->
+                            drawCircle(color, 4.dp.toPx(), Offset(xOf(n - 1), yOf(v)))
+                            drawCircle(Color.White, 2.dp.toPx(), Offset(xOf(n - 1), yOf(v)))
+                        }
+                    }
+                    if (crosshairX >= 0 && selectedDayIndex in 0 until n) {
+                        val cx = crosshairX
+                        val incomeY = yOf(incomePoints[selectedDayIndex])
+                        val expenseY = yOf(expensePoints[selectedDayIndex])
+
+                        // Vertical dashed line
+                        val dashLen = 6.dp.toPx()
+                        val gapLen = 4.dp.toPx()
+                        var y = 0f
+                        while (y < chartH) {
+                            drawLine(
+                                onSurface.copy(alpha = 0.2f),
+                                Offset(cx, y),
+                                Offset(cx, (y + dashLen).coerceAtMost(chartH)),
+                                1.5.dp.toPx()
+                            )
+                            y += dashLen + gapLen
+                        }
+
+                        // Income intercept dot
+                        drawCircle(surfaceColor, 7.dp.toPx(), Offset(cx, incomeY))
+                        drawCircle(incomeColor, 5.dp.toPx(), Offset(cx, incomeY))
+                        drawCircle(Color.White, 2.5.dp.toPx(), Offset(cx, incomeY))
+
+                        // Expense intercept dot
+                        drawCircle(surfaceColor, 7.dp.toPx(), Offset(cx, expenseY))
+                        drawCircle(expenseColor, 5.dp.toPx(), Offset(cx, expenseY))
+                        drawCircle(Color.White, 2.5.dp.toPx(), Offset(cx, expenseY))
+
+                        // Floating value label on income line
+                        val incomeLabelY = (incomeY - 18.dp.toPx()).coerceAtLeast(12.dp.toPx())
+                        val label = PesaTimeConfiguration.formatCurrency(
+                            incomePoints[selectedDayIndex].toDouble())
+                        val paint = android.graphics.Paint().apply {
+                            color = incomeColor.toArgb()
+                            textSize = 9.sp.toPx()
+                            isFakeBoldText = true
+                        }
+                        val labelWidth = paint.measureText(label)
+                        val lx = (cx - labelWidth / 2).coerceIn(padLeft, w - labelWidth)
+                        drawContext.canvas.nativeCanvas.drawText(label, lx, incomeLabelY, paint)
+
+                        // Floating value label on expense line
+                        val expenseLabelY = (expenseY + 18.dp.toPx()).coerceAtMost(chartH - 4.dp.toPx())
+                        val eLabel = PesaTimeConfiguration.formatCurrency(
+                            expensePoints[selectedDayIndex].toDouble())
+                        val ePaint = android.graphics.Paint().apply {
+                            color = expenseColor.toArgb()
+                            textSize = 9.sp.toPx()
+                            isFakeBoldText = true
+                        }
+                        val eLabelWidth = ePaint.measureText(eLabel)
+                        val elx = (cx - eLabelWidth / 2).coerceIn(padLeft, w - eLabelWidth)
+                        drawContext.canvas.nativeCanvas.drawText(eLabel, elx, expenseLabelY, ePaint)
+                    }
                 }
             }
 
@@ -262,10 +432,8 @@ fun CashFlowTrendChart(
 
             // ── Net cashflow summary pill ─────────────────────────────────────
             Spacer(Modifier.height(12.dp))
-            val net = incomePoints.lastOrNull() ?: 0f
-            val spent = expensePoints.lastOrNull() ?: 0f
-            val netValue = net - spent
-            val netColor = if (netValue >= 0) incomeColor else expenseColor
+            val net = (incomePoints.lastOrNull() ?: 0f) - (expensePoints.lastOrNull() ?: 0f)
+            val netColor = if (net >= 0) incomeColor else expenseColor
 
             Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -283,9 +451,9 @@ fun CashFlowTrendChart(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${if (netValue >= 0) "+" else ""}${
+                        text = "${if (net >= 0) "+" else ""}${
                             PesaTimeConfiguration.formatCurrency(
-                                netValue.toDouble()
+                                net.toDouble()
                             )
                         }",
                         style = MaterialTheme.typography.labelLarge,

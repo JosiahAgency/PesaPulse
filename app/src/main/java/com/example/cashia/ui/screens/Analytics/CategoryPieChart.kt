@@ -1,8 +1,13 @@
 package com.example.cashia.ui.screens.Analytics
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,8 +20,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +52,8 @@ import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ResolvedCategory
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 // ── Slice colours — enough for all system + custom categories ─────────────────
 private val SLICE_COLORS = listOf(
@@ -59,7 +71,8 @@ data class PieSlice(
     val emoji: String,
     val amount: Double,
     val percentage: Float,
-    val color: Color
+    val color: Color,
+    val transactions: List<MpesaTransactions>
 )
 
 @Composable
@@ -76,18 +89,20 @@ fun CategoryPieChart(
 
         filteredTransactions
             .groupBy { it.category }
-            .mapValues { it.value.sumOf { tx -> tx.amount } }
             .entries
-            .sortedByDescending { it.value }
+            .sortedByDescending { it.value.sumOf { tx -> tx.amount } }
             .mapIndexed { index, entry ->
+                val tx = entry.value
+                val amount = tx.sumOf { it.amount }
                 val resolved = categoryMap[entry.key]
                 PieSlice(
                     categoryId = entry.key,
                     label = resolved?.label ?: entry.key,
                     emoji = resolved?.emoji ?: "📦",
-                    amount = entry.value,
-                    percentage = (entry.value / total * 100).toFloat(),
-                    color = SLICE_COLORS[index % SLICE_COLORS.size]
+                    amount = amount,
+                    percentage = (amount / total * 100).toFloat(),
+                    color = SLICE_COLORS[index % SLICE_COLORS.size],
+                    transactions = tx.sortedByDescending { it.date }
                 )
             }
     }
@@ -105,11 +120,6 @@ fun CategoryPieChart(
         )
     }
 
-    if (selectedType == TransactionType.INCOME)
-        MaterialTheme.colorScheme.tertiary
-    else
-        MaterialTheme.colorScheme.error
-
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -117,7 +127,6 @@ fun CategoryPieChart(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ── Header ────────────────────────────────────────────────────
             Text(
                 text = "CATEGORY BREAKDOWN",
                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.5.sp),
@@ -125,7 +134,6 @@ fun CategoryPieChart(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
             )
 
-            // ── Donut chart ───────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -170,7 +178,7 @@ fun CategoryPieChart(
 
                 // ── Centre label ──────────────────────────────────────────
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (selectedIndex >= 0 && selectedIndex < slices.size) {
+                    if (selectedIndex in slices.indices) {
                         val sel = slices[selectedIndex]
                         Text(sel.emoji, fontSize = 26.sp)
                         Spacer(Modifier.height(2.dp))
@@ -201,7 +209,6 @@ fun CategoryPieChart(
                 }
             }
 
-            // ── Legend ────────────────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 slices.forEachIndexed { index, slice ->
                     val isSelected = index == selectedIndex
@@ -230,7 +237,6 @@ fun CategoryPieChart(
                                     .clip(CircleShape)
                                     .background(slice.color.copy(alpha = if (isSelected) 1f else 0.7f))
                             )
-                            // Emoji + label
                             Text(slice.emoji, fontSize = 14.sp)
                             Text(
                                 text = slice.label,
@@ -243,7 +249,15 @@ fun CategoryPieChart(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
-                            // Percentage chip
+                            Surface(shape = CircleShape,
+                                color = slice.color.copy(alpha = 0.1f)) {
+                                Text(
+                                    "${slice.transactions.size} txn",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = slice.color.copy(alpha = 0.8f)
+                                )
+                            }
                             Surface(
                                 shape = CircleShape,
                                 color = slice.color.copy(alpha = if (isSelected) 0.2f else 0.1f)
@@ -256,17 +270,126 @@ fun CategoryPieChart(
                                     color = slice.color
                                 )
                             }
-                            // Amount
-                            Text(
-                                text = PesaTimeConfiguration.formatCurrency(slice.amount),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            Icon(
+                                if (isSelected) Icons.Rounded.KeyboardArrowUp
+                                else Icons.Rounded.KeyboardArrowDown,
+                                null,
+                                modifier = Modifier.size(16.dp),
+                                tint = slice.color.copy(alpha = 0.6f)
                             )
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = isSelected,
+                        enter = expandVertically(tween(250)) + fadeIn(),
+                        exit = shrinkVertically(tween(200)) + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Subtotal strip
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(slice.color.copy(alpha = 0.07f))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "${slice.transactions.size} transactions",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                                Text(
+                                    PesaTimeConfiguration.formatCurrency(slice.amount),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = slice.color
+                                )
+                            }
+
+                            // Transaction rows — capped at 10 to avoid massive lists
+                            val visible = slice.transactions.take(10)
+                            visible.forEach { tx ->
+                                CategoryTransactionRow(tx = tx, accentColor = slice.color)
+                            }
+
+                            if (slice.transactions.size > 10) {
+                                Text(
+                                    "+${slice.transactions.size - 10} more",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = slice.color.copy(alpha = 0.6f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CategoryTransactionRow(tx: MpesaTransactions, accentColor: Color) {
+    val date = remember(tx.date) {
+        runCatching {
+            LocalDate.parse(tx.date)
+                .format(DateTimeFormatter.ofPattern("dd MMM"))
+        }.getOrDefault(tx.date)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Date badge
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = accentColor.copy(alpha = 0.1f),
+            modifier = Modifier.width(44.dp)
+        ) {
+            Text(
+                date,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = accentColor,
+                maxLines = 1
+            )
+        }
+
+        // Recipient
+        Text(
+            tx.recipient,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // Amount
+        Text(
+            PesaTimeConfiguration.formatCurrency(tx.amount),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Black,
+            color = if (tx.type == "income")
+                MaterialTheme.colorScheme.tertiary
+            else
+                MaterialTheme.colorScheme.error
+        )
     }
 }

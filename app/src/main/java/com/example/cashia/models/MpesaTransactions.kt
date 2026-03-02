@@ -11,6 +11,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val regexBalanceInquiry = Regex(
+    """([A-Z0-9]+)\s+Confirmed\.\s+Your\s+account\s+balance\s+was:\s+M-PESA\s+Account\s+:\s+Ksh([\d,]+\.\d{2})\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+    RegexOption.IGNORE_CASE
+)
 private val regexSentTo = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Ksh([\d,]+\.\d{2})\s+sent\s+to\s+(.+?)\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
@@ -36,6 +40,11 @@ private val balanceRegex =
 
 private val costRegex =
     """(?:Transaction\s+cost|cost),?\s+Ksh\s*([\d,]+\.\d{2})""".toRegex(RegexOption.IGNORE_CASE)
+
+private val regexReversal = Regex(
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Your\s+original\s+transaction\s+[A-Z0-9]+\s+in\s+favour\s+of\s+(.+?)\s+has\s+been\s+reversed\s+successfully\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s+and\s+Ksh([\d,]+\.\d{2})\s+has\s+been\s+credited""",
+    RegexOption.IGNORE_CASE
+)
 
 @Entity(tableName = "MpesaTransactions")
 data class MpesaTransactions(
@@ -149,6 +158,36 @@ fun parseMpesaMessage(message: String): MpesaTransactions? {
                     "income",
                     balance,
                     transactionCost
+                )
+            }
+
+            regexReversal.find(message) != null -> {
+                val match = regexReversal.find(message)!!
+                val (id, recipient, date, time, amount) = match.destructured
+                buildTransaction(
+                    id,
+                    amount,
+                    "Reversal: $recipient",
+                    date,
+                    time,
+                    "income",
+                    balance,
+                    transactionCost
+                )
+            }
+
+            regexBalanceInquiry.find(message) != null -> {
+                val match = regexBalanceInquiry.find(message)!!
+                val (id, balAmount, date, time) = match.destructured
+                buildTransaction(
+                    id = id,
+                    amountStr = "0.00", // No money moved in a balance check
+                    recipient = "Balance Inquiry",
+                    dateStr = date,
+                    timeStr = time,
+                    type = "neutral", // Use "neutral" so it doesn't affect Income/Expense totals
+                    balance = balAmount.replace(",", "").toDouble(),
+                    cost = transactionCost
                 )
             }
 

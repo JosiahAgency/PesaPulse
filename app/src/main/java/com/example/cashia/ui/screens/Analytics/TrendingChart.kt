@@ -125,8 +125,7 @@ fun GlassyTrendChart(
                     }
                 }
 
-                // Chart area
-                BoxWithConstraints(
+                BoxWithConstraints (
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
