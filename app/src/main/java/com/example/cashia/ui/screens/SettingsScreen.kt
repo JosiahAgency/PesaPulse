@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarViewWeek
+import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.cashia.Utility.BiometricAuthenticator
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
@@ -70,7 +72,8 @@ import java.time.DayOfWeek
 fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
-    onFirstDayOfWeekChange: (DayOfWeek) -> Unit
+    onFirstDayOfWeekChange: (DayOfWeek) -> Unit,
+    navController: NavController
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -202,13 +205,18 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier.padding(bottom = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            SettingsSection(title = "Categories") {
+                SettingsActionItem(
+                    label = "Manage Categories",
+                    subtitle = "Add or update categories",
+                    icon = Icons.Rounded.Category,
+                    onClick = {
+                        PesaActions.playSuccess(haptic)
+                        navController.navigate("categories")
+                    },
+                    isExpanded = false
+                )
+            }
         }
 
         // Appearance Section
@@ -224,27 +232,6 @@ fun SettingsScreen(
                         onToggleTheme(it)
                     }
                 )
-//                SettingsToggleItem(
-//                    label = "Use 24-Hour Clock",
-//                    subtitle = "Toggle between 12h (AM/PM) and 24h Time Format",
-//                    icon = Icons.Rounded.Schedule,
-//                    checked = use24HourFormat,
-//                    onCheckedChange = {
-//                        PesaActions.playClick(haptic)
-//                        onToggle24Hour(it)
-//                    }
-//                )
-//                SettingsActionItem(
-//                    label = "Week Start",
-//                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
-//                        .replaceFirstChar { it.uppercase() },
-//                    icon = Icons.Rounded.CalendarMonth,
-//                    onClick = {
-//                        PesaActions.playClick(haptic)
-//                        showDayPicker = true
-//                    },
-//                    isExpanded = false
-//                )
             }
         }
 
@@ -279,56 +266,8 @@ fun SettingsScreen(
                         }
                     }
                 )
-//                SettingsToggleItem(
-//                    label = "Auto-Lock",
-//                    subtitle = "Require authentication after the app has been in the background. ",
-//                    icon = Icons.Rounded.Fingerprint,
-//                    checked = biometricEnabled,
-//                    onCheckedChange = {
-//                        PesaActions.playClick(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    }
-//                )
             }
         }
-//
-//        // Data Management
-//        item {
-//            SettingsSection(title = "Data & Storage") {
-//                SettingsActionItem(
-//                    label = "Sync SMS Transactions",
-//                    subtitle = "Manually refresh from inbox",
-//                    icon = Icons.Rounded.Sync,
-//                    onClick = {
-//                        PesaActions.playSuccess(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    },
-//                    isExpanded = false
-//                )
-//                SettingsActionItem(
-//                    label = "Export Data",
-//                    subtitle = "Save transactions as CSV",
-//                    icon = Icons.Rounded.IosShare,
-//                    onClick = {
-//                        PesaActions.playClick(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    },
-//                    isExpanded = false
-//                )
-//            }
-//        }
 
         // About
         item {

@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,11 +58,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
+import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
 import com.example.cashia.ui.screens.AllTransactions.TransactionDetailDialog
 import com.example.cashia.ui.screens.AllTransactions.TransactionItem
+import com.example.cashia.ui.screens.AllTransactions.resolveCategory
 import com.example.cashia.ui.screens.Analytics.GlassySurface
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.theme.primaryGradient
@@ -72,13 +75,16 @@ import java.time.temporal.TemporalAdjusters
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(viewModel: TransactionsViewModel) {
+fun DashboardScreen(
+    viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel,
+) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
     val state = viewModel.state
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
     val hapticFeedback = LocalHapticFeedback.current
     var isListExpanded by remember { mutableStateOf(true) }
+    val allCategories by categoryViewModel.allCategories.collectAsState()
 
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
     val startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
@@ -146,6 +152,7 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
         selectedTransaction?.let { tx ->
             TransactionDetailDialog(
                 hapticFeedback, tx = tx,
+                categoryViewModel = categoryViewModel,
                 onDismiss = { selectedTransaction = null },
                 onEdit = {},
                 onDelete = {}
@@ -211,7 +218,12 @@ fun DashboardScreen(viewModel: TransactionsViewModel) {
                 // ── 5. TRANSACTIONS ───────────────────────────────────────────────
                 if (transactionsForScope.isNotEmpty() && isListExpanded) {
                     items(transactionsForScope, key = { it.id }) { tx ->
-                        TransactionItem(tx, onClick = { selectedTransaction = tx }, hapticFeedback)
+                        TransactionItem(
+                            tx,
+                            categoryLabel = resolveCategory(tx.category, allCategories),
+                            onClick = { selectedTransaction = tx },
+                            hapticFeedback
+                        )
                     }
                 } else if (transactionsForScope.isEmpty() && isListExpanded) {
                     item { EmptyStateMessage("No transactions in this period", hapticFeedback) }

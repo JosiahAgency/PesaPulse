@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -49,6 +50,7 @@ import java.time.temporal.TemporalAdjusters
 fun FullMonthCalendar(
     allTransactions: List<MpesaTransactions>,
     selectedDate: LocalDate,
+    upcomingTransactions: List<UpcomingTransaction> = emptyList(),
     onDateSelected: (LocalDate) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -57,7 +59,7 @@ fun FullMonthCalendar(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
-    var currentMonth = remember(pagerState.currentPage) {
+    val currentMonth = remember(pagerState.currentPage) {
         YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
     }
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
@@ -88,7 +90,6 @@ fun FullMonthCalendar(
             val targetPage = initialPage +
                     ((targetMonth.year - YearMonth.now().year) * 12) +
                     (targetMonth.monthValue - YearMonth.now().monthValue)
-
             pagerState.animateScrollToPage(targetPage)
         }
     }
@@ -104,6 +105,13 @@ fun FullMonthCalendar(
     }
     val expenseDates = remember(allTransactions) {
         allTransactions.filter { it.type == "expense" }.map { it.date }.toSet()
+    }
+    val upcomingDates = remember(upcomingTransactions) {
+        upcomingTransactions.map { it.dueDate }.toSet()
+    }
+    val overdueUpcomingDates = remember(upcomingTransactions) {
+        val today = LocalDate.now().toString()
+        upcomingTransactions.filter { it.dueDate < today }.map { it.dueDate }.toSet()
     }
 
     Surface(
@@ -132,12 +140,36 @@ fun FullMonthCalendar(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                Text(
-                    text = monthTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = monthTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val upcomingThisMonth = remember(upcomingTransactions, currentMonth) {
+                        upcomingTransactions.count {
+                            runCatching {
+                                val d = LocalDate.parse(it.dueDate)
+                                d.year == currentMonth.year && d.month == currentMonth.month
+                            }.getOrDefault(false)
+                        }
+                    }
+                    if (upcomingThisMonth > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                "$upcomingThisMonth scheduled",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 IconButton(onClick = {
                     coroutineScope.launch {
                         if (pagerState.currentPage < pagerState.pageCount - 1) {
@@ -167,7 +199,6 @@ fun FullMonthCalendar(
                             textAlign = TextAlign.Center
                         )
                     }
-
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -192,6 +223,8 @@ fun FullMonthCalendar(
                                     isCurrentMonth = day?.month == monthOfPage.month,
                                     hasIncome = day != null && incomeDates.contains(day.toString()),
                                     hasExpense = day != null && expenseDates.contains(day.toString()),
+                                    hasUpcoming = day != null && upcomingDates.contains(day.toString()),
+                                    isOverdueUpcoming = day != null && overdueUpcomingDates.contains(day.toString()),
                                     onDateSelected
                                 )
                             }
@@ -199,8 +232,59 @@ fun FullMonthCalendar(
                     }
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegendItem(colorScheme.tertiary, "Income")
+                Spacer(Modifier.width(16.dp))
+                LegendItem(colorScheme.error, "Expense")
+                Spacer(Modifier.width(16.dp))
+                LegendDiamond(colorScheme.primary, "Scheduled")
+            }
             Spacer(Modifier.height(4.dp))
         }
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(6.dp).clip(CircleShape).background(color)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        )
+    }
+}
+
+@Composable
+private fun LegendDiamond(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Rotated square = diamond
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(color)
+                .then(Modifier) // rotation handled visually by the square + small size
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        )
     }
 }
 
@@ -211,8 +295,15 @@ fun CalendarDayItem(
     isCurrentMonth: Boolean,
     hasIncome: Boolean,
     hasExpense: Boolean,
+    hasUpcoming: Boolean = false,
+    isOverdueUpcoming: Boolean = false,
     onDateSelected: (LocalDate) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val today = LocalDate.now()
+    val isToday = day == today
+    val isFuture = day != null && day.isAfter(today)
+
     Box(
         modifier = Modifier
             .size(44.dp) // Slightly larger touch target
@@ -222,7 +313,12 @@ fun CalendarDayItem(
         if (day != null) {
             val selectionModifier = if (isSelected) {
                 Modifier.background(brush = primaryGradient(), shape = CircleShape)
-            } else Modifier
+            }             else if (isToday)
+                Modifier.background(
+                    color = colorScheme.primary.copy(alpha = 0.12f),
+                    shape = CircleShape
+                )
+            else Modifier
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -235,21 +331,54 @@ fun CalendarDayItem(
                 Text(
                     text = day.dayOfMonth.toString(),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                    fontWeight = when {
+                        isSelected -> FontWeight.ExtraBold
+                        isToday -> FontWeight.Bold
+                        else -> FontWeight.Medium
+                    },
                     color = when {
                         isSelected -> Color.White
-                        !isCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                        else -> MaterialTheme.colorScheme.onSurface
+                        isToday -> colorScheme.primary
+                        !isCurrentMonth -> colorScheme.onSurface.copy(alpha = 0.25f)
+                        isFuture && hasUpcoming -> colorScheme.onSurface
+                        else -> colorScheme.onSurface
                     }
                 )
 
                 // Status Indicators
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.height(4.dp)
+                    modifier = Modifier.height(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (hasIncome) IndicatorDot(if (isSelected) Color.White else MaterialTheme.colorScheme.tertiary)
                     if (hasExpense) IndicatorDot(if (isSelected) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.error)
+                    if (hasUpcoming && !hasIncome && !hasExpense) {
+                        val upcomingColor = when {
+                            isSelected -> Color.White
+                            isOverdueUpcoming -> colorScheme.error
+                            else -> colorScheme.primary
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(upcomingColor)
+                        )
+                    } else if (hasUpcoming) {
+                        // Has both transaction history AND upcoming — show a tiny primary dot
+                        val upcomingColor = when {
+                            isSelected -> Color.White.copy(alpha = 0.8f)
+                            isOverdueUpcoming -> colorScheme.error
+                            else -> colorScheme.primary
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(upcomingColor)
+                        )
+                    }
                 }
             }
         }

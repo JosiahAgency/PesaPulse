@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
+import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import java.time.DayOfWeek
@@ -68,11 +70,12 @@ import kotlin.math.roundToInt
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalyticsScreen() {
+fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
     val context = LocalContext.current
     val viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
+    val allCategories by categoryViewModel.allCategories.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
     val state = viewModel.state
     val transactions = viewModel.state.allTransactions
@@ -202,19 +205,25 @@ fun AnalyticsScreen() {
                 }
 
                 // ── Quick insights ────────────────────────────────────────────
-                if (filteredTransactions.isNotEmpty()) {
-                    item {
-                        QuickInsightsRow(filteredTransactions, selectedType)
-                    }
-                }
+//                if (filteredTransactions.isNotEmpty()) {
+//                    item {
+//                        QuickInsightsRow(filteredTransactions, selectedType)
+//                    }
+//                }
 
                 // ── Category breakdown ────────────────────────────────────────
                 item {
-                    TopBreakdownSection(
-                        filteredTransactions = filteredTransactions,
-                        selectedType = selectedType
+                    CategoryPieChart(
+                        filteredTransactions, allCategories, selectedType
                     )
                 }
+//                item {
+//                    TopBreakdownSection(
+//                        filteredTransactions,
+//                        selectedType,
+//                        allCategories
+//                    )
+//                }
 
                 // ── Empty state with helpful guidance ─────────────────────────
                 if (filteredTransactions.isEmpty()) {

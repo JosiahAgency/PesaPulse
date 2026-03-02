@@ -13,6 +13,7 @@ import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -29,7 +30,9 @@ data class TransactionState(
     val totalExpenses: Double = 0.0,
     val totalTransactionCost: Double = 0.0,
     val currentMonth: String = "",
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val selectedCategory: String? = null,
+
 )
 
 data class SummaryData(
@@ -56,10 +59,13 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         isBalanceVisible = !isBalanceVisible
     }
 
+    var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
+
 
     init {
         observeDatabase()
         refreshFromSms()
+        reCategorizeExisting()
     }
 
     fun onPermissionGranted() {
@@ -78,7 +84,13 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             state = state.copy(isLoading = true)
             try {
+                val before = dao.getAllTransactionsOnce()
                 syncTransactions(context, database)
+                val after = dao.getAllTransactionsOnce()   // ← snapshot after sync
+                val newTxs = after.filter { a -> before.none { b -> b.id == a.id } }
+                if (newTxs.isNotEmpty()) {
+                    onNewTransactionsSynced?.invoke(newTxs)
+                }
             } catch (e: Exception) {
                 Log.e("PesaPulse", "Sync failed", e)
             } finally {
@@ -167,5 +179,28 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             startDate = startDate,
             endDate = enDate
         )
+    }
+
+    fun filterByCategory(category: String?) {
+        state = state.copy(selectedCategory = category)
+    }
+
+    fun updateCategory(txId: String, newCategory: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateCategory(txId, newCategory)
+        }
+    }
+
+    // Call this once to retroactively categorize old transactions
+    fun reCategorizeExisting() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uncategorized = dao.getUncategorizedTransactions()
+            uncategorized.forEach { tx ->
+                val guessed = guessCategory(tx.recipient, tx.type)
+                if (guessed != TransactionCategory.OTHER.name) {
+                    dao.updateCategory(tx.id, guessed)
+                }
+            }
+        }
     }
 }

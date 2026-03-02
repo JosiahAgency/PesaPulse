@@ -48,6 +48,7 @@ data class MpesaTransactions(
     val balance: Double,
     val time: String,
     val timestamp: Long,
+    val category: String = TransactionCategory.OTHER.name,
 ) {
     val displayTime: String
         get() = try {
@@ -188,7 +189,8 @@ private fun buildTransaction(
         type = type,
         balance = balance,
         time = standardizedTime,
-        timestamp = convertToTimestamp(formattedDate, standardizedTime)
+        timestamp = convertToTimestamp(formattedDate, standardizedTime),
+        category = guessCategory(cleanRecipient, type)
     )
 }
 

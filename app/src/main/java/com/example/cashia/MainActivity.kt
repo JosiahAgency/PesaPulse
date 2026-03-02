@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -44,9 +45,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,14 +78,18 @@ import androidx.navigation.compose.rememberNavController
 import com.example.cashia.Utility.BiometricAuthenticator
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.models.CategoryViewModel
+import com.example.cashia.models.DailyDigestWorker
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
 import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
-import com.example.cashia.ui.screens.ProjectionScreen
 import com.example.cashia.ui.screens.CalendarScreen
+import com.example.cashia.ui.screens.CategoryManagementScreen
 import com.example.cashia.ui.screens.Dashboard.DashboardScreen
+import com.example.cashia.ui.screens.ProjectionScreen
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
@@ -90,19 +97,17 @@ import com.example.cashia.ui.theme.primaryGradient
 class MainActivity : FragmentActivity() {
 
     private val permissionRequestCode = 100
-    private val permissionsToRequest = arrayOf(Manifest.permission.READ_SMS)
     private var isUnlocked = mutableStateOf(false)
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        if (permissionsToRequest.any {
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-            }) {
-            ActivityCompat.requestPermissions(this, permissionsToRequest, permissionRequestCode)
-        }
+        handlePermissions()
+
+        DailyDigestWorker.schedule(this)
         PesaTimeConfiguration.initialize(this)
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
@@ -110,15 +115,36 @@ class MainActivity : FragmentActivity() {
         } else {
             authenticateUser()
         }
+
         enableEdgeToEdge()
         setContent {
+            val unlocked by remember { isUnlocked }
             PesaPulseTheme(darkTheme = PesaTimeConfiguration.isDarkTheme) {
-                if (isUnlocked.value) {
+                if (unlocked) {
                     PesaPulseApp()
                 } else {
                     LockPlaceholder()
                 }
             }
+        }
+    }
+
+    private fun handlePermissions() {
+        val permissions = mutableListOf(Manifest.permission.READ_SMS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val permissionsToRequest = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsToRequest.toTypedArray(),
+                permissionRequestCode
+            )
         }
     }
 
@@ -167,9 +193,12 @@ private fun screenTitle(route: String?): String = when (route) {
     AppDestinations.Calendar.route -> "Calendar"
     AppDestinations.Analytics.route -> "Insights"
     AppDestinations.Projections.route -> "Forecast"
+    AppDestinations.Settings.route -> "Settings"
+    AppDestinations.Categories.route -> "Categories"
     else -> "PesaPulse"
 }
 
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
@@ -177,24 +206,37 @@ fun PesaPulseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
 
-    // Bottom nav items — logical flow: Now → Past → Calendar → Insights → Future
     val navItems = listOf(
         AppDestinations.Dashboard,
         AppDestinations.Transactions,
         AppDestinations.Calendar,
         AppDestinations.Analytics,
         AppDestinations.Projections,
+//        AppDestinations.Categories,
     )
 
     val haptic = LocalHapticFeedback.current
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
+    val categoryViewModel: CategoryViewModel = viewModel(
+        factory = CategoryViewModel.provideFactory(context)
+    )
+    val upcomingViewModel: UpcomingViewModel = viewModel(
+        factory = UpcomingViewModel.provideFactory(LocalContext.current)
+    )
+
     val settingsViewModel: SettingsViewModel = viewModel()
     val isDark by settingsViewModel.darkTheme.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(sharedViewModel, upcomingViewModel) {
+        sharedViewModel.onNewTransactionsSynced = { newTxs ->
+            newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -269,7 +311,6 @@ fun PesaPulseApp() {
                 }
             },
             bottomBar = {
-                // Only show bottom nav on main screens, not settings
                 if (currentRoute != AppDestinations.Settings.route) {
                     GlassNavigationBar(haptic, navController, navItems)
                 }
@@ -281,28 +322,43 @@ fun PesaPulseApp() {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(AppDestinations.Dashboard.route) {
-                    DashboardScreen(viewModel = sharedViewModel)
+                    DashboardScreen(
+                        viewModel = sharedViewModel,
+                        categoryViewModel
+                    )
                 }
                 composable(AppDestinations.Transactions.route) {
                     TransactionScreen(
                         viewModel = sharedViewModel,
+                        categoryViewModel,
+                        upcomingViewModel,
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }
                 composable(AppDestinations.Calendar.route) {
-                    CalendarScreen(viewModel = sharedViewModel)
+                    CalendarScreen(viewModel = sharedViewModel, categoryViewModel, upcomingViewModel)
                 }
                 composable(AppDestinations.Analytics.route) {
-                    AnalyticsScreen()
+                    AnalyticsScreen(categoryViewModel)
                 }
                 composable(AppDestinations.Projections.route) {
-                    ProjectionScreen()
+                    ProjectionScreen(
+                        sharedViewModel,
+                        upcomingViewModel,
+                        categoryViewModel
+                    )
                 }
                 composable(AppDestinations.Settings.route) {
                     SettingsScreen(
                         isDarkTheme = isDark,
                         onToggleTheme = settingsViewModel::setDarkTheme,
-                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek
+                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek,
+                        navController
+                    )
+                }
+                composable (AppDestinations.Categories.route){
+                    CategoryManagementScreen(
+                        categoryViewModel
                     )
                 }
             }

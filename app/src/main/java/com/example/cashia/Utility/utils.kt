@@ -57,7 +57,7 @@ object PesaTimeConfiguration {
     var use24HrsFormat by mutableStateOf(false)
     var datePattern: String = "dd MMM yyyy"
     var firstDayOfWeek by mutableStateOf(DayOfWeek.SUNDAY)
-    var isDarkTheme by mutableStateOf(false)
+    var isDarkTheme by mutableStateOf(true)
     const val CURRENCY = "KES"
     var isBiometricEnabled by mutableStateOf(false)
     private const val PREFS_NAME = "pesa_prefs"
@@ -80,7 +80,7 @@ object PesaTimeConfiguration {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         use24HrsFormat = prefs.getBoolean("use_24h", false)
         isBiometricEnabled = prefs.getBoolean("biometric_on", false)
-        isDarkTheme = prefs.getBoolean("dark_theme", false)
+        isDarkTheme = prefs.getBoolean("dark_theme", true)
         val dayName = prefs.getString("start_day", DayOfWeek.SUNDAY.name)
         firstDayOfWeek = DayOfWeek.valueOf(dayName ?: DayOfWeek.SUNDAY.name)
     }
