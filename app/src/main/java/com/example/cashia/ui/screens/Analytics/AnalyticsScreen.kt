@@ -32,6 +32,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +43,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
@@ -56,6 +55,7 @@ import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -70,15 +70,15 @@ import kotlin.math.roundToInt
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
-    val context = LocalContext.current
-    val viewModel: TransactionsViewModel = viewModel(
-        factory = TransactionsViewModel.provideFactory(context)
-    )
+fun AnalyticsScreen(
+    categoryViewModel: CategoryViewModel,
+    transactionsViewModel: TransactionsViewModel
+) {
+
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
-    val state = viewModel.state
-    val transactions = viewModel.state.allTransactions
+    val state = transactionsViewModel.state
+    val transactions = state.allTransactions
 
     var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
@@ -105,9 +105,12 @@ fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
     val endTs =
         endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-    val filteredTransactions = remember(transactions, selectedType, startTs, endTs) {
-        transactions.filter { tx ->
-            tx.timestamp in startTs..endTs && tx.type == selectedType.name.lowercase()
+    val typeStr = selectedType.name.lowercase()
+    val filteredTransactions by remember(transactions, typeStr, startTs, endTs) {
+        derivedStateOf {
+            transactions.filter { tx ->
+                tx.timestamp in startTs..endTs && tx.type == typeStr
+            }
         }
     }
 
@@ -140,7 +143,7 @@ fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
     Scaffold(containerColor = Color.Transparent) { _ ->
         PullToRefreshBox(
             isRefreshing = state.isLoading,
-            onRefresh = { viewModel.refreshFromSms() },
+            onRefresh = { transactionsViewModel.refreshFromSms() },
             modifier = Modifier.fillMaxSize()
         ) {
             LazyColumn(
@@ -204,26 +207,11 @@ fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
                     }
                 }
 
-                // ── Quick insights ────────────────────────────────────────────
-//                if (filteredTransactions.isNotEmpty()) {
-//                    item {
-//                        QuickInsightsRow(filteredTransactions, selectedType)
-//                    }
-//                }
-
-                // ── Category breakdown ────────────────────────────────────────
                 item {
                     CategoryPieChart(
                         filteredTransactions, allCategories, selectedType
                     )
                 }
-//                item {
-//                    TopBreakdownSection(
-//                        filteredTransactions,
-//                        selectedType,
-//                        allCategories
-//                    )
-//                }
 
                 // ── Empty state with helpful guidance ─────────────────────────
                 if (filteredTransactions.isEmpty()) {
@@ -231,118 +219,6 @@ fun AnalyticsScreen(categoryViewModel: CategoryViewModel) {
                         InsightsEmptyState(
                             selectedType = selectedType,
                             periodLabel = periodLabel
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Summary Amount Header — now takes periodLabel so every number has context
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-fun SummaryAmountHeader(
-    hapticFeedback: HapticFeedback,
-    totalAmount: Double,
-    transactionCount: Int,
-    type: TransactionType,
-    periodLabel: String,            // ← added
-    previousPeriodAmount: Double
-) {
-    val color = if (type == TransactionType.INCOME)
-        MaterialTheme.colorScheme.tertiary
-    else
-        MaterialTheme.colorScheme.error
-
-    val percentageChange = if (previousPeriodAmount > 0) {
-        ((totalAmount - previousPeriodAmount) / previousPeriodAmount * 100)
-    } else 0.0
-
-    GlassySurface {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .clickable { PesaActions.playClick(hapticFeedback) }
-        ) {
-            // Period label at the top — answers "this data is for WHAT period?"
-            Text(
-                text = periodLabel.uppercase(),
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Total ${type.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = PesaTimeConfiguration.formatCurrency(totalAmount),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = color
-                    )
-
-                    if (percentageChange != 0.0) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (percentageChange > 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                                contentDescription = null,
-                                tint = if (percentageChange > 0) color else color.copy(alpha = 0.6f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = "${if (percentageChange > 0) "+" else ""}${percentageChange.roundToInt()}% vs previous period",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                Surface(
-                    color = color.copy(alpha = 0.15f),
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = transactionCount.toString(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = color,
-                            lineHeight = 24.sp
-                        )
-                        Text(
-                            text = "Transactions",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 0.5.sp,
-                                fontSize = 9.sp
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            color = color.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -387,34 +263,6 @@ private fun InsightsEmptyState(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared composables (GlassySurface, DateColumn, helpers)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-fun DateColumn(label: String, date: LocalDate, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.Start
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
 @Composable
 fun GlassySurface(
     modifier: Modifier = Modifier,
@@ -432,10 +280,6 @@ fun GlassySurface(
         content()
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper functions
-// ─────────────────────────────────────────────────────────────────────────────
 
 fun calculatePreviousPeriod(
     transactions: List<MpesaTransactions>,

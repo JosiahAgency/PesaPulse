@@ -20,7 +20,7 @@ val LightColorScheme = lightColorScheme(
     onSurface = Color(0xFF0F172A),
 
     surfaceVariant = Color(0xFFE2E8F0),   // Glass Stroke color
-    onSurfaceVariant = Color(0xFF64748B)
+    onSurfaceVariant = Color(0xFF64748B),
 )
 val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF818CF8),          // Soft Electric Indigo

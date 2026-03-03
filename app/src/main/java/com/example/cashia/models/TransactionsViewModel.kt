@@ -13,8 +13,12 @@ import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -32,7 +36,6 @@ data class TransactionState(
     val currentMonth: String = "",
     val isLoading: Boolean = true,
     val selectedCategory: String? = null,
-
 )
 
 data class SummaryData(
@@ -42,6 +45,8 @@ data class SummaryData(
     val endDate: LocalDate
 )
 
+
+@OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val database = AppDatabase.getDatabase(context)
     private val dao = database.transactionDao()
@@ -49,23 +54,23 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     var state by mutableStateOf(TransactionState())
         private set
 
-    private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
-    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+//    private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
 
     var isBalanceVisible by mutableStateOf(false)
         private set
 
-    fun toggleBalanceVisibility() {
-        isBalanceVisible = !isBalanceVisible
-    }
-
     var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
 
+    private val prefs = context.getSharedPreferences("pesa_prefs", Context.MODE_PRIVATE)
 
     init {
         observeDatabase()
         refreshFromSms()
         reCategorizeExisting()
+    }
+
+    fun toggleBalanceVisibility() {
+        isBalanceVisible = !isBalanceVisible
     }
 
     fun onPermissionGranted() {
@@ -74,61 +79,76 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     private fun observeDatabase() {
         viewModelScope.launch {
-            dao.getAllTransactions().collect { transactions ->
-                updateStateWith(transactions)
-            }
+            dao.getAllTransactions()
+                .debounce(150)
+                .distinctUntilChanged()
+                .flowOn(Dispatchers.IO)
+                .collect { transactions ->
+                    val newState = computeState(transactions)
+                    withContext(Dispatchers.Main) {
+                        state = newState
+                    }
+                }
         }
     }
 
     fun refreshFromSms() {
         viewModelScope.launch(Dispatchers.IO) {
-            state = state.copy(isLoading = true)
+            withContext(Dispatchers.Main) { state = state.copy(isLoading = true) }
             try {
-                val before = dao.getAllTransactionsOnce()
+                val beforeIds = dao.getAllTransactionIdsOnce()
                 syncTransactions(context, database)
-                val after = dao.getAllTransactionsOnce()   // ← snapshot after sync
-                val newTxs = after.filter { a -> before.none { b -> b.id == a.id } }
-                if (newTxs.isNotEmpty()) {
-                    onNewTransactionsSynced?.invoke(newTxs)
+                val afterIds = dao.getAllTransactionIdsOnce()
+                val newIds = afterIds - beforeIds.toSet()
+                if (newIds.isNotEmpty()) {
+                    val newTxs = dao.getTransactionsByIds(newIds.toList())
+                    withContext(Dispatchers.Main) {
+                        onNewTransactionsSynced?.invoke(newTxs)
+                    }
                 }
+
             } catch (e: Exception) {
                 Log.e("PesaPulse", "Sync failed", e)
             } finally {
-                state = state.copy(isLoading = false)
+                withContext(Dispatchers.Main) { state = state.copy(isLoading = false) }
             }
         }
     }
 
-    private fun updateStateWith(transactions: List<MpesaTransactions>) {
+    private fun computeState(transactions: List<MpesaTransactions>): TransactionState {
         val now = LocalDate.now()
-        val currentMonthTransactions = transactions.filter {
-            val date = LocalDate.parse(it.date)
-            date.year == now.year && date.monthValue == now.monthValue
-        }
-        transactionsByDate = transactions.groupBy { LocalDate.parse(it.date) }
 
         val latestBalanceTx = transactions
             .filter { it.balance > 0.0 }
             .maxByOrNull { it.timestamp }
 
         val latestBalance = latestBalanceTx?.balance ?: 0.0
-
         val latestBalanceDateParsed = latestBalanceTx?.let {
-            try { LocalDate.parse(it.date) } catch (e: Exception) { LocalDate.now() }
-        } ?: LocalDate.now()
-
+            runCatching { LocalDate.parse(it.date) }.getOrDefault(now)
+        } ?: now
         val latestBalanceDate = latestBalanceDateParsed
             .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
 
-        state = state.copy(
+        // Only iterate once for current month totals
+        var monthIncome = 0.0
+        var monthExpenses = 0.0
+        transactions.forEach { tx ->
+            val date = runCatching { LocalDate.parse(tx.date) }.getOrNull() ?: return@forEach
+            if (date.year == now.year && date.monthValue == now.monthValue) {
+                when (tx.type) {
+                    "income" -> monthIncome += tx.amount + tx.transactionCost
+                    "expense" -> monthExpenses += tx.amount + tx.transactionCost
+                }
+            }
+        }
+
+        return state.copy(
             allTransactions = transactions,
             latestBalance = latestBalance,
             latestBalanceDate = latestBalanceDate,
             latestBalanceDateParsed = latestBalanceDateParsed,
-            totalIncome = currentMonthTransactions.filter { it.type == "income" }
-                .sumOf { it.amount + it.transactionCost },
-            totalExpenses = currentMonthTransactions.filter { it.type == "expense" }
-                .sumOf { it.amount + it.transactionCost },
+            totalIncome = monthIncome,
+            totalExpenses = monthExpenses,
             currentMonth = "${
                 now.month.getDisplayName(
                     TextStyle.FULL,
@@ -139,17 +159,26 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         )
     }
 
-    companion object {
-        fun provideFactory(context: Context): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    if (modelClass.isAssignableFrom(TransactionsViewModel::class.java)) {
-                        return TransactionsViewModel(context) as T
-                    }
-                    throw IllegalArgumentException("Unknown ViewModel class")
+    fun filterByCategory(category: String?) {
+        state = state.copy(selectedCategory = category)
+    }
+
+    fun updateCategory(txId: String, newCategory: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateCategory(txId, newCategory)
+        }
+    }
+
+    fun reCategorizeExisting() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uncategorized = dao.getUncategorizedTransactions()
+            uncategorized.forEach { tx ->
+                val guessed = guessCategory(tx.recipient, tx.type)
+                if (guessed != TransactionCategory.OTHER.name) {
+                    dao.updateCategory(tx.id, guessed)
                 }
             }
+        }
     }
 
     fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
@@ -181,26 +210,16 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         )
     }
 
-    fun filterByCategory(category: String?) {
-        state = state.copy(selectedCategory = category)
-    }
-
-    fun updateCategory(txId: String, newCategory: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.updateCategory(txId, newCategory)
-        }
-    }
-
-    // Call this once to retroactively categorize old transactions
-    fun reCategorizeExisting() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val uncategorized = dao.getUncategorizedTransactions()
-            uncategorized.forEach { tx ->
-                val guessed = guessCategory(tx.recipient, tx.type)
-                if (guessed != TransactionCategory.OTHER.name) {
-                    dao.updateCategory(tx.id, guessed)
+    companion object {
+        fun provideFactory(context: Context): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    if (modelClass.isAssignableFrom(TransactionsViewModel::class.java)) {
+                        return TransactionsViewModel(context) as T
+                    }
+                    throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }
-        }
     }
 }

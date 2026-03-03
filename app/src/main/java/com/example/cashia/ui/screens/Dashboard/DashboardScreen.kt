@@ -62,7 +62,6 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
-import com.example.cashia.ui.screens.AllTransactions.TransactionDetailDialog
 import com.example.cashia.ui.screens.AllTransactions.TransactionItem
 import com.example.cashia.ui.screens.AllTransactions.resolveCategory
 import com.example.cashia.ui.screens.Analytics.GlassySurface
@@ -149,16 +148,6 @@ fun DashboardScreen(
             }
         }
     ) { padding ->
-        selectedTransaction?.let { tx ->
-            TransactionDetailDialog(
-                hapticFeedback, tx = tx,
-                categoryViewModel = categoryViewModel,
-                onDismiss = { selectedTransaction = null },
-                onEdit = {},
-                onDelete = {}
-            )
-        }
-
         PullToRefreshBox(
             isRefreshing = state.isLoading,
             onRefresh = { viewModel.refreshFromSms() },
@@ -171,7 +160,6 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
 
-                // ── 1. BALANCE HERO — always shows "right now" balance ──────────────
                 item {
                     BalanceHeroCard(
                         state.latestBalance,
@@ -181,7 +169,6 @@ fun DashboardScreen(
                     )
                 }
 
-                // ── 2. PERIOD SCOPE SELECTOR + SUMMARY — clearly labelled ───────────
                 item {
                     PeriodSummaryCard(
                         selectedScope = selectedScope,
@@ -222,7 +209,8 @@ fun DashboardScreen(
                             tx,
                             categoryLabel = resolveCategory(tx.category, allCategories),
                             onClick = { selectedTransaction = tx },
-                            hapticFeedback
+                            hapticFeedback,
+                            categoryViewModel
                         )
                     }
                 } else if (transactionsForScope.isEmpty() && isListExpanded) {
@@ -268,9 +256,10 @@ private fun BalanceHeroCard(
                         PesaTimeConfiguration.formatCurrency(balance)
                     else
                         "••••••",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        brush = primaryGradient()
+                    ),
                     fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface
                 )
                 // Live indicator dot
                 Box(

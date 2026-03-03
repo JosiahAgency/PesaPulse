@@ -21,6 +21,7 @@ enum class TransactionCategory(val label: String, val emoji: String, val isSyste
     INSURANCE("Insurance", "🛡️"),
     INVESTMENT("Investment", "📈"),
     OTHER("Other", "📦");
+
 }
 
 // ─── User-created custom category (stored in DB) ───────────────────────────────
@@ -130,7 +131,7 @@ fun guessCategory(
             "insurance", "jubilee", "britam", "madison", "cic insurance",
             "aaa insurance", "resolution insurance", "sanlam", "aar",
             "heritage insurance", "pioneer assurance", "icea lion",
-            "liberty life", "old mutual", "nhif" // NHIF can be gov or insurance
+            "liberty life", "old mutual", "nhif"
         )
     ) return TransactionCategory.INSURANCE.name
 
@@ -249,10 +250,6 @@ fun guessCategory(
         )
     ) return TransactionCategory.SHOPPING.name
 
-    // ── 16. Send Money (person-to-person — last resort for expenses) ──────
-    // If nothing matched and it's an expense with a phone-number-like or
-    // human-name-like recipient, classify as Send Money.
-    // M-Pesa names are usually FIRSTNAME LASTNAME or have no business keywords.
     if (type == "expense" && looksLikePersonName(r)) {
         return TransactionCategory.SEND_MONEY.name
     }
@@ -265,10 +262,6 @@ fun guessCategory(
 private fun String.containsAny(vararg keywords: String): Boolean =
     keywords.any { this.contains(it, ignoreCase = true) }
 
-/**
- * Heuristic: if recipient has no digits and looks like two short words,
- * it's probably a person (e.g. "JOHN KAMAU", "Mary Wanjiku").
- */
 private fun looksLikePersonName(r: String): Boolean {
     val noDigits = r.none { it.isDigit() }
     val words = r.trim().split("\\s+".toRegex())

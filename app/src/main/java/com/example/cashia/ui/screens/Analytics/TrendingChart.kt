@@ -36,10 +36,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.ui.theme.primaryGradient
 
 
 @Composable
@@ -81,10 +83,12 @@ fun GlassyTrendChart(
             ) {
                 Column {
                     Text(
-                        "Trend Analysis",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "TREND ANALYSIS",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            letterSpacing = 1.5.sp,
+                            brush = primaryGradient()
+                        ),
+                        fontWeight = FontWeight.Black,
                     )
                     Text(
                         "Tap bars for details",
@@ -125,7 +129,7 @@ fun GlassyTrendChart(
                     }
                 }
 
-                BoxWithConstraints (
+                BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()

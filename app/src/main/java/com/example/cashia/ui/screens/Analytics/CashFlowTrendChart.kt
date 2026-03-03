@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.ui.theme.primaryGradient
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -138,10 +139,12 @@ fun CashFlowTrendChart(
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "Cash Flow Trend",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                text = "CASH FLOW TREND",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    letterSpacing = 1.5.sp,
+                    brush = primaryGradient()
+                ),
+                fontWeight = FontWeight.Black,
             )
             Text(
                 text = "Cumulative income vs. expenses",

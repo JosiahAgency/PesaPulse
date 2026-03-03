@@ -2,6 +2,7 @@ package com.example.cashia.models
 
 import android.util.Log
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.cashia.Utility.PesaTimeConfiguration
 import java.time.LocalDate
@@ -46,7 +47,14 @@ private val regexReversal = Regex(
     RegexOption.IGNORE_CASE
 )
 
-@Entity(tableName = "MpesaTransactions")
+@Entity(
+    tableName = "MpesaTransactions", indices = [
+        Index(value = ["timestamp"]),   // used by getLastTransactionTimestamp + sync diff
+        Index(value = ["date"]),        // used by calendar day filter + month filter
+        Index(value = ["type"]),        // used by income/expense splits everywhere
+        Index(value = ["category"])     // used by category filter in TransactionScreen
+    ]
+)
 data class MpesaTransactions(
     @PrimaryKey val id: String,
     val amount: Double,
@@ -59,21 +67,26 @@ data class MpesaTransactions(
     val timestamp: Long,
     val category: String = TransactionCategory.OTHER.name,
 ) {
-    val displayTime: String
-        get() = try {
-            val storedTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+    @get:androidx.room.Ignore
+    val displayTime: String by lazy {
+        try {
+            val storedTime = LocalTime.parse(
+                time, DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+            )
             storedTime.format(PesaTimeConfiguration.getTimeFormatter())
         } catch (e: Exception) {
             time
         }
+    }
 
-    val displayDate: String
-        get() = try {
-            val storedDate = LocalDate.parse(date)
-            storedDate.format(PesaTimeConfiguration.getDateFormatter())
+    @get:androidx.room.Ignore
+    val displayDate: String by lazy {
+        try {
+            LocalDate.parse(date).format(PesaTimeConfiguration.getDateFormatter())
         } catch (e: Exception) {
             date
         }
+    }
 }
 
 fun parseMpesaMessage(message: String): MpesaTransactions? {

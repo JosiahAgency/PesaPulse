@@ -87,9 +87,9 @@ import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
 import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.CalendarScreen
-import com.example.cashia.ui.screens.CategoryManagementScreen
+import com.example.cashia.ui.screens.Categorys.CategoryManagementScreen
 import com.example.cashia.ui.screens.Dashboard.DashboardScreen
-import com.example.cashia.ui.screens.ProjectionScreen
+import com.example.cashia.ui.screens.Projections.ProjectionScreen
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
@@ -206,14 +206,15 @@ fun PesaPulseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
 
-    val navItems = listOf(
-        AppDestinations.Dashboard,
-        AppDestinations.Transactions,
-        AppDestinations.Calendar,
-        AppDestinations.Analytics,
-        AppDestinations.Projections,
-//        AppDestinations.Categories,
-    )
+    val navItems = remember {
+        listOf(
+            AppDestinations.Dashboard,
+            AppDestinations.Transactions,
+            AppDestinations.Calendar,
+            AppDestinations.Analytics,
+            AppDestinations.Projections,
+        )
+    }
 
     val haptic = LocalHapticFeedback.current
     val sharedViewModel: TransactionsViewModel = viewModel(
@@ -232,7 +233,7 @@ fun PesaPulseApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    LaunchedEffect(sharedViewModel, upcomingViewModel) {
+    LaunchedEffect(Unit) {
         sharedViewModel.onNewTransactionsSynced = { newTxs ->
             newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
         }
@@ -331,15 +332,17 @@ fun PesaPulseApp() {
                     TransactionScreen(
                         viewModel = sharedViewModel,
                         categoryViewModel,
-                        upcomingViewModel,
-                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
                 composable(AppDestinations.Calendar.route) {
-                    CalendarScreen(viewModel = sharedViewModel, categoryViewModel, upcomingViewModel)
+                    CalendarScreen(
+                        viewModel = sharedViewModel,
+                        categoryViewModel,
+                        upcomingViewModel
+                    )
                 }
                 composable(AppDestinations.Analytics.route) {
-                    AnalyticsScreen(categoryViewModel)
+                    AnalyticsScreen(categoryViewModel, sharedViewModel)
                 }
                 composable(AppDestinations.Projections.route) {
                     ProjectionScreen(
@@ -356,7 +359,7 @@ fun PesaPulseApp() {
                         navController
                     )
                 }
-                composable (AppDestinations.Categories.route){
+                composable(AppDestinations.Categories.route) {
                     CategoryManagementScreen(
                         categoryViewModel
                     )
@@ -368,6 +371,7 @@ fun PesaPulseApp() {
 
 @Composable
 fun BackgroundGlow(color: Color) {
+    val glowColor = remember(color) { color }
     Canvas(
         modifier = Modifier
             .fillMaxSize()
@@ -375,14 +379,14 @@ fun BackgroundGlow(color: Color) {
     ) {
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(color, Color.Transparent),
+                colors = listOf(glowColor, Color.Transparent),
                 center = Offset(size.width * 0.2f, size.height * 0.15f),
                 radius = size.width * 0.8f
             ), alpha = 0.4f
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(color, Color.Transparent),
+                colors = listOf(glowColor, Color.Transparent),
                 center = Offset(size.width * 0.8f, size.height * 0.9f),
                 radius = size.width * 0.6f
             ), alpha = 0.3f

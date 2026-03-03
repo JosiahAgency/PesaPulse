@@ -15,10 +15,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -83,7 +81,7 @@ import com.example.cashia.models.UpcomingType
 import com.example.cashia.models.UpcomingUiState
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.screens.Analytics.GlassySurface
-import com.example.cashia.ui.screens.CategoryPickerSheet
+import com.example.cashia.ui.screens.Categorys.CategoryPickerSheet
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -235,8 +233,6 @@ fun UpcomingTransactionsSection(
             }
         }
     }
-
-    // ── Delete confirm ────────────────────────────────────────────────────
     deleteTarget?.let { tx ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -254,8 +250,6 @@ fun UpcomingTransactionsSection(
         )
     }
 }
-
-// ── Single card ───────────────────────────────────────────────────────────────
 
 @Composable
 fun UpcomingTransactionCard(

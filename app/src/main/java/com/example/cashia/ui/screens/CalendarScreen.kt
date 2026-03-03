@@ -39,6 +39,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,7 +63,6 @@ import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
-import com.example.cashia.ui.screens.AllTransactions.TransactionDetailDialog
 import com.example.cashia.ui.screens.AllTransactions.TransactionItem
 import com.example.cashia.ui.screens.AllTransactions.resolveCategory
 import com.example.cashia.ui.screens.Analytics.FinancialOverviewCards
@@ -74,7 +74,11 @@ import java.time.format.DateTimeFormatter
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel, upcomingViewModel: UpcomingViewModel) {
+fun CalendarScreen(
+    viewModel: TransactionsViewModel,
+    categoryViewModel: CategoryViewModel,
+    upcomingViewModel: UpcomingViewModel
+) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
     val state = viewModel.state
@@ -96,6 +100,13 @@ fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: Category
 
     val upcomingForDay = remember(upcomingAll, selectedDate) {
         upcomingAll.filter { it.dueDate == selectedDate.toString() }
+    }
+
+    val transactionsForDay by remember(state.allTransactions, selectedDate) {
+        derivedStateOf {
+            val dateStr = selectedDate.toString()   // compare strings — no parse needed
+            state.allTransactions.filter { it.date == dateStr }
+        }
     }
 
     Scaffold(
@@ -130,15 +141,15 @@ fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: Category
             }
         }) { padding ->
         selectedTransaction?.let { tx ->
-            TransactionDetailDialog(
-                hapticFeedback,
-                tx = tx,
-                categoryViewModel = categoryViewModel,
-                onDismiss = { selectedTransaction = null },
-                onEdit = { /* Handle Edit logic */ },
-                onDelete = {
-                }
-            )
+//            TransactionDetailDialog(
+//                hapticFeedback,
+//                tx = tx,
+//                categoryViewModel = categoryViewModel,
+//                onDismiss = { selectedTransaction = null },
+//                onEdit = { /* Handle Edit logic */ },
+//                onDelete = {
+//                }
+//            )
         }
         PullToRefreshBox(
             isRefreshing = state.isLoading, onRefresh = {
@@ -158,7 +169,11 @@ fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: Category
                     }
                 }
                 item {
-                    FullMonthCalendar(state.allTransactions, selectedDate, upcomingAll) { selectedDate = it }
+                    FullMonthCalendar(
+                        state.allTransactions,
+                        selectedDate,
+                        upcomingAll
+                    ) { selectedDate = it }
                 }
                 item {
                     TransactionFrequencyCard(state.allTransactions, selectedDate) {
@@ -167,9 +182,6 @@ fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: Category
                 }
                 item {
                     DayHeader(selectedDate = selectedDate)
-                }
-                val transactionsForDay = state.allTransactions.filter {
-                    LocalDate.parse(it.date) == selectedDate
                 }
                 if (transactionsForDay.isNotEmpty() || upcomingForDay.isNotEmpty()) {
                     item {
@@ -197,7 +209,8 @@ fun CalendarScreen(viewModel: TransactionsViewModel, categoryViewModel: Category
                             tx,
                             categoryLabel = resolveCategory(tx.category, allCategories),
                             onClick = { selectedTransaction = tx },
-                            hapticFeedback
+                            hapticFeedback,
+                            categoryViewModel
                         )
                     }
                 }
@@ -394,9 +407,11 @@ private fun DayStatPill(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(icon, null,
+                Icon(
+                    icon, null,
                     modifier = Modifier.size(12.dp),
-                    tint = color.copy(alpha = 0.7f))
+                    tint = color.copy(alpha = 0.7f)
+                )
                 Text(
                     label,
                     style = MaterialTheme.typography.labelSmall,

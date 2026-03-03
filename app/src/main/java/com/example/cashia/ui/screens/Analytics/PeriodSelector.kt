@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.TimeScope
+import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -60,13 +61,13 @@ fun PeriodSelectorCard(
         ) {
             Text(
                 text = "PERIOD",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = colorScheme.primary,
-                letterSpacing = 1.5.sp
+                style = MaterialTheme.typography.labelLarge.copy(
+                    letterSpacing = 1.5.sp,
+                    brush = primaryGradient()
+                ),
+                fontWeight = FontWeight.Black,
             )
 
-            // Quick-tap chips: Day / Week / Month
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -102,9 +103,6 @@ fun PeriodSelectorCard(
                     }
                 }
             }
-
-            // Fine-tune date range — tapping a chip above pre-fills these
-            // Tapping these manually sets scope to CUSTOM
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -138,9 +136,10 @@ fun PeriodSelectorCard(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = startDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                brush = primaryGradient()
+                            ),
                             fontWeight = FontWeight.Bold,
-                            color = colorScheme.primary
                         )
                     }
                 }
@@ -180,15 +179,14 @@ fun PeriodSelectorCard(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                brush = primaryGradient()
+                            ),
                             fontWeight = FontWeight.Bold,
-                            color = colorScheme.primary
                         )
                     }
                 }
             }
-
-            // CUSTOM badge — only shows when date pickers have been used manually
             if (selectedScope == TimeScope.CUSTOM) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),

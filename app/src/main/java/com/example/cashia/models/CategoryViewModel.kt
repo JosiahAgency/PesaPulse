@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -45,9 +47,13 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
 
     val allCategories: StateFlow<List<ResolvedCategory>> =
         combine(
-            overrideDao.getAllOverrides().map { it.associateBy { o -> o.id } },
+            overrideDao.getAllOverrides()
+                .distinctUntilChanged()         // ← skip if overrides unchanged
+                .map { it.associateBy { o -> o.id } },
             categoryDao.getAllCustomCategories()
+                .distinctUntilChanged()         // ← skip if custom cats unchanged
         ) { overrides, customs ->
+            // Runs on IO via flowOn below
             TransactionCategory.entries.map { cat ->
                 val ov = overrides[cat.name]
                 ResolvedCategory(
@@ -58,7 +64,20 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                 )
             } + customs.map { it.toResolved() }
         }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .flowOn(Dispatchers.IO)
+            .distinctUntilChanged()
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                TransactionCategory.entries.map { cat ->
+                    ResolvedCategory(
+                        id = cat.name,
+                        label = cat.label,
+                        emoji = cat.emoji,
+                        isSystem = true
+                    )
+                }
+            )
 
 
     var uiState by mutableStateOf(CategoryManageState())
@@ -166,12 +185,11 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val customs = categoryDao.getAllCustomCategoriesOnce()
             val uncategorized = txDao.getUncategorizedTransactions()
-            uncategorized.forEach { tx ->
+            val updates = uncategorized.mapNotNull { tx ->
                 val guessed = guessCategory(tx.recipient, tx.type, customs)
-                if (guessed != TransactionCategory.OTHER.name) {
-                    txDao.updateCategoryById(tx.id, guessed)
-                }
+                if (guessed != TransactionCategory.OTHER.name) tx.id to guessed else null
             }
+            updates.forEach { (id, cat) -> txDao.updateCategoryById(id, cat) }
         }
     }
 

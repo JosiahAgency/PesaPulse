@@ -20,7 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,9 +41,7 @@ fun WeeklyCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    rememberCoroutineScope()
-
-    val today = remember { LocalDate.now() }
+    val today = LocalDate.now()
     val initialPage = 500
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
         initialPage = initialPage,
@@ -54,25 +51,25 @@ fun WeeklyCalendar(
 
     LaunchedEffect(selectedDate) {
         val firstDay = PesaTimeConfiguration.firstDayOfWeek
-
         val anchorWeekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
         val targetWeekStart = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
-
         val weeksDiff =
             java.time.temporal.ChronoUnit.WEEKS.between(anchorWeekStart, targetWeekStart)
                 .toInt()
         val targetPage = initialPage + weeksDiff
-
         if (pagerState.currentPage != targetPage) {
             pagerState.animateScrollToPage(targetPage)
         }
     }
-
     val incomeDates = remember(allTransactions) {
         allTransactions.filter { it.type == "income" }.map { it.date }.toSet()
     }
     val expenseDates = remember(allTransactions) {
         allTransactions.filter { it.type == "expense" }.map { it.date }.toSet()
+    }
+    val firstDayOfWeek = remember { PesaTimeConfiguration.firstDayOfWeek }
+    val anchorWeekStart = remember(today, firstDayOfWeek) {
+        today.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
     }
 
     // Glassy Container
@@ -89,11 +86,7 @@ fun WeeklyCalendar(
                     .fillMaxWidth()
             ) { page ->
                 val weekOffset = (page - initialPage).toLong()
-                val startOfWeek = PesaTimeConfiguration.firstDayOfWeek
-
-                val weekStart = today
-                    .with(TemporalAdjusters.previousOrSame(startOfWeek))
-                    .plusWeeks(weekOffset)
+                val weekStart = anchorWeekStart.plusWeeks(weekOffset)
 
                 Row(
                     modifier = Modifier
@@ -103,13 +96,10 @@ fun WeeklyCalendar(
                 ) {
                     (0..6).forEach { dayOffset ->
                         val date = weekStart.plusDays(dayOffset.toLong())
-                        val isSelected = date == selectedDate
-                        val isToday = date == LocalDate.now()
-
                         WeeklyDayItem(
                             date = date,
-                            isSelected = isSelected,
-                            isToday = isToday,
+                            isSelected = date == selectedDate,
+                            isToday = date == today,
                             hasIncome = incomeDates.contains(date.toString()),
                             hasExpense = expenseDates.contains(date.toString()),
                             onDateSelected = onDateSelected,
@@ -133,22 +123,26 @@ fun WeeklyDayItem(
     hapticFeedback: HapticFeedback
 ) {
     val dayName = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+    val dayNumber = remember(date) { date.dayOfMonth.toString() }
 
     Column(
         modifier = Modifier
             .width(45.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable { onDateSelected(date) }
+            .clickable {
+                onDateSelected(date)
+                PesaActions.playClick(hapticFeedback)
+            }
             .then(
-                if (isSelected) Modifier
-                    .background(primaryGradient())
-                    .clickable { PesaActions.playClick(hapticFeedback) }
-                else if (isToday) Modifier.border(
-                    1.dp,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                    RoundedCornerShape(16.dp)
-                )
-                else Modifier
+                when{
+                    isSelected -> Modifier.background(primaryGradient())
+                    isToday -> Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                        RoundedCornerShape(16.dp)
+                    )
+                    else -> Modifier
+                }
             )
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -162,12 +156,15 @@ fun WeeklyDayItem(
         )
 
         Text(
-            text = date.dayOfMonth.toString(),
+            text = dayNumber,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.ExtraBold,
-            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+            color = when {
+                isSelected -> Color.White
+                isToday -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
+            }
         )
-
         // Compact Indicators
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),

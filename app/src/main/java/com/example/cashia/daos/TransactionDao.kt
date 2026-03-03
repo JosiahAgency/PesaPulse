@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TransactionDao {
 
+    @Query("SELECT id FROM MpesaTransactions")
+    suspend fun getAllTransactionIdsOnce(): List<String>
+
+    @Query("SELECT * FROM MpesaTransactions WHERE id IN (:ids)")
+    suspend fun getTransactionsByIds(ids: List<String>): List<MpesaTransactions>
+
     @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<MpesaTransactions>>
 

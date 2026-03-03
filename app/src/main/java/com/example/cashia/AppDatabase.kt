@@ -17,7 +17,7 @@ import com.example.cashia.models.UpcomingTransaction
 
 @Database(
     entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +78,14 @@ abstract class AppDatabase : RoomDatabase() {
                 )
             }
         }
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_timestamp ON MpesaTransactions(timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_date ON MpesaTransactions(date)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_type ON MpesaTransactions(type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_category ON MpesaTransactions(category)")
+            }
+        }
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -85,7 +93,8 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "pesa_pulse_db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
                     .also { INSTANCE = it }
             }
