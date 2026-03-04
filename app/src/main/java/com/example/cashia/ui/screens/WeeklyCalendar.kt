@@ -41,38 +41,38 @@ fun WeeklyCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    val today = LocalDate.now()
+    val today = remember { LocalDate.now() }
     val initialPage = 500
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
-
-
-    LaunchedEffect(selectedDate) {
-        val firstDay = PesaTimeConfiguration.firstDayOfWeek
-        val anchorWeekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
-        val targetWeekStart = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
-        val weeksDiff =
-            java.time.temporal.ChronoUnit.WEEKS.between(anchorWeekStart, targetWeekStart)
-                .toInt()
+    val firstDayOfWeek = remember { PesaTimeConfiguration.firstDayOfWeek }
+    val anchorWeekStart = remember(today, firstDayOfWeek) {
+        today.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+    }
+    LaunchedEffect(selectedDate, firstDayOfWeek) {
+        val targetWeekStart = selectedDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+        val weeksDiff = java.time.temporal.ChronoUnit.WEEKS
+            .between(anchorWeekStart, targetWeekStart).toInt()
         val targetPage = initialPage + weeksDiff
         if (pagerState.currentPage != targetPage) {
             pagerState.animateScrollToPage(targetPage)
         }
     }
-    val incomeDates = remember(allTransactions) {
-        allTransactions.filter { it.type == "income" }.map { it.date }.toSet()
-    }
-    val expenseDates = remember(allTransactions) {
-        allTransactions.filter { it.type == "expense" }.map { it.date }.toSet()
-    }
-    val firstDayOfWeek = remember { PesaTimeConfiguration.firstDayOfWeek }
-    val anchorWeekStart = remember(today, firstDayOfWeek) {
-        today.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+
+    val (incomeDates, expenseDates) = remember(allTransactions) {
+        val inc = HashSet<String>(allTransactions.size)
+        val exp = HashSet<String>(allTransactions.size)
+        for (tx in allTransactions) {
+            when (tx.type) {
+                "income" -> inc.add(tx.date)
+                "expense" -> exp.add(tx.date)
+            }
+        }
+        inc to exp
     }
 
-    // Glassy Container
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -82,8 +82,7 @@ fun WeeklyCalendar(
         Column(modifier = Modifier.padding(vertical = 12.dp)) {
             androidx.compose.foundation.pager.HorizontalPager(
                 state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             ) { page ->
                 val weekOffset = (page - initialPage).toLong()
                 val weekStart = anchorWeekStart.plusWeeks(weekOffset)
@@ -94,16 +93,17 @@ fun WeeklyCalendar(
                         .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    (0..6).forEach { dayOffset ->
+                    for (dayOffset in 0..6) {
                         val date = weekStart.plusDays(dayOffset.toLong())
+                        val dateStr = date.toString()
                         WeeklyDayItem(
                             date = date,
                             isSelected = date == selectedDate,
                             isToday = date == today,
-                            hasIncome = incomeDates.contains(date.toString()),
-                            hasExpense = expenseDates.contains(date.toString()),
+                            hasIncome = dateStr in incomeDates,
+                            hasExpense = dateStr in expenseDates,
                             onDateSelected = onDateSelected,
-                            hapticFeedback
+                            hapticFeedback = hapticFeedback
                         )
                     }
                 }
@@ -122,7 +122,9 @@ fun WeeklyDayItem(
     onDateSelected: (LocalDate) -> Unit,
     hapticFeedback: HapticFeedback
 ) {
-    val dayName = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+    val dayName = remember(date) {
+        date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+    }
     val dayNumber = remember(date) { date.dayOfMonth.toString() }
 
     Column(
@@ -134,13 +136,14 @@ fun WeeklyDayItem(
                 PesaActions.playClick(hapticFeedback)
             }
             .then(
-                when{
+                when {
                     isSelected -> Modifier.background(primaryGradient())
                     isToday -> Modifier.border(
                         1.dp,
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
                         RoundedCornerShape(16.dp)
                     )
+
                     else -> Modifier
                 }
             )
@@ -152,9 +155,9 @@ fun WeeklyDayItem(
             text = dayName,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isSelected) Color.White.copy(alpha = 0.8f)
+            else MaterialTheme.colorScheme.onSurfaceVariant
         )
-
         Text(
             text = dayNumber,
             style = MaterialTheme.typography.titleMedium,
@@ -165,7 +168,6 @@ fun WeeklyDayItem(
                 else -> MaterialTheme.colorScheme.onSurface
             }
         )
-        // Compact Indicators
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -175,7 +177,10 @@ fun WeeklyDayItem(
                     modifier = Modifier
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) Color.White else MaterialTheme.colorScheme.tertiary)
+                        .background(
+                            if (isSelected) Color.White
+                            else MaterialTheme.colorScheme.tertiary
+                        )
                 )
             }
             if (hasExpense) {
@@ -183,7 +188,10 @@ fun WeeklyDayItem(
                     modifier = Modifier
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.error)
+                        .background(
+                            if (isSelected) Color.White.copy(alpha = 0.6f)
+                            else MaterialTheme.colorScheme.error
+                        )
                 )
             }
         }

@@ -1,9 +1,6 @@
 package com.example.cashia.ui.screens.AllTransactions
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -39,7 +36,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,7 +63,6 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionCategory
 import com.example.cashia.ui.screens.Categorys.CategoryPickerSheet
-import kotlin.math.absoluteValue
 
 @Composable
 fun SwipeableTransactionItem(
@@ -77,9 +72,10 @@ fun SwipeableTransactionItem(
     categoryViewModel: CategoryViewModel,
     hapticFeedback: HapticFeedback,
 ) {
-    var offsetX by remember { mutableFloatStateOf(0f) }
     var expanded by remember { mutableStateOf(false) }
     var currentCategoryId by remember(tx.id) { mutableStateOf(tx.category) }
+
+    // Resolve category once per tx+categories change, not on every recompose
     val resolvedCategory = remember(currentCategoryId, allCategories) {
         allCategories.find { it.id == currentCategoryId }
             ?: ResolvedCategory(
@@ -92,18 +88,9 @@ fun SwipeableTransactionItem(
 
     var showCategoryPicker by remember { mutableStateOf(false) }
 
-    val animatedOffset by animateFloatAsState(
-        targetValue = offsetX,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "swipe"
-    )
-    val swipeThreshold = -180f
-    val swipeProgress = (-animatedOffset / swipeThreshold.absoluteValue).coerceIn(0f, 1f)
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f + swipeProgress * 0.2f)
-
     if (showCategoryPicker) {
         CategoryPickerSheet(
-            allCategories = allCategories, // see note below — pass via param
+            allCategories = allCategories,
             currentCategoryId = currentCategoryId,
             onPick = { newId ->
                 currentCategoryId = newId
@@ -117,12 +104,12 @@ fun SwipeableTransactionItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(20.dp))
     ) {
         TransactionItemExpanded(
             tx = tx,
-            resolvedCategory,
+            resolvedCategory = resolvedCategory,
             expanded = expanded,
             hapticFeedback = hapticFeedback,
             onExpandToggle = { expanded = !expanded },
@@ -130,7 +117,6 @@ fun SwipeableTransactionItem(
         )
     }
 }
-
 
 @Composable
 private fun TransactionItemExpanded(
@@ -153,6 +139,10 @@ private fun TransactionItemExpanded(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
+    // Pre-format amount once — avoids repeated string building in text composition
+    val formattedAmount = remember(tx.amount) { formatAmount(tx.amount) }
+    val amountPrefix = if (isIncome) "+" else if (isExpense) "-" else ""
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -162,8 +152,11 @@ private fun TransactionItemExpanded(
                     onLongPress = {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         PesaActions.copyToClipboard(
-                            context, clipboard, hapticFeedback,
-                            "Reference", tx.id
+                            context,
+                            clipboard,
+                            hapticFeedback,
+                            "Reference",
+                            tx.id
                         )
                     }
                 )
@@ -172,8 +165,7 @@ private fun TransactionItemExpanded(
         color = colorScheme.surface.copy(alpha = glassAlpha),
         border = BorderStroke(
             if (expanded) 1.dp else 0.5.dp,
-            if (expanded) accentColor.copy(alpha = 0.3f)
-            else colorScheme.onSurface.copy(alpha = 0.08f)
+            if (expanded) accentColor.copy(alpha = 0.3f) else colorScheme.onSurface.copy(alpha = 0.08f)
         )
     ) {
         Column {
@@ -208,12 +200,10 @@ private fun TransactionItemExpanded(
                     Surface(
                         modifier = Modifier
                             .padding(top = 4.dp)
-                            .clickable(onClick = onCategoryTap),   // ← tap to change
+                            .clickable(onClick = onCategoryTap),
                         shape = RoundedCornerShape(8.dp),
                         color = accentColor.copy(alpha = 0.08f),
-                        border = BorderStroke(
-                            0.5.dp, accentColor.copy(alpha = 0.2f)
-                        )
+                        border = BorderStroke(0.5.dp, accentColor.copy(alpha = 0.2f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
@@ -246,11 +236,7 @@ private fun TransactionItemExpanded(
                         .padding(4.dp)
                 ) {
                     Text(
-                        text = "${if (isIncome) "+" else if (isExpense) "-" else ""}${
-                            formatAmount(
-                                tx.amount
-                            )
-                        }",
+                        text = "$amountPrefix$formattedAmount",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Black,
                             fontFeatureSettings = "tnum"
@@ -274,6 +260,7 @@ private fun TransactionItemExpanded(
                     tint = colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                 )
             }
+
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically(tween(200)) + fadeIn(),
@@ -289,8 +276,7 @@ private fun TransactionItemExpanded(
                     HorizontalDivider(color = accentColor.copy(alpha = 0.1f))
                     Spacer(Modifier.height(2.dp))
 
-                    InlineDetailRow("REF", tx.id, monospace = true) {
-                    }
+                    InlineDetailRow("REF", tx.id, monospace = true)
                     if (!isIncome && tx.transactionCost > 0) {
                         InlineDetailRow(
                             "FEES",
@@ -311,7 +297,6 @@ private fun TransactionItemExpanded(
                     }
 
                     Spacer(Modifier.height(2.dp))
-                    // Quick action row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -335,7 +320,7 @@ private fun TransactionItemExpanded(
                             modifier = Modifier.weight(1f)
                         ) {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            clipboard.setText(AnnotatedString(formatAmount(tx.amount)))
+                            clipboard.setText(AnnotatedString(formattedAmount))
                         }
                         QuickActionChip(
                             label = "Change",
@@ -352,7 +337,6 @@ private fun TransactionItemExpanded(
         }
     }
 }
-
 
 @Composable
 private fun QuickActionChip(
@@ -374,21 +358,12 @@ private fun QuickActionChip(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                icon, null, modifier = Modifier.size(12.dp),
-                tint = tint
-            )
+            Icon(icon, null, modifier = Modifier.size(12.dp), tint = tint)
             Spacer(Modifier.width(5.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = tint,
-                maxLines = 1,
-            )
+            Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
         }
     }
 }
-
 
 @Composable
 private fun InlineDetailRow(
@@ -421,4 +396,3 @@ private fun InlineDetailRow(
         )
     }
 }
-

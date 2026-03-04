@@ -75,7 +75,8 @@ fun PeriodSelectorCard(
                 listOf(
                     TimeScope.DAY to "Day",
                     TimeScope.WEEK to "Week",
-                    TimeScope.MONTH to "Month"
+                    TimeScope.MONTH to "Month",
+                    TimeScope.YEAR to "Year",
                 ).forEach { (scope, label) ->
                     val isSelected = selectedScope == scope
                     Surface(

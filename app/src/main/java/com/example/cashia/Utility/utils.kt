@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 enum class TimeScope {
-    DAY, WEEK, MONTH, CUSTOM
+    DAY, WEEK, MONTH, CUSTOM, YEAR
 }
 
 enum class TransactionType {
@@ -42,14 +42,6 @@ object PesaActions {
         clipboard.setText(AnnotatedString(value))
         playSuccess(haptic)
         Toast.makeText(context, "$label Copied", Toast.LENGTH_SHORT).show()
-    }
-
-    fun getGreeting(): String {
-        return when (LocalTime.now().hour) {
-            in 0..11 -> "Good Morning"
-            in 12..16 -> "Good Afternoon"
-            else -> "Good Evening"
-        }
     }
 }
 

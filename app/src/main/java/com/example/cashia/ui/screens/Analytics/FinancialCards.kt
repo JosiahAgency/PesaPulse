@@ -2,7 +2,6 @@ package com.example.cashia.ui.screens.Analytics
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -39,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.models.MpesaTransactions
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 
 @Composable
@@ -50,18 +47,27 @@ fun FinancialOverviewCards(
     val selectedMonth = selectedDate.month
     val selectedYear = selectedDate.year
 
-    val monthlyTransactions = remember(transactions, selectedMonth, selectedYear) {
-        transactions.filter {
-            val date = LocalDate.parse(it.date)
-            date.month == selectedMonth && date.year == selectedYear
-        }
+    val monthPrefix = remember(selectedMonth, selectedYear) {
+        "$selectedYear-${selectedMonth.value.toString().padStart(2, '0')}"
     }
 
-    // 3. Calculate Monthly Sums
-    val monthlyIncome = monthlyTransactions.filter { it.type == "income" }.sumOf { it.amount }
-    val monthlyExpense = monthlyTransactions.filter { it.type == "expense" }.sumOf { it.amount }
-    val monthlyNetFlow = monthlyIncome - monthlyExpense
+    // Single pass: accumulate income + expense totals and collect matching transactions
+    val (monthlyIncome, monthlyExpense, hasTransactions) = remember(transactions, monthPrefix) {
+        var income = 0.0
+        var expense = 0.0
+        var count = 0
+        for (tx in transactions) {
+            if (!tx.date.startsWith(monthPrefix)) continue
+            count++
+            when (tx.type) {
+                "income" -> income += tx.amount
+                "expense" -> expense += tx.amount
+            }
+        }
+        Triple(income, expense, count > 0)
+    }
 
+    val monthlyNetFlow = monthlyIncome - monthlyExpense
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -102,7 +108,7 @@ fun FinancialOverviewCards(
                 amount = monthlyNetFlow,
                 icon = if (monthlyNetFlow >= 0) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                 color = if (monthlyNetFlow >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
-                isSelected = monthlyTransactions.isNotEmpty()
+                hasTransactions
             )
         }
     }
@@ -118,8 +124,6 @@ fun SmallMetricCard(
     isSelected: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
-
-    val borderAlpha by animateFloatAsState(if (isSelected) 0.4f else 0.05f, label = "border")
     val backgroundAlpha by animateFloatAsState(if (isSelected) 0.12f else 0.04f, label = "bg")
 
     GlassySurface(

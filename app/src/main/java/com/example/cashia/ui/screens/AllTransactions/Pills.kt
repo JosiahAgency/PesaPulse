@@ -27,6 +27,9 @@ import com.example.cashia.models.ResolvedCategory
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+// Hoisted to file scope — DateTimeFormatter construction is non-trivial and was
+// being called on every recomposition of ActiveFilterPills.
+private val SHORT_DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM")
 
 @Composable
 fun ActiveFilterPills(
@@ -44,10 +47,7 @@ fun ActiveFilterPills(
     ) {
         if (searchQuery.isNotBlank()) {
             item {
-                FilterPill(
-                    label = "\"$searchQuery\"",
-                    onDismiss = onClearSearch
-                )
+                FilterPill(label = "\"$searchQuery\"", onDismiss = onClearSearch)
             }
         }
         if (selectedCategory != null) {
@@ -60,10 +60,9 @@ fun ActiveFilterPills(
         }
         if (dateRangeStart != null || dateRangeEnd != null) {
             item {
-                val label =
-                    "${dateRangeStart?.format(DateTimeFormatter.ofPattern("dd MMM")) ?: "..."} → ${
-                        dateRangeEnd?.format(DateTimeFormatter.ofPattern("dd MMM")) ?: "..."
-                    }"
+                val label = "${dateRangeStart?.format(SHORT_DATE_FMT) ?: "…"} → ${
+                    dateRangeEnd?.format(SHORT_DATE_FMT) ?: "…"
+                }"
                 FilterPill(label = label, onDismiss = onClearDate)
             }
         }

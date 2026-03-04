@@ -48,6 +48,16 @@ import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+// ── Data classes hoisted to file scope — not re-declared inside the composable ──
+private data class DayGroup(
+    val date: LocalDate,
+    val transactions: List<MpesaTransactions>,
+    val dayIncome: Double,
+    val dayExpense: Double,
+    val dayBalance: Double
+)
+
+private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,11 +82,14 @@ fun TransactionScreen(
     // Build category lookup map once
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
 
+    // Stable today — used as fallback for unparseable dates
+    val today = remember { LocalDate.now() }
+
     // ── Pre-parse all dates once ──────────────────────────────────────────
     val parsedAll by remember(state.allTransactions) {
         derivedStateOf {
             state.allTransactions.map { tx ->
-                val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { LocalDate.now() }
+                val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
                 ParsedTx(tx, date, weekBucket(date))
             }
         }
@@ -90,19 +103,15 @@ fun TransactionScreen(
             val amountQuery = searchQuery.trim().toDoubleOrNull()
             parsedAll.filter { p ->
                 val tx = p.tx
-                // Text search
                 val textMatch = searchQuery.isBlank() ||
                         tx.recipient.contains(searchQuery, ignoreCase = true) ||
                         tx.id.contains(searchQuery, ignoreCase = true) ||
                         (amountQuery != null && tx.amount == amountQuery) ||
                         categoryMap[tx.category]?.label?.contains(
-                            searchQuery,
-                            ignoreCase = true
+                            searchQuery, ignoreCase = true
                         ) == true
-                // Category filter chip
-                val catMatch = selectedCategoryFilter == null ||
-                        tx.category == selectedCategoryFilter
-                // Date range
+                val catMatch =
+                    selectedCategoryFilter == null || tx.category == selectedCategoryFilter
                 val dateMatch = (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
                         (dateRangeEnd == null || !p.date.isAfter(dateRangeEnd!!))
                 textMatch && catMatch && dateMatch
@@ -111,25 +120,12 @@ fun TransactionScreen(
     }
 
     // ── Group: bucket → date → transactions ──────────────────────────────
-    data class DayGroup(
-        val date: LocalDate,
-        val transactions: List<MpesaTransactions>,
-        val dayIncome: Double,
-        val dayExpense: Double,
-        val dayBalance: Double   // last known balance in that day
-    )
-
-    data class WeekGroup(val bucket: String, val days: List<DayGroup>)
-
     val weekGroups by remember(filtered) {
         derivedStateOf {
             filtered
                 .groupBy { it.bucket }
                 .entries
-                .sortedByDescending { entry ->
-                    // Sort buckets by the latest date in each
-                    entry.value.maxOf { it.date }
-                }
+                .sortedByDescending { entry -> entry.value.maxOf { it.date } }
                 .map { (bucket, rows) ->
                     val days = rows
                         .groupBy { it.date }
@@ -137,12 +133,20 @@ fun TransactionScreen(
                         .sortedByDescending { it.key }
                         .map { (date, dayRows) ->
                             val txs = dayRows.map { it.tx }
+                            // Single pass: accumulate income + expense simultaneously
+                            var inc = 0.0
+                            var exp = 0.0
+                            for (tx in txs) {
+                                when (tx.type) {
+                                    "income" -> inc += tx.amount
+                                    "expense" -> exp += tx.amount
+                                }
+                            }
                             DayGroup(
                                 date = date,
                                 transactions = txs,
-                                dayIncome = txs.filter { it.type == "income" }.sumOf { it.amount },
-                                dayExpense = txs.filter { it.type == "expense" }
-                                    .sumOf { it.amount },
+                                dayIncome = inc,
+                                dayExpense = exp,
                                 dayBalance = txs.filter { it.balance > 0 }.lastOrNull()?.balance
                                     ?: 0.0
                             )
@@ -153,7 +157,6 @@ fun TransactionScreen(
     }
 
     // ── Collapsed state ───────────────────────────────────────────────────
-    var collapsedDates by remember { mutableStateOf(setOf<LocalDate>()) }
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
 
     // ── Back-to-top visibility ────────────────────────────────────────────
@@ -191,17 +194,6 @@ fun TransactionScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    // ── Summary card ───────────────────────────────────────
-                    item(key = "summary") {
-                        CompactTransactionSummary(
-                            balance = state.latestBalance,
-                            income = state.totalIncome,
-                            expenses = state.totalExpenses
-                        )
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    // ── Search + filter bar ────────────────────────────────
                     item(key = "search") {
                         EnhancedSearchBar(
                             query = searchQuery,
@@ -264,7 +256,6 @@ fun TransactionScreen(
                     weekGroups.forEach { weekGroup ->
                         val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
 
-                        // Week bucket header
                         stickyHeader(key = "bucket_${weekGroup.bucket}") {
                             WeekBucketHeader(
                                 label = weekGroup.bucket,
@@ -281,23 +272,20 @@ fun TransactionScreen(
 
                         if (!bucketCollapsed) {
                             weekGroup.days.forEach { dayGroup ->
-                                val dayCollapsed = collapsedDates.contains(dayGroup.date)
-                                if (!dayCollapsed) {
-                                    items(
-                                        items = dayGroup.transactions,
-                                        key = { it.id }
-                                    ) { tx ->
-                                        SwipeableTransactionItem(
-                                            tx,
-                                            resolveCategory(
-                                                tx.category,
-                                                allCategories
-                                            ),
-                                            allCategories,
-                                            categoryViewModel,
-                                            hapticFeedback = haptic,
-                                        )
+                                items(
+                                    items = dayGroup.transactions,
+                                    key = { it.id }
+                                ) { tx ->
+                                    val categoryLabel = remember(tx.id, allCategories) {
+                                        resolveCategory(tx.category, allCategories)
                                     }
+                                    SwipeableTransactionItem(
+                                        tx,
+                                        categoryLabel,
+                                        allCategories,
+                                        categoryViewModel,
+                                        hapticFeedback = haptic,
+                                    )
                                 }
                             }
                         }
@@ -319,16 +307,13 @@ fun TransactionScreen(
                 modifier = Modifier
                     .size(44.dp)
                     .clickable {
-                        coroutineScope.launch {
-                            listState.animateScrollToItem(0)
-                        }
+                        coroutineScope.launch { listState.animateScrollToItem(0) }
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
             ) {
                 Box(
-                    contentAlignment = Alignment.Center, modifier = Modifier.background(
-                        brush = primaryGradient()
-                    )
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.background(brush = primaryGradient())
                 ) {
                     Icon(
                         Icons.Rounded.KeyboardArrowUp,

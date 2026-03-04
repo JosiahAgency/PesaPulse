@@ -98,7 +98,7 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    var selectedScope by remember { mutableStateOf(TimeScope.WEEK) }
+    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
     val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
         derivedStateOf { viewModel.calculateSummary(selectedDate, selectedScope) }
     }
@@ -110,12 +110,12 @@ fun DashboardScreen(
                 TimeScope.DAY -> txDate == selectedDate
                 TimeScope.WEEK -> !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
                 TimeScope.MONTH -> txDate.month == selectedDate.month && txDate.year == selectedDate.year
+                TimeScope.YEAR -> txDate.year == selectedDate.year
                 else -> txDate == selectedDate
             }
         }.sortedByDescending { it.date }
     }
 
-    // Human-readable period label used everywhere so stats are always contextualised
     val periodLabel = remember(selectedDate, selectedScope) {
         when (selectedScope) {
             TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM"))
@@ -126,6 +126,7 @@ fun DashboardScreen(
             }"
 
             TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+            TimeScope.YEAR -> selectedDate.format(DateTimeFormatter.ofPattern("yyyy"))
             else -> ""
         }
     }
@@ -281,9 +282,6 @@ private fun BalanceHeroCard(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Period Summary — every number is labelled with what period it's for
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PeriodSummaryCard(
     selectedScope: TimeScope,
@@ -304,7 +302,12 @@ private fun PeriodSummaryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(TimeScope.DAY, TimeScope.WEEK, TimeScope.MONTH).forEach { scope ->
+                listOf(
+                    TimeScope.DAY,
+                    TimeScope.WEEK,
+                    TimeScope.MONTH,
+                    TimeScope.YEAR
+                ).forEach { scope ->
                     val isSelected = selectedScope == scope
                     Surface(
                         modifier = Modifier
@@ -329,6 +332,7 @@ private fun PeriodSummaryCard(
                                     TimeScope.DAY -> "Day"
                                     TimeScope.WEEK -> "Week"
                                     TimeScope.MONTH -> "Month"
+                                    TimeScope.YEAR -> "Year"
                                     else -> ""
                                 },
                                 style = MaterialTheme.typography.labelMedium,
@@ -401,7 +405,8 @@ private fun PeriodSummaryCard(
                             when (selectedScope) {
                                 TimeScope.DAY -> "day"
                                 TimeScope.WEEK -> "week"
-                                else -> "month"
+                                TimeScope.MONTH -> "month"
+                                else -> "year"
                             }
                         }",
                         style = MaterialTheme.typography.labelMedium,

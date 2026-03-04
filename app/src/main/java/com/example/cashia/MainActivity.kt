@@ -134,11 +134,9 @@ class MainActivity : FragmentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-
         val permissionsToRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
@@ -226,10 +224,8 @@ fun PesaPulseApp() {
     val upcomingViewModel: UpcomingViewModel = viewModel(
         factory = UpcomingViewModel.provideFactory(LocalContext.current)
     )
-
     val settingsViewModel: SettingsViewModel = viewModel()
     val isDark by settingsViewModel.darkTheme.collectAsState()
-
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -249,7 +245,6 @@ fun PesaPulseApp() {
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                // Contextual top bar: title changes per screen with subtitle explaining what the screen does
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -371,7 +366,6 @@ fun PesaPulseApp() {
 
 @Composable
 fun BackgroundGlow(color: Color) {
-    val glowColor = remember(color) { color }
     Canvas(
         modifier = Modifier
             .fillMaxSize()
@@ -379,14 +373,14 @@ fun BackgroundGlow(color: Color) {
     ) {
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(glowColor, Color.Transparent),
+                colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.2f, size.height * 0.15f),
                 radius = size.width * 0.8f
             ), alpha = 0.4f
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(glowColor, Color.Transparent),
+                colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.8f, size.height * 0.9f),
                 radius = size.width * 0.6f
             ), alpha = 0.3f
@@ -446,7 +440,6 @@ fun GlassNavigationBar(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        // Selected indicator pill
                         if (selected) {
                             Box(
                                 modifier = Modifier

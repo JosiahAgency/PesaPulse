@@ -191,8 +191,8 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 val end = startOfWeek.plusDays(6)
                 startOfWeek to end
             }
-
             TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
+            TimeScope.YEAR -> selectedDate.withDayOfYear(1) to selectedDate.withDayOfYear(selectedDate.lengthOfYear())
             TimeScope.CUSTOM -> selectedDate to selectedDate
         }
 

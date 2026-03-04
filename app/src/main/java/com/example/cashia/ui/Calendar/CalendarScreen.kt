@@ -59,14 +59,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingTransaction
+import com.example.cashia.models.UpcomingType
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.ui.Calendar.FullMonthCalendar
+import com.example.cashia.ui.Calendar.TransactionFrequencyCard
 import com.example.cashia.ui.screens.AllTransactions.EmptyStateMessage
 import com.example.cashia.ui.screens.AllTransactions.TransactionItem
+import com.example.cashia.ui.screens.AllTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.screens.AllTransactions.resolveCategory
 import com.example.cashia.ui.screens.Analytics.FinancialOverviewCards
 import com.example.cashia.ui.screens.Analytics.GlassySurface
+import com.example.cashia.ui.screens.Analytics.formatCompactAmount
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -79,8 +85,10 @@ fun CalendarScreen(
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel
 ) {
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    val today = LocalDate.now()
+    // Stable today — not recomputed on every recompose
+    val today = remember { LocalDate.now() }
+
+    var selectedDate by remember { mutableStateOf(today) }
     val state = viewModel.state
     var selectedTransaction by remember { mutableStateOf<MpesaTransactions?>(null) }
     val hapticFeedback = LocalHapticFeedback.current
@@ -90,21 +98,22 @@ fun CalendarScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.onPermissionGranted()
-            }
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.onPermissionGranted()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val upcomingForDay = remember(upcomingAll, selectedDate) {
-        upcomingAll.filter { it.dueDate == selectedDate.toString() }
+    val upcomingForDay by remember(upcomingAll, selectedDate) {
+        derivedStateOf {
+            val dateStr = selectedDate.toString()
+            upcomingAll.filter { it.dueDate == dateStr }
+        }
     }
 
     val transactionsForDay by remember(state.allTransactions, selectedDate) {
         derivedStateOf {
-            val dateStr = selectedDate.toString()   // compare strings — no parse needed
+            val dateStr = selectedDate.toString()
             state.allTransactions.filter { it.date == dateStr }
         }
     }
@@ -114,16 +123,9 @@ fun CalendarScreen(
         floatingActionButton = {
             if (selectedDate != today) {
                 ExtendedFloatingActionButton(
-                    onClick = {
-                        selectedDate = today
-                    },
-                    icon = {
-                        Icon(Icons.Default.Today, contentDescription = "Today")
-
-                    },
-                    text = {
-                        Text("Today", fontWeight = FontWeight.SemiBold)
-                    },
+                    onClick = { selectedDate = today },
+                    icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
+                    text = { Text("Today", fontWeight = FontWeight.SemiBold) },
                     containerColor = Color.Transparent,
                     elevation = FloatingActionButtonDefaults.elevation(
                         defaultElevation = 0.dp,
@@ -134,27 +136,14 @@ fun CalendarScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(
-                            brush = primaryGradient()
-                        )
+                        .background(brush = primaryGradient())
                 )
             }
-        }) { padding ->
-        selectedTransaction?.let { tx ->
-//            TransactionDetailDialog(
-//                hapticFeedback,
-//                tx = tx,
-//                categoryViewModel = categoryViewModel,
-//                onDismiss = { selectedTransaction = null },
-//                onEdit = { /* Handle Edit logic */ },
-//                onDelete = {
-//                }
-//            )
         }
+    ) { padding ->
         PullToRefreshBox(
-            isRefreshing = state.isLoading, onRefresh = {
-                viewModel.refreshFromSms()
-            },
+            isRefreshing = state.isLoading,
+            onRefresh = { viewModel.refreshFromSms() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding()
@@ -181,6 +170,13 @@ fun CalendarScreen(
                     }
                 }
                 item {
+                    UpcomingTransactionsSection(
+                        upcomingViewModel = upcomingViewModel,
+                        categoryViewModel = categoryViewModel,
+                        allCategories = allCategories
+                    )
+                }
+                item {
                     DayHeader(selectedDate = selectedDate)
                 }
                 if (transactionsForDay.isNotEmpty() || upcomingForDay.isNotEmpty()) {
@@ -191,16 +187,6 @@ fun CalendarScreen(
                         )
                     }
                 }
-                if (upcomingForDay.isNotEmpty()) {
-                    item {
-                        UpcomingDaySection(
-                            upcoming = upcomingForDay,
-                            allCategories = allCategories,
-                            onMarkPaid = { upcomingViewModel.markPaid(it) }
-                        )
-                    }
-                }
-
                 if (transactionsForDay.isEmpty() && upcomingForDay.isEmpty()) {
                     item { EmptyStateMessage("No Transactions On This Day", hapticFeedback) }
                 } else {
@@ -218,6 +204,8 @@ fun CalendarScreen(
         }
     }
 }
+
+// ── Day header ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun DayHeader(selectedDate: LocalDate) {
@@ -267,28 +255,31 @@ private fun DayHeader(selectedDate: LocalDate) {
     }
 }
 
-// ── Day spending summary bar ──────────────────────────────────────────────────
-
 @Composable
 private fun DaySpendingBar(
     transactions: List<MpesaTransactions>,
     upcomingForDay: List<UpcomingTransaction>
 ) {
-    val income = transactions.filter { it.type == "income" }.sumOf { it.amount }
-    val expense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
-    val upcomingExpense = upcomingForDay
-        .filter { it.type == com.example.cashia.models.UpcomingType.EXPENSE }
-        .sumOf { it.amount }
-    val upcomingIncome = upcomingForDay
-        .filter { it.type != com.example.cashia.models.UpcomingType.EXPENSE }
-        .sumOf { it.amount }
+    var income = 0.0
+    var expense = 0.0
+    for (tx in transactions) {
+        when (tx.type) {
+            "income" -> income += tx.amount
+            "expense" -> expense += tx.amount
+        }
+    }
+    var upcomingExpense = 0.0
+    var upcomingIncome = 0.0
+    for (tx in upcomingForDay) {
+        if (tx.type == UpcomingType.EXPENSE) upcomingExpense += tx.amount
+        else upcomingIncome += tx.amount
+    }
 
     val totalInflow = income + upcomingIncome
     val totalOutflow = expense + upcomingExpense
     val total = totalInflow + totalOutflow
     val incomeRatio = if (total > 0) (totalInflow / total).toFloat() else 0.5f
 
-    // Animate bar fill
     val animatedRatio by animateFloatAsState(
         targetValue = incomeRatio,
         animationSpec = tween(600),
@@ -328,7 +319,6 @@ private fun DaySpendingBar(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Income / Expense split bar ────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -347,7 +337,6 @@ private fun DaySpendingBar(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Stat row ──────────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -368,17 +357,14 @@ private fun DaySpendingBar(
                     color = MaterialTheme.colorScheme.error,
                     icon = Icons.Default.TrendingDown
                 )
-                // Net
                 val net = income - expense
                 DayStatPill(
                     modifier = Modifier.weight(1f),
                     label = "Net",
                     amount = net,
                     pendingAmount = 0.0,
-                    color = if (net >= 0) MaterialTheme.colorScheme.tertiary
-                    else MaterialTheme.colorScheme.error,
-                    icon = if (net >= 0) Icons.Default.TrendingUp
-                    else Icons.Default.TrendingDown
+                    color = if (net >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                    icon = if (net >= 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown
                 )
             }
         }
@@ -407,11 +393,7 @@ private fun DayStatPill(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
-                    icon, null,
-                    modifier = Modifier.size(12.dp),
-                    tint = color.copy(alpha = 0.7f)
-                )
+                Icon(icon, null, modifier = Modifier.size(12.dp), tint = color.copy(alpha = 0.7f))
                 Text(
                     label,
                     style = MaterialTheme.typography.labelSmall,
@@ -419,14 +401,13 @@ private fun DayStatPill(
                 )
             }
             Text(
-                com.example.cashia.ui.screens.Analytics.formatCompactAmount(amount),
+                formatCompactAmount(amount),
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                 color = if (amount == 0.0) color.copy(alpha = 0.35f) else color
             )
-            // Show pending upcoming amount if present
             if (pendingAmount > 0) {
                 Text(
-                    "+${com.example.cashia.ui.screens.Analytics.formatCompactAmount(pendingAmount)} scheduled",
+                    "+${formatCompactAmount(pendingAmount)} scheduled",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                 )
@@ -435,14 +416,14 @@ private fun DayStatPill(
     }
 }
 
-// ── Upcoming items on selected day ────────────────────────────────────────────
-
 @Composable
 private fun UpcomingDaySection(
     upcoming: List<UpcomingTransaction>,
-    allCategories: List<com.example.cashia.models.ResolvedCategory>,
+    allCategories: List<ResolvedCategory>,
     onMarkPaid: (UpcomingTransaction) -> Unit
 ) {
+    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "SCHEDULED TODAY",
@@ -454,14 +435,13 @@ private fun UpcomingDaySection(
             modifier = Modifier.padding(start = 4.dp)
         )
         upcoming.forEach { tx ->
-            val resolved = allCategories.find { it.id == tx.categoryId }
+            val resolved = categoryMap[tx.categoryId]
             GlassySurface(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Category emoji
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -476,9 +456,7 @@ private fun UpcomingDaySection(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             tx.title,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            )
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
                             resolved?.label ?: "Other",
@@ -489,10 +467,8 @@ private fun UpcomingDaySection(
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             com.example.cashia.Utility.PesaTimeConfiguration.formatCurrency(tx.amount),
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = if (tx.type == com.example.cashia.models.UpcomingType.INCOME)
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                            color = if (tx.type == UpcomingType.INCOME)
                                 MaterialTheme.colorScheme.tertiary
                             else
                                 MaterialTheme.colorScheme.error
@@ -512,184 +488,5 @@ private fun UpcomingDaySection(
                 }
             }
         }
-    }
-}
-
-
-@Composable
-fun TransactionFrequencyCard(
-    allTransactions: List<MpesaTransactions>, selectedDate: LocalDate,
-    onDateSelected: (LocalDate) -> Unit
-) {
-    val selectedMonth = selectedDate.month
-    val selectedYear = selectedDate.year
-
-    val monthlyTransactions = remember(allTransactions, selectedDate) {
-        allTransactions.mapNotNull { txn ->
-            runCatching {
-                txn to LocalDate.parse(txn.date)
-            }.getOrNull()
-        }.filter { (_, date) ->
-            date.month == selectedMonth && date.year == selectedYear
-        }
-    }
-
-    val frequencyData = remember(monthlyTransactions) {
-        val incomeMap = monthlyTransactions
-            .filter { it.first.type == "income" }
-            .groupBy { it.second }
-
-        val expenseMap = monthlyTransactions
-            .filter { it.first.type == "expense" }
-            .groupBy { it.second }
-
-        val topIncome = incomeMap.maxByOrNull { it.value.size }
-        val topExpense = expenseMap.maxByOrNull { it.value.size }
-
-        Triple(topIncome, topExpense, monthlyTransactions.size)
-    }
-
-    val (topIncome, topExpense, _) = frequencyData
-
-    selectedDate.toString()
-    monthlyTransactions.count {
-        it.second == selectedDate && it.first.type == "income"
-    }
-    monthlyTransactions.count {
-        it.second == selectedDate && it.first.type == "expense"
-    }
-
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "MONTHLY ACTIVITY PEAKS",
-            style = MaterialTheme.typography.labelLarge.copy(
-                letterSpacing = 1.5.sp,
-                fontWeight = FontWeight.Black
-            ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        GlassySurface {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    FrequencyMetric(
-                        modifier = Modifier.weight(1f),
-                        label = "Income Peak",
-                        dateString = topIncome?.key?.toString(),
-                        count = topIncome?.value?.size ?: 0,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        icon = Icons.Default.TrendingUp,
-                        onClick = {
-                            topIncome?.key?.let(onDateSelected)
-                        }
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(60.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                            .align(Alignment.CenterVertically)
-                    )
-
-                    // Expense Frequency Side
-                    FrequencyMetric(
-                        modifier = Modifier.weight(1f),
-                        label = "Expense Peak",
-                        dateString = topExpense?.key?.toString(),
-                        count = topExpense?.value?.size ?: 0,
-                        color = MaterialTheme.colorScheme.error,
-                        icon = Icons.Default.TrendingDown,
-                        onClick = {
-                            topExpense?.key?.let(onDateSelected)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FrequencyMetric(
-    modifier: Modifier,
-    label: String,
-    dateString: String?,
-    count: Int,
-    color: Color,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    val formattedDate = remember(dateString) {
-        if (dateString != null) {
-            LocalDate.parse(dateString).format(DateTimeFormatter.ofPattern("dd MMM, yyyy"))
-        } else "No Data"
-    }
-
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Icon(icon, null, tint = color.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Text(
-            text = formattedDate,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = color
-            )
-            Text(
-                text = "Transactions",
-                style = MaterialTheme.typography.labelSmall,
-                color = color.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SelectionBadge(count: Int, color: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(color.copy(alpha = 0.1f))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-        Text(
-            text = "$count",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Black,
-            color = color
-        )
     }
 }

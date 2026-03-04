@@ -5,25 +5,15 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -31,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -39,23 +30,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.cashia.Utility.PesaActions
-import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TimeScope
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -65,7 +50,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Calendar
-import kotlin.math.roundToInt
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,7 +66,7 @@ fun AnalyticsScreen(
 
     var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
-    val today = LocalDate.now()
+    val today = remember { LocalDate.now() }
     var startDate by remember { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
 
@@ -94,6 +78,7 @@ fun AnalyticsScreen(
                         today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
 
                 TimeScope.MONTH -> today.withDayOfMonth(1) to today.with(TemporalAdjusters.lastDayOfMonth())
+                TimeScope.YEAR -> today.withDayOfYear(1) to today.with(TemporalAdjusters.lastDayOfYear())
                 else -> startDate to endDate
             }
             startDate = start
@@ -101,11 +86,24 @@ fun AnalyticsScreen(
         }
     }
 
-    val startTs = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val endTs =
-        endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val startTs by remember(startDate) {
+        derivedStateOf {
+            startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+    }
 
-    val typeStr = selectedType.name.lowercase()
+    val endTs by remember(endDate) {
+        derivedStateOf {
+            endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+    }
+
+    val typeStr by remember(selectedType) {
+        derivedStateOf {
+            selectedType.name.lowercase()
+        }
+    }
+
     val filteredTransactions by remember(transactions, typeStr, startTs, endTs) {
         derivedStateOf {
             transactions.filter { tx ->
@@ -114,31 +112,33 @@ fun AnalyticsScreen(
         }
     }
 
-    // Human-readable period label displayed on every stat so there's no ambiguity
-    val periodLabel = remember(startDate, endDate, selectedScope) {
-        when (selectedScope) {
-            TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
-            TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
-                endDate.format(
-                    DateTimeFormatter.ofPattern("dd MMM yyyy")
-                )
-            }"
-
-            TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-            TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
-                endDate.format(
-                    DateTimeFormatter.ofPattern("dd MMM yyyy")
-                )
-            }"
-
-            else -> ""
+    val previousPeriodAmount by remember(transactions, startDate, endDate, selectedType) {
+        derivedStateOf {
+            calculatePreviousPeriod(transactions, startDate, endDate, selectedType)
         }
     }
 
-    val colorScheme = MaterialTheme.colorScheme
-    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
-    colorScheme.surface.copy(alpha = glassAlpha)
-    colorScheme.onSurface.copy(alpha = 0.12f)
+    val periodLabel = remember(startDate, endDate, selectedScope) {
+        derivedStateOf {
+            when (selectedScope) {
+                TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+                TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                    endDate.format(
+                        DateTimeFormatter.ofPattern("dd MMM yyyy")
+                    )
+                }"
+
+                TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+                TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                    endDate.format(
+                        DateTimeFormatter.ofPattern("dd MMM yyyy")
+                    )
+                }"
+
+                else -> ""
+            }
+        }
+    }
 
     Scaffold(containerColor = Color.Transparent) { _ ->
         PullToRefreshBox(
@@ -155,13 +155,13 @@ fun AnalyticsScreen(
                     PeriodSelectorCard(
                         hapticFeedback,
                         selectedScope,
-                        startDate = startDate,
-                        endDate = endDate,
-                        onScopeChange = { selectedScope = it },
-                        onStartDateSelected = {
+                        startDate,
+                        endDate,
+                        { selectedScope = it },
+                        {
                             startDate = it; selectedScope = TimeScope.CUSTOM
                         },
-                        onEndDateSelected = {
+                        {
                             endDate = it; selectedScope = TimeScope.CUSTOM
                         }
                     )
@@ -172,53 +172,42 @@ fun AnalyticsScreen(
                 item {
                     TypeSelectorCard(
                         hapticFeedback,
-                        selectedType = selectedType,
-                        onTypeChange = { selectedType = it },
-                        transactions = transactions,
-                        startTs = startTs,
-                        endTs = endTs
+                        selectedType,
+                        { selectedType = it },
+                        transactions,
+                        startTs,
+                        endTs
                     )
                 }
-
-                // ── Summary header — period label is the first line ───────────
                 item {
                     SummaryAmountHeader(
                         hapticFeedback,
-                        totalAmount = filteredTransactions.sumOf { it.amount },
-                        transactionCount = filteredTransactions.size,
-                        type = selectedType,
-                        periodLabel = periodLabel,
-                        previousPeriodAmount = calculatePreviousPeriod(
-                            transactions,
-                            startDate,
-                            endDate,
-                            selectedType
-                        )
+                        filteredTransactions.sumOf { it.amount },
+                        filteredTransactions.size,
+                        selectedType,
+                        periodLabel,
+                        previousPeriodAmount
                     )
                 }
-
-                // ── Chart — subtitle says what period ─────────────────────────
                 if (filteredTransactions.isNotEmpty()) {
                     item {
                         GlassyTrendChart(
-                            transactions = filteredTransactions,
-                            type = selectedType
+                            filteredTransactions,
+                            selectedType
                         )
                     }
                 }
-
                 item {
                     CategoryPieChart(
                         filteredTransactions, allCategories, selectedType
                     )
                 }
 
-                // ── Empty state with helpful guidance ─────────────────────────
                 if (filteredTransactions.isEmpty()) {
                     item {
                         InsightsEmptyState(
-                            selectedType = selectedType,
-                            periodLabel = periodLabel
+                            selectedType,
+                            periodLabel
                         )
                     }
                 }
@@ -227,13 +216,10 @@ fun AnalyticsScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Empty state that tells the user WHY there's nothing and what to try
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun InsightsEmptyState(
     selectedType: TransactionType,
-    periodLabel: String
+    periodLabel: State<String?>
 ) {
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -294,8 +280,9 @@ fun calculatePreviousPeriod(
         previousStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val previousEndTs =
         previousEnd.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val typeLower = type.name.lowercase()
     return transactions.filter { tx ->
-        tx.timestamp in previousStartTs..previousEndTs && tx.type == type.name.lowercase()
+        tx.timestamp in previousStartTs..previousEndTs && tx.type == typeLower
     }.sumOf { it.amount }
 }
 

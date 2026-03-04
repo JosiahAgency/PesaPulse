@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +42,7 @@ fun SummaryAmountHeader(
     totalAmount: Double,
     transactionCount: Int,
     type: TransactionType,
-    periodLabel: String,            // ← added
+    periodLabel: State<String?>,
     previousPeriodAmount: Double
 ) {
     val color = if (type == TransactionType.INCOME)
@@ -62,7 +63,7 @@ fun SummaryAmountHeader(
         ) {
             // Period label at the top — answers "this data is for WHAT period?"
             Text(
-                text = periodLabel.uppercase(),
+                (periodLabel.value ?: "").toUpperCase(),
                 style = MaterialTheme.typography.labelLarge.copy(
                     letterSpacing = 1.5.sp,
                     brush = primaryGradient()

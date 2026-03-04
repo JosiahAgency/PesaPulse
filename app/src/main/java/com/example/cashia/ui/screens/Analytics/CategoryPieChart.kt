@@ -56,7 +56,6 @@ import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-// ── Slice colours — enough for all system + custom categories ─────────────────
 private val SLICE_COLORS = listOf(
     Color(0xFF6C63FF), Color(0xFFFF6584), Color(0xFF43E97B),
     Color(0xFFFA8231), Color(0xFF00B4D8), Color(0xFFFFD166),
@@ -84,7 +83,7 @@ fun CategoryPieChart(
 ) {
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
 
-    val slices = remember(filteredTransactions, allCategories) {
+    val slices = remember(filteredTransactions, categoryMap) {
         val total = filteredTransactions.sumOf { it.amount }
         if (total == 0.0) return@remember emptyList()
 
@@ -110,9 +109,9 @@ fun CategoryPieChart(
 
     if (slices.isEmpty()) return
 
-    var selectedIndex by remember(filteredTransactions) { mutableIntStateOf(-1) }
+    var selectedIndex by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(filteredTransactions) { selectedIndex = -1 }
     val animatedProgress = remember { Animatable(0f) }
-
     LaunchedEffect(filteredTransactions) {
         animatedProgress.snapTo(0f)
         animatedProgress.animateTo(
@@ -179,7 +178,6 @@ fun CategoryPieChart(
                     }
                 }
 
-                // ── Centre label ──────────────────────────────────────────
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (selectedIndex in slices.indices) {
                         val sel = slices[selectedIndex]
@@ -295,7 +293,6 @@ fun CategoryPieChart(
                                 .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            // Subtotal strip
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -317,9 +314,7 @@ fun CategoryPieChart(
                                 )
                             }
 
-                            // Transaction rows — capped at 10 to avoid massive lists
-                            val visible = slice.transactions.take(10)
-                            visible.forEach { tx ->
+                            slice.transactions.take(10).forEach { tx ->
                                 CategoryTransactionRow(tx = tx, accentColor = slice.color)
                             }
 
@@ -360,7 +355,6 @@ private fun CategoryTransactionRow(tx: MpesaTransactions, accentColor: Color) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Date badge
         Surface(
             shape = RoundedCornerShape(6.dp),
             color = accentColor.copy(alpha = 0.1f),
@@ -375,8 +369,6 @@ private fun CategoryTransactionRow(tx: MpesaTransactions, accentColor: Color) {
                 maxLines = 1
             )
         }
-
-        // Recipient
         Text(
             tx.recipient,
             modifier = Modifier.weight(1f),
@@ -385,8 +377,6 @@ private fun CategoryTransactionRow(tx: MpesaTransactions, accentColor: Color) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-
-        // Amount
         Text(
             PesaTimeConfiguration.formatCurrency(tx.amount),
             style = MaterialTheme.typography.labelMedium,
