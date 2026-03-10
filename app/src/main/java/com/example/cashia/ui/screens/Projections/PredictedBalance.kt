@@ -42,7 +42,7 @@ import com.example.cashia.ui.screens.Analytics.GlassySurface
 @Composable
 fun PredictedBalanceCard(
     currentBalance: Double,
-    horizonDays: Int,
+    period: ProjectionPeriod,
     projection: FinanceProjection,
     confidence: Int,
     zeroCrossingDay: Int?
@@ -51,7 +51,7 @@ fun PredictedBalanceCard(
 
     val balanceColor = when {
         projection.predictedBalance < 0 -> colorScheme.error
-        projection.predictedBalance < currentBalance * 0.5 -> Color(0xFFF59E0B) // amber
+        projection.predictedBalance < currentBalance * 0.5 -> Color(0xFFF59E0B)
         else -> colorScheme.tertiary
     }
 
@@ -74,10 +74,16 @@ fun PredictedBalanceCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
+            // Period label — "Predicted Balance · This Month"
             Text(
-                "Predicted Balance in $horizonDays days",
+                "Predicted Balance · ${period.label}",
                 style = MaterialTheme.typography.labelLarge,
                 color = colorScheme.onSurfaceVariant
+            )
+            Text(
+                "by ${period.endLabel()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
 
             Spacer(Modifier.height(12.dp))
@@ -102,10 +108,7 @@ fun PredictedBalanceCard(
                 Spacer(Modifier.width(4.dp))
                 Text(
                     "${if (changePercent >= 0) "+" else ""}${
-                        String.format(
-                            "%.1f",
-                            changePercent
-                        )
+                        String.format("%.1f", changePercent)
                     }% from today's balance",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colorScheme.onSurfaceVariant
@@ -162,9 +165,7 @@ fun PredictedBalanceCard(
                 MiniStat(
                     "Net Change",
                     "${if (projection.predictedNet >= 0) "+" else ""}${
-                        PesaTimeConfiguration.formatCurrency(
-                            projection.predictedNet
-                        )
+                        PesaTimeConfiguration.formatCurrency(projection.predictedNet)
                     }",
                     if (projection.predictedNet >= 0) colorScheme.tertiary else colorScheme.error
                 )
@@ -197,7 +198,6 @@ private fun MiniStat(label: String, value: String, color: Color) {
         )
     }
 }
-
 
 @Composable
 private fun ConfidenceBar(confidence: Int) {

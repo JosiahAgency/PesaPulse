@@ -90,14 +90,7 @@ fun GlassyTrendChart(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        "TREND ANALYSIS",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            letterSpacing = 1.5.sp,
-                            brush = primaryGradient()
-                        ),
-                        fontWeight = FontWeight.Black,
-                    )
+                    SectionLabel("TREND ANALYSIS")
                     Text(
                         "Tap bars for details",
                         style = MaterialTheme.typography.labelSmall,

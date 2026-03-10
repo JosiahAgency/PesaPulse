@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
+import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingTransaction
@@ -61,7 +62,6 @@ import com.example.cashia.ui.screens.Analytics.GlassySurface
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.collections.forEach
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,7 +73,8 @@ fun UpcomingSection(
     later: List<UpcomingTransaction>,
     allCategories: List<ResolvedCategory>,
     upcomingViewModel: UpcomingViewModel,
-    haptic: HapticFeedback
+    haptic: HapticFeedback,
+    categoryViewModel: CategoryViewModel,
 ) {
     val uiState = upcomingViewModel.uiState
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
@@ -243,7 +244,9 @@ fun UpcomingSection(
                         onRecurrenceChange = upcomingViewModel::onRecurrenceChange,
                         onNotesChange = upcomingViewModel::onNotesChange,
                         onSave = upcomingViewModel::save,
-                        onDismiss = upcomingViewModel::closeSheet
+                        onDismiss = upcomingViewModel::closeSheet,
+                        categoryViewModel = categoryViewModel
+
                     )
                 }
             }

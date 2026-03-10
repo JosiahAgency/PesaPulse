@@ -41,38 +41,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.FinanceProjectionEngine
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
-import com.example.cashia.models.FinanceProjection
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingStatus
 import com.example.cashia.models.UpcomingViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-private fun computeConfidence(
-    txCount: Int,
-    lookbackDays: Int,
-    horizonDays: Int,
-    projection: FinanceProjection
-): Int {
-    var score = 100
-    val density = txCount.toFloat() / lookbackDays.coerceAtLeast(1)
-    if (density < 0.5f) score -= 20
-    else if (density < 1f) score -= 10
-    if (horizonDays > 30) score -= 15
-    else if (horizonDays > 14) score -= 5
-    if (txCount < 10) score -= 20
-    else if (txCount < 30) score -= 10
-    if (projection.dataQualityNote.isNotEmpty()) score -= 15
-    return score.coerceIn(10, 95)
-}
-
-private fun daysUntilZero(trend: List<Pair<LocalDate, Double>>, currentBalance: Double): Int? {
-    if (currentBalance <= 0) return 0
-    trend.forEachIndexed { i, (_, bal) ->
-        if (bal <= 0) return i + 1
-    }
-    return null
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +65,10 @@ fun ProjectionScreen(
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
 
-    var horizonDays by remember { mutableIntStateOf(30) }
+    var selectedPeriod by remember { mutableIntStateOf(1) } // default: This Month
+    val period = ProjectionPeriod.entries[selectedPeriod]
+    val horizonDays = remember(selectedPeriod) { period.daysRemaining() }
+
     var balanceOverride by remember { mutableStateOf("") }
     var configExpanded by remember { mutableStateOf(false) }
 
@@ -117,23 +94,19 @@ fun ProjectionScreen(
         upcomingAll.filter { it.status == UpcomingStatus.PENDING }
     }
 
-    val projection =
-        remember(
-            recentTransactions,
-            effectiveBalance,
+    val projection = remember(
+        recentTransactions, effectiveBalance, horizonDays,
+        state.latestBalanceDateParsed, pendingUpcoming
+    ) {
+        FinanceProjectionEngine.project(
+            transactions = recentTransactions,
+            currentBalance = effectiveBalance,
+            balanceAsOfDate = if (balanceOverride.toDoubleOrNull() != null) LocalDate.now()
+            else state.latestBalanceDateParsed,
             horizonDays,
-            state.latestBalanceDateParsed,
             pendingUpcoming
-        ) {
-            FinanceProjectionEngine.project(
-                transactions = recentTransactions,
-                currentBalance = effectiveBalance,
-                balanceAsOfDate = if (balanceOverride.toDoubleOrNull() != null) LocalDate.now()
-                else state.latestBalanceDateParsed,
-                horizonDays,
-                pendingUpcoming
-            )
-        }
+        )
+    }
 
     val confidence = remember(recentTransactions.size, maxLookback, horizonDays, projection) {
         computeConfidence(recentTransactions.size, maxLookback.toInt(), horizonDays, projection)
@@ -158,6 +131,7 @@ fun ProjectionScreen(
             LocalDate.parse(it.dueDate) >= today.plusDays(8)
         }.sortedBy { it.dueDate }
     }
+
     Scaffold(containerColor = Color.Transparent) { _ ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -168,8 +142,8 @@ fun ProjectionScreen(
                 ProjectionConfigCard(
                     isExpanded = configExpanded,
                     onToggle = { PesaActions.playClick(haptic); configExpanded = !configExpanded },
-                    horizonDays = horizonDays,
-                    onHorizonChange = { horizonDays = it },
+                    selectedPeriod = selectedPeriod,
+                    onPeriodChange = { selectedPeriod = it },
                     balanceOverride = balanceOverride,
                     onBalanceOverrideChange = { balanceOverride = it },
                     autoBalance = state.latestBalance,
@@ -181,7 +155,7 @@ fun ProjectionScreen(
             item {
                 ProjectionConfigSummary(
                     totalDays = maxLookback,
-                    horizonDays = horizonDays,
+                    period = period,
                     isBalanceOverridden = balanceOverride.toDoubleOrNull() != null,
                     dataPointCount = recentTransactions.size,
                     pendingUpcoming.size
@@ -191,7 +165,7 @@ fun ProjectionScreen(
             item {
                 PredictedBalanceCard(
                     currentBalance = effectiveBalance,
-                    horizonDays = horizonDays,
+                    period = period,
                     projection = projection,
                     confidence = confidence,
                     zeroCrossingDay = zeroCrossingDay
@@ -201,7 +175,7 @@ fun ProjectionScreen(
             item {
                 ProjectionTrendChart(
                     projection = projection,
-                    horizonDays = horizonDays,
+                    period = period,
                     currentBalance = effectiveBalance,
                     confidence = confidence
                 )
@@ -215,7 +189,8 @@ fun ProjectionScreen(
                     later,
                     allCategories,
                     upcomingViewModel,
-                    haptic
+                    haptic,
+                    categoryViewModel
                 )
             }
 
@@ -223,7 +198,9 @@ fun ProjectionScreen(
                 ProjectionInsightsCard(
                     projection = projection,
                     transactionCount = recentTransactions.size,
-                    horizonDays = horizonDays,
+                    period = period,
+                    selectedPeriodIndex = selectedPeriod,
+                    onPeriodChange = { selectedPeriod = it },
                     confidence = confidence,
                     transactions,
                     allCategories
@@ -270,14 +247,13 @@ private fun SummaryPill(
     }
 }
 
-
 @Composable
 private fun ProjectionConfigSummary(
     totalDays: Int,
-    horizonDays: Int,
+    period: ProjectionPeriod,
     isBalanceOverridden: Boolean,
     dataPointCount: Int,
-    upcomingCount: Int   // ← add
+    upcomingCount: Int
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -286,9 +262,9 @@ private fun ProjectionConfigSummary(
         SummaryPill(Modifier.weight(1f), "All ${totalDays}d data", Icons.Default.History, false)
         SummaryPill(
             Modifier.weight(1f),
-            "${horizonDays}d forecast",
+            period.label,
             Icons.Default.AutoGraph,
-            horizonDays != 30
+            isCustom = true
         )
         SummaryPill(
             Modifier.weight(1f),

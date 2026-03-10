@@ -46,16 +46,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.ui.theme.primaryGradient
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 
 @Composable
 fun ProjectionConfigCard(
     isExpanded: Boolean,
     onToggle: () -> Unit,
-    horizonDays: Int,
-    onHorizonChange: (Int) -> Unit,
+    selectedPeriod: Int,
+    onPeriodChange: (Int) -> Unit,
     balanceOverride: String,
     onBalanceOverrideChange: (String) -> Unit,
     autoBalance: Double,
@@ -68,6 +66,8 @@ fun ProjectionConfigCard(
     val overrideIsNegative = overrideValue != null && overrideValue < 0
     val overrideIsUnreasonable =
         overrideValue != null && autoBalance > 0 && overrideValue > autoBalance * 10
+
+    val period = ProjectionPeriod.entries[selectedPeriod]
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -90,8 +90,7 @@ fun ProjectionConfigCard(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        modifier = Modifier
-                            .size(38.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
@@ -113,7 +112,8 @@ fun ProjectionConfigCard(
                             color = colorScheme.onSurface
                         )
                         Text(
-                            if (isExpanded) "Tap to collapse" else "Tap to configure",
+                            if (isExpanded) "Tap to collapse"
+                            else "${period.label} · ends ${period.endLabel()}",
                             style = MaterialTheme.typography.labelSmall,
                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
@@ -136,32 +136,41 @@ fun ProjectionConfigCard(
                 ) {
                     HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
 
+                    // ── Period selector ───────────────────────────────────
                     ConfigSection(
-                        label = "FORECAST WINDOW",
-                        sublabel = "Projecting through ${
-                            LocalDate.now().plusDays(horizonDays.toLong())
-                                .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-                        } (${horizonDays} days)\nAccuracy peaks within 30 days."
+                        label = "FORECAST PERIOD",
+                        sublabel = buildString {
+                            append("Projecting through ${period.endLabel()}")
+                            append(" (${period.daysRemaining()} days remaining).")
+                            if (selectedPeriod >= 2)
+                                append(" Longer periods have lower accuracy.")
+                        }
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            listOf(
-                                7 to "7d",
-                                14 to "14d",
-                                30 to "30d",
-                                60 to "60d"
-                            ).forEach { (days, label) ->
+                            ProjectionPeriod.entries.forEachIndexed { index, p ->
+                                // Use a short label so 4 chips fit in one row
+                                val shortLabel = when (p) {
+                                    ProjectionPeriod.THIS_WEEK -> "Week"
+                                    ProjectionPeriod.THIS_MONTH -> "Month"
+                                    ProjectionPeriod.THIS_QUARTER -> "Quarter"
+                                    ProjectionPeriod.THIS_YEAR -> "Year"
+                                }
                                 ConfigChip(
-                                    label,
-                                    horizonDays == days,
-                                    Modifier.weight(1f)
-                                ) { PesaActions.playClick(haptic); onHorizonChange(days) }
+                                    label = shortLabel,
+                                    selected = selectedPeriod == index,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    PesaActions.playClick(haptic)
+                                    onPeriodChange(index)
+                                }
                             }
                         }
                     }
 
+                    // ── Starting balance ──────────────────────────────────
                     ConfigSection(
                         label = "STARTING BALANCE",
                         sublabel = buildString {
@@ -183,7 +192,8 @@ fun ProjectionConfigCard(
                             prefix = {
                                 Text(
                                     "KES ",
-                                    color = if (overrideIsNegative) colorScheme.error else colorScheme.primary,
+                                    color = if (overrideIsNegative) colorScheme.error
+                                    else colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -242,7 +252,8 @@ fun ProjectionConfigCard(
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = if (overrideIsNegative || overrideIsUnreasonable) colorScheme.error else colorScheme.primary,
+                                focusedBorderColor = if (overrideIsNegative || overrideIsUnreasonable)
+                                    colorScheme.error else colorScheme.primary,
                                 unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f),
                                 focusedContainerColor = colorScheme.primary.copy(alpha = 0.04f),
                                 unfocusedContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -291,10 +302,10 @@ private fun ConfigChip(
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(50.dp),
-        color = if (selected) colorScheme.primary else colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = if (selected) colorScheme.primary
+        else colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = if (selected) null else BorderStroke(
-            0.5.dp,
-            colorScheme.onSurface.copy(alpha = 0.08f)
+            0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)
         )
     ) {
         Text(
@@ -302,7 +313,8 @@ private fun ConfigChip(
             modifier = Modifier.padding(vertical = 9.dp),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) Color.White else colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            color = if (selected) Color.White
+            else colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
     }

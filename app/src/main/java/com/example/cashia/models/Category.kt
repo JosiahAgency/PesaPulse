@@ -20,6 +20,7 @@ enum class TransactionCategory(val label: String, val emoji: String, val isSyste
     GOVERNMENT("Government & Tax", "🏛️"),
     INSURANCE("Insurance", "🛡️"),
     INVESTMENT("Investment", "📈"),
+    BALANCE_INQUIRY("Balance Inquiry", "🔍"),
     OTHER("Other", "📦");
 
 }

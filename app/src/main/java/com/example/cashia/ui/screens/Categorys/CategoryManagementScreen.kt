@@ -124,7 +124,7 @@ fun CategoryManagementScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                "Re-runs smart detection on uncategorised transactions",
+                                "Re-runs smart detection on uncategorized transactions",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )

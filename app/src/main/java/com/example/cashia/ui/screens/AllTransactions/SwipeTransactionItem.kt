@@ -97,7 +97,8 @@ fun SwipeableTransactionItem(
                 categoryViewModel.updateTransactionCategory(tx.id, newId)
                 showCategoryPicker = false
             },
-            onDismiss = { showCategoryPicker = false }
+            onDismiss = { showCategoryPicker = false },
+            categoryViewModel = categoryViewModel,
         )
     }
 

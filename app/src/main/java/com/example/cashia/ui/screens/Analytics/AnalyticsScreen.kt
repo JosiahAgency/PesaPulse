@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -58,7 +57,6 @@ fun AnalyticsScreen(
     categoryViewModel: CategoryViewModel,
     transactionsViewModel: TransactionsViewModel
 ) {
-
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
     val state = transactionsViewModel.state
@@ -67,8 +65,8 @@ fun AnalyticsScreen(
     var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
     val today = remember { LocalDate.now() }
-    var startDate by remember { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
-    var endDate by remember { mutableStateOf(LocalDate.now()) }
+    var startDate by remember { mutableStateOf(today.withDayOfMonth(1)) }
+    var endDate by remember { mutableStateOf(today) }
 
     LaunchedEffect(selectedScope) {
         if (selectedScope != TimeScope.CUSTOM) {
@@ -78,7 +76,6 @@ fun AnalyticsScreen(
                         today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
 
                 TimeScope.MONTH -> today.withDayOfMonth(1) to today.with(TemporalAdjusters.lastDayOfMonth())
-                TimeScope.YEAR -> today.withDayOfYear(1) to today.with(TemporalAdjusters.lastDayOfYear())
                 else -> startDate to endDate
             }
             startDate = start
@@ -86,22 +83,19 @@ fun AnalyticsScreen(
         }
     }
 
+    // Memoize timestamp conversions — only recompute when dates change
     val startTs by remember(startDate) {
-        derivedStateOf {
-            startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
+        derivedStateOf { startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     }
-
     val endTs by remember(endDate) {
         derivedStateOf {
             endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
     }
 
+    // Stable lowercase type string — avoids repeated allocation
     val typeStr by remember(selectedType) {
-        derivedStateOf {
-            selectedType.name.lowercase()
-        }
+        derivedStateOf { selectedType.name.lowercase() }
     }
 
     val filteredTransactions by remember(transactions, typeStr, startTs, endTs) {
@@ -112,32 +106,33 @@ fun AnalyticsScreen(
         }
     }
 
+    // Memoize previous period — was previously recomputed on every recomposition
     val previousPeriodAmount by remember(transactions, startDate, endDate, selectedType) {
         derivedStateOf {
             calculatePreviousPeriod(transactions, startDate, endDate, selectedType)
         }
     }
 
-    val periodLabel = remember(startDate, endDate, selectedScope) {
+    val periodLabel by remember(startDate, endDate, selectedScope) {
         derivedStateOf {
             when (selectedScope) {
                 TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
                 TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
-                    endDate.format(
-                        DateTimeFormatter.ofPattern("dd MMM yyyy")
-                    )
+                    endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
                 }"
 
                 TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
                 TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
-                    endDate.format(
-                        DateTimeFormatter.ofPattern("dd MMM yyyy")
-                    )
+                    endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
                 }"
 
                 else -> ""
             }
         }
+    }
+
+    val allInPeriod by remember(transactions, startTs, endTs) {
+        derivedStateOf { transactions.filter { it.timestamp in startTs..endTs } }
     }
 
     Scaffold(containerColor = Color.Transparent) { _ ->
@@ -155,15 +150,11 @@ fun AnalyticsScreen(
                     PeriodSelectorCard(
                         hapticFeedback,
                         selectedScope,
-                        startDate,
-                        endDate,
-                        { selectedScope = it },
-                        {
-                            startDate = it; selectedScope = TimeScope.CUSTOM
-                        },
-                        {
-                            endDate = it; selectedScope = TimeScope.CUSTOM
-                        }
+                        startDate = startDate,
+                        endDate = endDate,
+                        onScopeChange = { selectedScope = it },
+                        onStartDateSelected = { startDate = it; selectedScope = TimeScope.CUSTOM },
+                        onEndDateSelected = { endDate = it; selectedScope = TimeScope.CUSTOM }
                     )
                 }
                 item {
@@ -172,28 +163,28 @@ fun AnalyticsScreen(
                 item {
                     TypeSelectorCard(
                         hapticFeedback,
-                        selectedType,
-                        { selectedType = it },
-                        transactions,
-                        startTs,
-                        endTs
+                        selectedType = selectedType,
+                        onTypeChange = { selectedType = it },
+                        transactions = transactions,
+                        startTs = startTs,
+                        endTs = endTs
                     )
                 }
                 item {
                     SummaryAmountHeader(
                         hapticFeedback,
-                        filteredTransactions.sumOf { it.amount },
-                        filteredTransactions.size,
-                        selectedType,
-                        periodLabel,
-                        previousPeriodAmount
+                        totalAmount = filteredTransactions.sumOf { it.amount },
+                        transactionCount = filteredTransactions.size,
+                        type = selectedType,
+                        periodLabel = periodLabel,
+                        previousPeriodAmount = previousPeriodAmount
                     )
                 }
                 if (filteredTransactions.isNotEmpty()) {
                     item {
                         GlassyTrendChart(
-                            filteredTransactions,
-                            selectedType
+                            transactions = filteredTransactions,
+                            type = selectedType
                         )
                     }
                 }
@@ -203,11 +194,56 @@ fun AnalyticsScreen(
                     )
                 }
 
+                // ── New insight cards ─────────────────────────────────────────
+                if (filteredTransactions.isNotEmpty()) {
+                    item {
+                        SpendingVelocityCard(
+                            filteredTransactions = filteredTransactions,
+                            startDate = startDate,
+                            endDate = endDate,
+                            type = selectedType
+                        )
+                    }
+                    item {
+                        TopMerchantsCard(
+                            filteredTransactions = filteredTransactions,
+                            type = selectedType
+                        )
+                    }
+                    item {
+                        LargestTransactionsCard(
+                            filteredTransactions = filteredTransactions,
+                            allCategories = allCategories,
+                            type = selectedType
+                        )
+                    }
+                    item {
+                        SpendingByDayOfWeekCard(
+                            filteredTransactions = filteredTransactions,
+                            type = selectedType
+                        )
+                    }
+                }
+
+                // Activity card uses all transactions in the period (income + expense)
+                // regardless of the currently selected type tab
+                if (allInPeriod.isNotEmpty()) {
+                    item {
+                        TransactionActivityCard(
+                            allTransactionsInPeriod = allInPeriod,
+                            startDate = startDate,
+                            endDate = endDate
+                        )
+                    }
+                    item {
+                        BalanceSparklineCard(allTransactionsInPeriod = allInPeriod)
+                    }
+                }
                 if (filteredTransactions.isEmpty()) {
                     item {
                         InsightsEmptyState(
-                            selectedType,
-                            periodLabel
+                            selectedType = selectedType,
+                            periodLabel = periodLabel
                         )
                     }
                 }
@@ -219,7 +255,7 @@ fun AnalyticsScreen(
 @Composable
 private fun InsightsEmptyState(
     selectedType: TransactionType,
-    periodLabel: State<String?>
+    periodLabel: String
 ) {
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(

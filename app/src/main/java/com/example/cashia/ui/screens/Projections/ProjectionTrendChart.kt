@@ -21,11 +21,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -51,11 +51,13 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun ProjectionTrendChart(
     projection: FinanceProjection,
-    horizonDays: Int,
+    period: ProjectionPeriod,
     currentBalance: Double,
     confidence: Int
 ) {
     if (projection.dailyTrend.isEmpty()) return
+
+    val horizonDays = period.daysRemaining()
 
     val primary = MaterialTheme.colorScheme.primary
     val tertiary = MaterialTheme.colorScheme.tertiary
@@ -75,18 +77,14 @@ fun ProjectionTrendChart(
     val maxVal = (allValues.maxOrNull() ?: 1.0) * (1 + bandFraction)
     val range = if (maxVal != minVal) maxVal - minVal else 1.0
 
-    // Touch state
     var crosshairIndex by remember { mutableIntStateOf(-1) }
     var crosshairX by remember { mutableFloatStateOf(-1f) }
-    // Store chart pixel bounds for gesture → index mapping
     var chartWidth by remember { mutableFloatStateOf(1f) }
 
-    // Callout data
     val calloutDate = projection.dailyTrend.getOrNull(crosshairIndex - 1)?.first
     val calloutBalance = if (crosshairIndex == 0) currentBalance
     else projection.dailyTrend.getOrNull(crosshairIndex - 1)?.second
 
-    // Nearest upcoming marker to crosshair
     val nearestUpcoming = remember(crosshairIndex, projection.upcomingMarkers) {
         if (crosshairIndex < 0) null
         else projection.upcomingMarkers.minByOrNull { (date, _, _) ->
@@ -108,28 +106,34 @@ fun ProjectionTrendChart(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Balance Trajectory",
+                    Text(
+                        "Balance Trajectory",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Projected path over next $horizonDays days",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "${period.label} · through ${period.endLabel()}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
                 Surface(
                     shape = RoundedCornerShape(50.dp),
                     color = primary.copy(alpha = 0.08f),
                     border = BorderStroke(0.5.dp, primary.copy(alpha = 0.2f))
                 ) {
-                    Text("${confidence}% conf.",
+                    Text(
+                        "${confidence}% conf.",
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = primary, fontWeight = FontWeight.SemiBold)
+                        color = primary, fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Callout box (fixed height to prevent layout jump) ─────────
+            // ── Callout box ───────────────────────────────────────────────
             if (crosshairIndex >= 0 && calloutBalance != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -159,34 +163,39 @@ fun ProjectionTrendChart(
                                 }
                             )
                         }
-                        // Show upcoming label if crosshair is near a marker
                         nearestUpcoming?.let { (_, _, title) ->
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = tertiary.copy(alpha = 0.12f)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(
+                                        horizontal = 10.dp,
+                                        vertical = 6.dp
+                                    ),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text("◆", fontSize = 9.sp, color = tertiary)
-                                    Text(title,
+                                    Text(
+                                        title,
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = tertiary,
-                                        maxLines = 1)
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
-                        // Change vs today
                         val change = calloutBalance - currentBalance
                         val changePct = if (currentBalance != 0.0)
                             change / currentBalance * 100 else 0.0
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("vs Today",
+                            Text(
+                                "vs Today",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
                             Text(
                                 "${if (change >= 0) "+" else ""}${
                                     PesaTimeConfiguration.formatCurrency(change)
@@ -200,7 +209,7 @@ fun ProjectionTrendChart(
                 }
                 Spacer(Modifier.height(12.dp))
             } else {
-                Spacer(Modifier.height(64.dp)) // placeholder height
+                Spacer(Modifier.height(64.dp))
             }
 
             // ── Canvas ────────────────────────────────────────────────────
@@ -221,7 +230,7 @@ fun ProjectionTrendChart(
                     }
                     .pointerInput(allValues.size) {
                         detectDragGestures(
-                            onDragEnd = { /* keep position */ },
+                            onDragEnd = {},
                             onDrag = { change, _ ->
                                 val n = allValues.size
                                 if (n < 2) return@detectDragGestures
@@ -256,7 +265,6 @@ fun ProjectionTrendChart(
                 val visLower = lowerPoints.take(drawCount)
 
                 if (vis.size >= 2) {
-                    // Confidence band
                     drawPath(Path().apply {
                         moveTo(visUpper.first().x, visUpper.first().y)
                         visUpper.drop(1).forEach { lineTo(it.x, it.y) }
@@ -264,30 +272,32 @@ fun ProjectionTrendChart(
                         close()
                     }, color = primary.copy(alpha = 0.06f))
 
-                    // Gradient fill
-                    drawPath(Path().apply {
-                        moveTo(vis.first().x, h)
-                        vis.forEach { lineTo(it.x, it.y) }
-                        lineTo(vis.last().x, h)
-                        close()
-                    }, brush = Brush.verticalGradient(
-                        listOf(primary.copy(alpha = 0.22f), Color.Transparent), 0f, h))
+                    drawPath(
+                        Path().apply {
+                            moveTo(vis.first().x, h)
+                            vis.forEach { lineTo(it.x, it.y) }
+                            lineTo(vis.last().x, h)
+                            close()
+                        }, brush = Brush.verticalGradient(
+                            listOf(primary.copy(alpha = 0.22f), Color.Transparent), 0f, h
+                        )
+                    )
 
-                    // Main line
                     drawPath(Path().apply {
                         moveTo(vis.first().x, vis.first().y)
                         vis.drop(1).forEach { lineTo(it.x, it.y) }
                     }, color = primary, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round))
                 }
 
-                // Zero baseline
                 if (minVal < 0) {
                     val zeroY = valueToY(0.0)
-                    drawLine(error.copy(alpha = 0.5f), Offset(0f, zeroY), Offset(w, zeroY),
-                        1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
+                    drawLine(
+                        error.copy(alpha = 0.5f), Offset(0f, zeroY), Offset(w, zeroY),
+                        1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+                    )
                 }
 
-                // Upcoming diamond markers
                 projection.upcomingMarkers.forEach { (date, balance, _) ->
                     val dayIndex = ChronoUnit.DAYS.between(LocalDate.now(), date).toInt()
                     if (dayIndex in 1..horizonDays) {
@@ -304,7 +314,6 @@ fun ProjectionTrendChart(
                     }
                 }
 
-                // Today + end dots
                 if (vis.isNotEmpty()) {
                     drawCircle(tertiary, 6.dp.toPx(), points.first())
                     drawCircle(Color.White, 3.dp.toPx(), points.first())
@@ -314,32 +323,28 @@ fun ProjectionTrendChart(
                     drawCircle(Color.White, 3.dp.toPx(), points.last())
                 }
 
-                // ── Crosshair ─────────────────────────────────────────────
                 if (crosshairX >= 0 && crosshairIndex in points.indices) {
                     val cx = crosshairX
                     val cy = points[crosshairIndex].y
-
-                    // Dashed vertical line
-                    val dashLen = 6.dp.toPx(); val gapLen = 4.dp.toPx()
+                    val dashLen = 6.dp.toPx()
+                    val gapLen = 4.dp.toPx()
                     var y = 0f
                     while (y < h) {
-                        drawLine(onSurface.copy(alpha = 0.2f),
+                        drawLine(
+                            onSurface.copy(alpha = 0.2f),
                             Offset(cx, y), Offset(cx, (y + dashLen).coerceAtMost(h)),
-                            1.5.dp.toPx())
+                            1.5.dp.toPx()
+                        )
                         y += dashLen + gapLen
                     }
-
-                    // Horizontal guide to Y axis
-                    drawLine(onSurface.copy(alpha = 0.08f),
+                    drawLine(
+                        onSurface.copy(alpha = 0.08f),
                         Offset(0f, cy), Offset(cx, cy), 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
-
-                    // Intercept dot
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
+                    )
                     drawCircle(surfaceColor, 8.dp.toPx(), Offset(cx, cy))
                     drawCircle(primary, 5.5.dp.toPx(), Offset(cx, cy))
                     drawCircle(Color.White, 2.5.dp.toPx(), Offset(cx, cy))
-
-                    // Floating balance label above dot
                     if (calloutBalance != null) {
                         val label = PesaTimeConfiguration.formatCurrency(calloutBalance)
                         val paint = android.graphics.Paint().apply {
@@ -355,23 +360,30 @@ fun ProjectionTrendChart(
                 }
             }
 
-            // ── X-axis labels ─────────────────────────────────────────────
+            // ── X-axis labels — "Today" → period end date ─────────────────
             Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Today", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(LocalDate.now().plusDays(horizonDays.toLong())
-                    .format(DateTimeFormatter.ofPattern("dd MMM")),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Today",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    period.endLabel(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
-            // ── Upcoming legend ───────────────────────────────────────────
             if (projection.upcomingMarkers.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Canvas(modifier = Modifier.size(10.dp)) {
                         val diamond = Path().apply {
                             moveTo(size.width / 2f, 0f)
@@ -381,9 +393,11 @@ fun ProjectionTrendChart(
                         }
                         drawPath(diamond, color = tertiary)
                     }
-                    Text("Scheduled payment",
+                    Text(
+                        "Scheduled payment",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
                 }
             }
         }

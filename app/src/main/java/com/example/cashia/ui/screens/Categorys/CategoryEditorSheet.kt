@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
@@ -33,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -59,11 +57,10 @@ fun CategoryEditorSheet(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val isKeyboardVisible = WindowInsets.isImeVisible
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val isEditing = uiState.editingCategory != null
     val isSystemEdit = uiState.editingSystemCategory != null
 
-    MaterialTheme.colorScheme
+    val colorScheme = MaterialTheme.colorScheme
     val previewEmoji = uiState.draftEmoji.ifBlank { "📦" }
 
     BackHandler(enabled = isKeyboardVisible) {
@@ -79,7 +76,7 @@ fun CategoryEditorSheet(
             .padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Title row
+        // ── Title row ─────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -98,6 +95,7 @@ fun CategoryEditorSheet(
             }
         }
 
+        // ── Name field (hidden for system edits) ──────────────────────────
         if (!isSystemEdit) {
             OutlinedTextField(
                 value = uiState.draftLabel,
@@ -106,12 +104,7 @@ fun CategoryEditorSheet(
                 placeholder = { Text("e.g. Family Expenses") },
                 isError = uiState.error != null,
                 supportingText = uiState.error?.let {
-                    {
-                        Text(
-                            it,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
+                    { Text(it, color = colorScheme.error) }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -123,71 +116,96 @@ fun CategoryEditorSheet(
             )
         }
 
-        // Keywords field
-        OutlinedTextField(
-            value = uiState.draftKeywords,
-            onValueChange = onKeywordsChange,
-            label = { Text("Keywords (comma-separated)") },
-            placeholder = { Text("e.g. wife, mum, family, home") },
-            supportingText = {
-                Text(
-                    "Transactions whose recipient contains any keyword will be auto-assigned here",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2,
-            maxLines = 4,
-            shape = RoundedCornerShape(14.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
-        )
-
-        // Emoji picker
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "ICON",
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                fontWeight = FontWeight.Bold
+        // ── Keywords field ────────────────────────────────────────────────
+        if (!isSystemEdit) {
+            OutlinedTextField(
+                value = uiState.draftKeywords,
+                onValueChange = onKeywordsChange,
+                label = { Text("Keywords (comma-separated)") },
+                placeholder = { Text("e.g. wife, mum, family, home") },
+                supportingText = {
+                    Text(
+                        "Transactions whose recipient matches any keyword get auto-assigned here",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 4,
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
             )
-            // Current emoji preview + custom input
+        } else {
+            // System categories only support keyword override
+            OutlinedTextField(
+                value = uiState.draftKeywords,
+                onValueChange = onKeywordsChange,
+                label = { Text("Additional Keywords") },
+                placeholder = { Text("Extra words to match this category") },
+                supportingText = {
+                    Text(
+                        "Add extra keywords to improve auto-detection for this built-in category",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 4,
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+            )
+        }
+
+        // ── Emoji picker ──────────────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Large preview badge
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(60.dp)
                         .background(
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                            RoundedCornerShape(16.dp)
+                            colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            RoundedCornerShape(18.dp)
                         )
                         .border(
                             1.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                            RoundedCornerShape(16.dp)
+                            colorScheme.primary.copy(alpha = 0.25f),
+                            RoundedCornerShape(18.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(previewEmoji, fontSize = 28.sp)
+                    Text(previewEmoji, fontSize = 30.sp)
                 }
-                OutlinedTextField(
-                    value = uiState.draftEmoji,
-                    onValueChange = { if (it.length <= 2) onEmojiChange(it) },
-                    label = { Text("Emoji") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "ICON",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Browse by category or search below",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
             }
+
+            // Full tabbed emoji picker
             EmojiPicker(
                 selected = uiState.draftEmoji,
                 onSelect = onEmojiChange
             )
         }
 
-        // Save button
+        // ── Save button ───────────────────────────────────────────────────
         Button(
             onClick = {
                 PesaActions.playSuccess(haptic)
@@ -201,7 +219,11 @@ fun CategoryEditorSheet(
             Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (isEditing) "Save Changes" else "Create Category",
+                when {
+                    isSystemEdit -> "Save Customisation"
+                    isEditing -> "Save Changes"
+                    else -> "Create Category"
+                },
                 fontWeight = FontWeight.Bold
             )
         }

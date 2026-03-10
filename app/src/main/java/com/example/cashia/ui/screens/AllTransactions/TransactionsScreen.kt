@@ -177,7 +177,8 @@ fun TransactionScreen(
                         categoryViewModel.updateTransactionCategory(tx.id, newId)
                         swipeCategoryTarget = null
                     },
-                    onDismiss = { swipeCategoryTarget = null }
+                    onDismiss = { swipeCategoryTarget = null },
+                    categoryViewModel = categoryViewModel
                 )
             }
 

@@ -59,21 +59,12 @@ fun PeriodSelectorCard(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "PERIOD",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    letterSpacing = 1.5.sp,
-                    brush = primaryGradient()
-                ),
-                fontWeight = FontWeight.Black,
-            )
-
+            SectionLabel("PERIOD")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
-                    TimeScope.DAY to "Day",
                     TimeScope.WEEK to "Week",
                     TimeScope.MONTH to "Month",
                     TimeScope.YEAR to "Year",

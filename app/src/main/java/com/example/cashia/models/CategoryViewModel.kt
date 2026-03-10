@@ -101,10 +101,10 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
         val existing = systemOverrides.value[category.name]
         uiState = CategoryManageState(
             showCreateSheet = true,
-            editingSystemCategory = category,          // ← new field (see below)
+            editingSystemCategory = category,
             draftLabel = existing?.label ?: category.label,
             draftEmoji = existing?.emoji ?: category.emoji,
-            draftKeywords = ""                         // system cats have no keywords
+            draftKeywords = ""
         )
     }
 
@@ -128,6 +128,24 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
 
     fun onKeywordsChange(value: String) {
         uiState = uiState.copy(draftKeywords = value)
+    }
+
+    fun saveInlineCategory(category: CustomCategory) {
+        viewModelScope.launch(Dispatchers.IO) {
+            categoryDao.upsertCategory(category)
+            if (category.keywords.isNotBlank()) {
+                reclassifyWithCustomCategory(category)
+            }
+        }
+    }
+
+    fun deleteResolvedCategory(cat: ResolvedCategory) {
+        if (!cat.isSystem) {
+            viewModelScope.launch(Dispatchers.IO) {
+                txDao.resetDeletedCategory(cat.id)
+                categoryDao.deleteCategoryById(cat.id)
+            }
+        }
     }
 
     fun saveCategory() {

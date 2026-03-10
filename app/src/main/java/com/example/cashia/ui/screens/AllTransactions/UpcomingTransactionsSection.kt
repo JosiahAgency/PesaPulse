@@ -228,7 +228,8 @@ fun UpcomingTransactionsSection(
                     onRecurrenceChange = upcomingViewModel::onRecurrenceChange,
                     onNotesChange = upcomingViewModel::onNotesChange,
                     onSave = upcomingViewModel::save,
-                    onDismiss = upcomingViewModel::closeSheet
+                    onDismiss = upcomingViewModel::closeSheet,
+                    categoryViewModel = categoryViewModel,
                 )
             }
         }
@@ -446,7 +447,8 @@ fun UpcomingEditorSheet(
     onRecurrenceChange: (RecurrenceType) -> Unit,
     onNotesChange: (String) -> Unit,
     onSave: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    categoryViewModel: CategoryViewModel,
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -679,7 +681,8 @@ fun UpcomingEditorSheet(
             allCategories = allCategories,
             currentCategoryId = uiState.draftCategory,
             onPick = { onCategoryChange(it); showCategoryPicker = false },
-            onDismiss = { showCategoryPicker = false }
+            onDismiss = { showCategoryPicker = false },
+            categoryViewModel = categoryViewModel,
         )
     }
 }

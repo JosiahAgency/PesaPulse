@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
-import com.example.cashia.ui.theme.primaryGradient
 import kotlin.math.roundToInt
 
 
@@ -42,7 +40,7 @@ fun SummaryAmountHeader(
     totalAmount: Double,
     transactionCount: Int,
     type: TransactionType,
-    periodLabel: State<String?>,
+    periodLabel: String?,
     previousPeriodAmount: Double
 ) {
     val color = if (type == TransactionType.INCOME)
@@ -61,15 +59,7 @@ fun SummaryAmountHeader(
                 .padding(24.dp)
                 .clickable { PesaActions.playClick(hapticFeedback) }
         ) {
-            // Period label at the top — answers "this data is for WHAT period?"
-            Text(
-                (periodLabel.value ?: "").toUpperCase(),
-                style = MaterialTheme.typography.labelLarge.copy(
-                    letterSpacing = 1.5.sp,
-                    brush = primaryGradient()
-                ),
-                fontWeight = FontWeight.Black,
-            )
+            SectionLabel((periodLabel ?: "").toUpperCase())
             Spacer(Modifier.height(8.dp))
 
             Row(

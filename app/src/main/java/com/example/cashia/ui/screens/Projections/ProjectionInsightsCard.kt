@@ -26,10 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,44 +42,61 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.ui.screens.Analytics.GlassySurface
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 
 @Composable
 fun ProjectionInsightsCard(
     projection: FinanceProjection,
     transactionCount: Int,
-    horizonDays: Int,
+    period: ProjectionPeriod,           // ← shared period from screen
+    selectedPeriodIndex: Int,           // ← for chip highlight
+    onPeriodChange: (Int) -> Unit,      // ← controls the screen-level period
     confidence: Int,
     allTransactions: List<MpesaTransactions>,
     allCategories: List<ResolvedCategory>
 ) {
     val colorScheme = MaterialTheme.colorScheme
-
-    val periods = listOf("Week", "Month", "Year")
-    var selectedPeriod by remember { mutableIntStateOf(1) }
     val haptic = LocalHapticFeedback.current
 
-    val (periodIncome, periodExpense) = remember(allTransactions, selectedPeriod) {
-        val cutoff = when (selectedPeriod) {
-            0 -> LocalDate.now().minusWeeks(1)
-            1 -> LocalDate.now().minusMonths(1)
-            else -> LocalDate.now().minusYears(1)
+    // ── Period cutoff — derived from shared period ────────────────────────────
+    val periodCutoff = remember(selectedPeriodIndex) {
+        when (ProjectionPeriod.entries[selectedPeriodIndex]) {
+            ProjectionPeriod.THIS_WEEK -> LocalDate.now().with(java.time.DayOfWeek.MONDAY)
+            ProjectionPeriod.THIS_MONTH -> LocalDate.now().withDayOfMonth(1)
+            ProjectionPeriod.THIS_QUARTER -> {
+                val month = LocalDate.now().monthValue
+                val qStartMonth = ((month - 1) / 3) * 3 + 1
+                LocalDate.now().withMonth(qStartMonth).withDayOfMonth(1)
+            }
+
+            ProjectionPeriod.THIS_YEAR -> LocalDate.now().withDayOfYear(1)
         }
-        val filtered = allTransactions.filter {
-            runCatching { LocalDate.parse(it.date) >= cutoff }.getOrDefault(false)
+    }
+
+    val periodTransactions = remember(allTransactions, selectedPeriodIndex) {
+        allTransactions.filter {
+            runCatching { LocalDate.parse(it.date) >= periodCutoff }.getOrDefault(false)
         }
-        val inc = filtered.filter { it.type == "income" }.sumOf { it.amount }
-        val exp = filtered.filter { it.type == "expense" }.sumOf { it.amount }
-        inc to exp
+    }
+
+    val periodIncome = remember(periodTransactions) {
+        periodTransactions.filter { it.type == "income" }.sumOf { it.amount }
+    }
+    val periodExpense = remember(periodTransactions) {
+        periodTransactions.filter { it.type == "expense" }.sumOf { it.amount }
     }
     val savingsRate = if (periodIncome > 0)
         ((periodIncome - periodExpense) / periodIncome * 100) else 0.0
 
-    val dailyAvgSpend = if (horizonDays > 0)
-        projection.predictedExpenses / horizonDays else 0.0
-    val dailyAvgIncome = if (horizonDays > 0)
-        projection.predictedIncome / horizonDays else 0.0
+    // Daily averages use actual days elapsed in this period (not horizon days)
+    val daysElapsed = remember(selectedPeriodIndex) {
+        ChronoUnit.DAYS.between(periodCutoff, LocalDate.now()).toInt().coerceAtLeast(1)
+    }
+    val dailyAvgSpend = periodExpense / daysElapsed
+    val dailyAvgIncome = periodIncome / daysElapsed
 
+    // Monthly burn rate — rolling average across all available months
     val monthlyBurnRate = remember(allTransactions) {
         val byMonth = allTransactions
             .groupBy {
@@ -98,20 +112,15 @@ fun ProjectionInsightsCard(
         }.average()
     }
 
-    remember(projection, allCategories) {
-        null as String?
-    }
-    val topCategoryPair = remember(allTransactions, allCategories) {
-        val catTotals = allTransactions
+    // Top category within the selected period
+    val topCategoryPair = remember(periodTransactions, allCategories) {
+        val catTotals = periodTransactions
             .filter { it.type == "expense" }
             .groupBy { it.category }
             .mapValues { it.value.sumOf { tx -> tx.amount } }
             .entries.maxByOrNull { it.value }
         val cat = catTotals?.let { allCategories.find { c -> c.id == it.key } }
-        val emoji = cat?.emoji ?: "📦"
-        val label = cat?.label ?: catTotals?.key ?: "—"
-        val amount = catTotals?.value ?: 0.0
-        Triple(emoji, label, amount)
+        Triple(cat?.emoji ?: "📦", cat?.label ?: catTotals?.key ?: "—", catTotals?.value ?: 0.0)
     }
 
     val daysUntilZero = remember(projection) {
@@ -121,12 +130,53 @@ fun ProjectionInsightsCard(
 
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                "Projection Insights",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
+            // ── Header + period chips (shared with the rest of the screen) ────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Projection Insights",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colorScheme.onSurfaceVariant
+                )
+                // Period chips — same selection drives the whole screen
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ProjectionPeriod.entries.forEachIndexed { i, p ->
+                        val shortLabel = when (p) {
+                            ProjectionPeriod.THIS_WEEK -> "Wk"
+                            ProjectionPeriod.THIS_MONTH -> "Mo"
+                            ProjectionPeriod.THIS_QUARTER -> "Qtr"
+                            ProjectionPeriod.THIS_YEAR -> "Yr"
+                        }
+                        Surface(
+                            modifier = Modifier.clickable {
+                                PesaActions.playClick(haptic)
+                                onPeriodChange(i)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selectedPeriodIndex == i) colorScheme.primary
+                            else colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                shortLabel,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selectedPeriodIndex == i) FontWeight.Bold
+                                else FontWeight.Normal,
+                                color = if (selectedPeriodIndex == i) Color.White
+                                else colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
+
+            // Context note
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = colorScheme.primary.copy(alpha = 0.05f)
@@ -134,18 +184,19 @@ fun ProjectionInsightsCard(
                 Text(
                     "Projected daily net: ${if (projection.projectedDailyNet >= 0) "+" else ""}${
                         PesaTimeConfiguration.formatCurrency(projection.projectedDailyNet)
-                    }. Based on ${transactionCount} transactions.",
+                    }. Based on $transactionCount transactions · ${period.label}.",
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                     modifier = Modifier.padding(10.dp),
                     lineHeight = 16.sp
                 )
             }
+
             if (projection.dataQualityNote.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.06f),
+                    color = colorScheme.error.copy(alpha = 0.06f),
                     border = BorderStroke(0.5.dp, Color.Red.copy(alpha = 0.2f))
                 ) {
                     Row(
@@ -154,17 +205,16 @@ fun ProjectionInsightsCard(
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
-                            Icons.Default.Warning,
-                            null,
+                            Icons.Default.Warning, null,
                             modifier = Modifier
                                 .size(14.dp)
                                 .padding(top = 1.dp),
-                            tint = MaterialTheme.colorScheme.error
+                            tint = colorScheme.error
                         )
                         Text(
                             projection.dataQualityNote,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            color = colorScheme.error.copy(alpha = 0.8f),
                             lineHeight = 16.sp
                         )
                     }
@@ -172,8 +222,10 @@ fun ProjectionInsightsCard(
             }
 
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+            HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
             Spacer(Modifier.height(12.dp))
+
+            // ── 1. Savings Rate ───────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -204,36 +256,18 @@ fun ProjectionInsightsCard(
                                 "%.1f",
                                 savingsRate
                             )
-                        }% of ${periods[selectedPeriod].lowercase()} income saved",
+                        }% of ${period.label.lowercase()} income saved",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (savingsRate < 0) colorScheme.error
                         else colorScheme.onSurfaceVariant
                     )
                 }
-                // Period chips
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    periods.forEachIndexed { i, label ->
-                        Surface(
-                            modifier = Modifier.clickable {
-                                PesaActions.playClick(haptic)
-                                selectedPeriod = i
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selectedPeriod == i) colorScheme.primary
-                            else colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                label,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selectedPeriod == i) FontWeight.Bold
-                                else FontWeight.Normal,
-                                color = if (selectedPeriod == i) Color.White
-                                else colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
+                Text(
+                    "${if (savingsRate >= 0) "+" else ""}${String.format("%.1f", savingsRate)}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Black,
+                    color = if (savingsRate >= 0) colorScheme.tertiary else colorScheme.error
+                )
             }
 
             HorizontalDivider(
@@ -241,7 +275,7 @@ fun ProjectionInsightsCard(
                 color = colorScheme.onSurface.copy(alpha = 0.06f)
             )
 
-            // ── 2 & 3. Daily Avg row — Income + Spend side by side ────────
+            // ── 2 & 3. Daily Avg Income + Spend ──────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -250,6 +284,7 @@ fun ProjectionInsightsCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.ArrowDownward,
                     label = "Daily Avg Income",
+                    sublabel = period.label,
                     value = PesaTimeConfiguration.formatCurrency(dailyAvgIncome),
                     color = colorScheme.tertiary
                 )
@@ -257,6 +292,7 @@ fun ProjectionInsightsCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.ArrowUpward,
                     label = "Daily Avg Spend",
+                    sublabel = period.label,
                     value = PesaTimeConfiguration.formatCurrency(dailyAvgSpend),
                     color = colorScheme.error
                 )
@@ -267,7 +303,7 @@ fun ProjectionInsightsCard(
                 color = colorScheme.onSurface.copy(alpha = 0.06f)
             )
 
-            // ── 4. Monthly burn rate ──────────────────────────────────────
+            // ── 4. Monthly Burn Rate (historical average, always all-time) ───
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = CircleShape,
@@ -290,7 +326,7 @@ fun ProjectionInsightsCard(
                         color = colorScheme.onSurface
                     )
                     Text(
-                        "Average monthly expenses from history",
+                        "Average monthly expenses · all history",
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.onSurfaceVariant
                     )
@@ -308,7 +344,7 @@ fun ProjectionInsightsCard(
                 color = colorScheme.onSurface.copy(alpha = 0.06f)
             )
 
-            // ── 5. Most expensive category ────────────────────────────────
+            // ── 5. Top Spend Category (within selected period) ───────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -328,7 +364,7 @@ fun ProjectionInsightsCard(
                         color = colorScheme.onSurface
                     )
                     Text(
-                        topCategoryPair.second,
+                        "${topCategoryPair.second} · ${period.label}",
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.onSurfaceVariant
                     )
@@ -341,6 +377,7 @@ fun ProjectionInsightsCard(
                 )
             }
 
+            // ── Zero balance warning ──────────────────────────────────────────
             if (projection.predictedBalance < 0 || daysUntilZero != null) {
                 Spacer(Modifier.height(12.dp))
                 Surface(
@@ -379,6 +416,7 @@ private fun InsightStatTile(
     modifier: Modifier = Modifier,
     icon: ImageVector,
     label: String,
+    sublabel: String,
     value: String,
     color: Color
 ) {
@@ -389,13 +427,19 @@ private fun InsightStatTile(
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(icon, null, modifier = Modifier.size(16.dp), tint = color.copy(alpha = 0.7f))
             Text(
                 label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Text(
+                sublabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = color.copy(alpha = 0.5f),
+                fontSize = 10.sp
             )
             Text(
                 value,

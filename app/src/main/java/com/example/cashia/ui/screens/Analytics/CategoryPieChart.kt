@@ -52,7 +52,6 @@ import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ResolvedCategory
-import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -127,15 +126,7 @@ fun CategoryPieChart(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(
-                text = "CATEGORY BREAKDOWN",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    letterSpacing = 1.5.sp,
-                    brush = primaryGradient()
-                ),
-                fontWeight = FontWeight.Black,
-            )
-
+            SectionLabel("CATEGORY BREAKDOWN")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
