@@ -25,17 +25,15 @@ enum class TransactionCategory(val label: String, val emoji: String, val isSyste
 
 }
 
-// ─── User-created custom category (stored in DB) ───────────────────────────────
 @Entity(tableName = "CustomCategories")
 data class CustomCategory(
-    @PrimaryKey val id: String,           // e.g. "custom_groceries"
+    @PrimaryKey val id: String,
     val label: String,
     val emoji: String,
-    val keywords: String,                 // comma-separated keywords to match
+    val keywords: String,
     val createdAt: Long = System.currentTimeMillis()
 )
 
-// ─── Resolved category (either system enum or custom) ─────────────────────────
 data class ResolvedCategory(
     val id: String,          // TransactionCategory.name OR CustomCategory.id
     val label: String,
@@ -257,8 +255,6 @@ fun guessCategory(
 
     return TransactionCategory.OTHER.name
 }
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 private fun String.containsAny(vararg keywords: String): Boolean =
     keywords.any { this.contains(it, ignoreCase = true) }

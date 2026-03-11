@@ -48,7 +48,6 @@ import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-// ── Data classes hoisted to file scope — not re-declared inside the composable ──
 private data class DayGroup(
     val date: LocalDate,
     val transactions: List<MpesaTransactions>,

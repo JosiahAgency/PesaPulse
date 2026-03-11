@@ -80,6 +80,7 @@ import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DailyDigestWorker
+import com.example.cashia.models.NotificationHelper
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -104,11 +105,10 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-
         handlePermissions()
-
-        DailyDigestWorker.schedule(this)
         PesaTimeConfiguration.initialize(this)
+        NotificationHelper.createNotificationChannel(this)
+        DailyDigestWorker.schedule(this)
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
             isUnlocked.value = true
@@ -150,12 +150,9 @@ class MainActivity : FragmentActivity() {
         BiometricAuthenticator(this).promptAuthenticator(
             activity = this,
             onSuccess = { isUnlocked.value = true },
-            onError = { error ->
-                // Handle error (e.g., show a "Retry" button)
-            }
+            onError = { /* Show retry UI if needed */ }
         )
     }
-
 }
 
 @Composable
@@ -215,6 +212,7 @@ fun PesaPulseApp() {
     }
 
     val haptic = LocalHapticFeedback.current
+
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -222,9 +220,10 @@ fun PesaPulseApp() {
         factory = CategoryViewModel.provideFactory(context)
     )
     val upcomingViewModel: UpcomingViewModel = viewModel(
-        factory = UpcomingViewModel.provideFactory(LocalContext.current)
+        factory = UpcomingViewModel.provideFactory(context)
     )
     val settingsViewModel: SettingsViewModel = viewModel()
+
     val isDark by settingsViewModel.darkTheme.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -275,16 +274,17 @@ fun PesaPulseApp() {
                                         Text(
                                             text = subtitle,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.6f
-                                            )
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                .copy(alpha = 0.6f)
                                         )
                                     }
                                 }
                             }
                         },
                         windowInsets = WindowInsets.statusBars,
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        ),
                         actions = {
                             IconButton(onClick = {
                                 PesaActions.playClick(haptic)
@@ -307,7 +307,9 @@ fun PesaPulseApp() {
                 }
             },
             bottomBar = {
-                if (currentRoute != AppDestinations.Settings.route) {
+                if (currentRoute != AppDestinations.Settings.route &&
+                    currentRoute != AppDestinations.Categories.route
+                ) {
                     GlassNavigationBar(haptic, navController, navItems)
                 }
             }
@@ -318,16 +320,10 @@ fun PesaPulseApp() {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(AppDestinations.Dashboard.route) {
-                    DashboardScreen(
-                        viewModel = sharedViewModel,
-                        categoryViewModel
-                    )
+                    DashboardScreen(viewModel = sharedViewModel, categoryViewModel)
                 }
                 composable(AppDestinations.Transactions.route) {
-                    TransactionScreen(
-                        viewModel = sharedViewModel,
-                        categoryViewModel,
-                    )
+                    TransactionScreen(viewModel = sharedViewModel, categoryViewModel)
                 }
                 composable(AppDestinations.Calendar.route) {
                     CalendarScreen(
@@ -355,9 +351,7 @@ fun PesaPulseApp() {
                     )
                 }
                 composable(AppDestinations.Categories.route) {
-                    CategoryManagementScreen(
-                        categoryViewModel
-                    )
+                    CategoryManagementScreen(categoryViewModel)
                 }
             }
         }
@@ -376,14 +370,16 @@ fun BackgroundGlow(color: Color) {
                 colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.2f, size.height * 0.15f),
                 radius = size.width * 0.8f
-            ), alpha = 0.4f
+            ),
+            alpha = 0.4f
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(color, Color.Transparent),
                 center = Offset(size.width * 0.8f, size.height * 0.9f),
                 radius = size.width * 0.6f
-            ), alpha = 0.3f
+            ),
+            alpha = 0.3f
         )
     }
 }
@@ -397,6 +393,7 @@ fun GlassNavigationBar(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val colorScheme = MaterialTheme.colorScheme
+    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
 
     Surface(
         modifier = Modifier
@@ -405,9 +402,7 @@ fun GlassNavigationBar(
             .fillMaxWidth()
             .height(72.dp),
         shape = RoundedCornerShape(28.dp),
-        color = colorScheme.surface.copy(
-            alpha = if (colorScheme.background.luminance() > 0.5f) 0.92f else 0.78f
-        ),
+        color = colorScheme.surface.copy(alpha = glassAlpha),
         border = BorderStroke(0.6.dp, colorScheme.onSurface.copy(alpha = 0.12f)),
         tonalElevation = 0.dp
     ) {
@@ -418,6 +413,14 @@ fun GlassNavigationBar(
         ) {
             paths.forEach { screen ->
                 val selected = currentRoute == screen.route
+                val iconTint = if (selected)
+                    colorScheme.primary
+                else
+                    colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+
+                val textColor = if (selected) Color.Unspecified
+                else colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -452,15 +455,11 @@ fun GlassNavigationBar(
                         } else {
                             Spacer(Modifier.height(7.dp))
                         }
-
                         Icon(
                             imageVector = screen.icon,
                             contentDescription = screen.label,
                             modifier = Modifier.size(22.dp),
-                            tint = if (selected)
-                                colorScheme.primary
-                            else
-                                colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            tint = iconTint,
                         )
                         Spacer(modifier = Modifier.height(3.dp))
                         Text(
@@ -468,8 +467,7 @@ fun GlassNavigationBar(
                             fontSize = 10.sp,
                             maxLines = 1,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) Color.Unspecified
-                            else colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            color = textColor,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 brush = if (selected) primaryGradient() else null,
                             )

@@ -3,6 +3,7 @@ package com.example.cashia.Utility
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -11,7 +12,6 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.example.cashia.ui.screens.AllTransactions.formatAmount
 import java.time.DayOfWeek
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -52,12 +52,14 @@ object PesaTimeConfiguration {
     var isDarkTheme by mutableStateOf(true)
     const val CURRENCY = "KES"
     var isBiometricEnabled by mutableStateOf(false)
+    var isDailyDigestEnabled by mutableStateOf(false)
+    var reminderHour by mutableIntStateOf(8)
+    var reminderMinute by mutableIntStateOf(0)
     private const val PREFS_NAME = "pesa_prefs"
 
     fun formatCurrency(amount: Double): String {
         return "$CURRENCY ${formatAmount(amount)}"
     }
-
 
     fun getTimeFormatter(): DateTimeFormatter {
         val pattern = if (use24HrsFormat) "HH:mm" else "h:mm a"
@@ -75,6 +77,9 @@ object PesaTimeConfiguration {
         isDarkTheme = prefs.getBoolean("dark_theme", true)
         val dayName = prefs.getString("start_day", DayOfWeek.SUNDAY.name)
         firstDayOfWeek = DayOfWeek.valueOf(dayName ?: DayOfWeek.SUNDAY.name)
+        isDailyDigestEnabled = prefs.getBoolean("daily_digest_on", false)
+        reminderHour = prefs.getInt("reminder_hour", 8)
+        reminderMinute = prefs.getInt("reminder_minute", 0)
     }
 
     // Individual save methods to be called by ViewModel
@@ -100,6 +105,22 @@ object PesaTimeConfiguration {
         firstDayOfWeek = day
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString("start_day", day.name).apply()
+    }
+
+    fun saveDailyDigest(context: Context, enabled: Boolean) {
+        isDailyDigestEnabled = enabled
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean("daily_digest_on", enabled).apply()
+    }
+
+    fun saveReminderTime(context: Context, hour: Int, minute: Int) {
+        reminderHour = hour
+        reminderMinute = minute
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("reminder_hour", hour)
+            .putInt("reminder_minute", minute)
+            .apply()
     }
 }
 

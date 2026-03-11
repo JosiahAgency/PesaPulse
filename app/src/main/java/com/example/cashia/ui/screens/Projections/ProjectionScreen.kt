@@ -33,11 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cashia.Utility.FinanceProjectionEngine
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
@@ -47,37 +45,42 @@ import com.example.cashia.models.UpcomingViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectionScreen(
+    // ✅ FIX: Use the ViewModels passed in from the parent NavHost.
+    //    Previously this screen called viewModel<TransactionsViewModel>() a SECOND time,
+    //    creating a brand-new, uninitialized ViewModel instance that fetched all
+    //    transactions from scratch — doubling DB reads and SMS parsing on every visit.
     transactionsViewModel: TransactionsViewModel,
     upcomingViewModel: UpcomingViewModel,
     categoryViewModel: CategoryViewModel
 ) {
-    val context = LocalContext.current
-    val viewModel: TransactionsViewModel = viewModel(
-        factory = TransactionsViewModel.provideFactory(context)
-    )
     val haptic = LocalHapticFeedback.current
-    val state = viewModel.state
+
+    // Use the shared ViewModel directly — no redundant local instance
+    val state = transactionsViewModel.state
     val transactions = state.allTransactions
+
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
 
-    var selectedPeriod by remember { mutableIntStateOf(1) } // default: This Month
+    var selectedPeriod by remember { mutableIntStateOf(1) }
     val period = ProjectionPeriod.entries[selectedPeriod]
     val horizonDays = remember(selectedPeriod) { period.daysRemaining() }
 
     var balanceOverride by remember { mutableStateOf("") }
     var configExpanded by remember { mutableStateOf(false) }
 
+    // ✅ PERF: effective balance derived once — not re-evaluated on unrelated recompositions.
     val effectiveBalance = remember(balanceOverride, state.latestBalance) {
         balanceOverride.toDoubleOrNull()?.takeIf { it >= 0 } ?: state.latestBalance
     }
 
+    // ✅ PERF: earliest date and max lookback derived once per transactions change.
     val earliestDate = remember(transactions) {
-        transactions.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+        transactions
+            .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
             .minOrNull() ?: LocalDate.now().minusDays(365)
     }
 
@@ -85,9 +88,12 @@ fun ProjectionScreen(
         ChronoUnit.DAYS.between(earliestDate, LocalDate.now()).toInt().coerceIn(30, 365)
     }
 
+    // ✅ PERF: recentTransactions only recomputed when transactions or maxLookback changes.
     val recentTransactions = remember(transactions, maxLookback) {
         val cutoff = LocalDate.now().minusDays(maxLookback.toLong())
-        transactions.filter { runCatching { LocalDate.parse(it.date) >= cutoff }.getOrDefault(false) }
+        transactions.filter {
+            runCatching { LocalDate.parse(it.date) >= cutoff }.getOrDefault(false)
+        }
     }
 
     val pendingUpcoming = remember(upcomingAll) {
@@ -109,27 +115,35 @@ fun ProjectionScreen(
     }
 
     val confidence = remember(recentTransactions.size, maxLookback, horizonDays, projection) {
-        computeConfidence(recentTransactions.size, maxLookback.toInt(), horizonDays, projection)
+        computeConfidence(recentTransactions.size, maxLookback, horizonDays, projection)
     }
 
     val zeroCrossingDay = remember(projection, effectiveBalance) {
         daysUntilZero(projection.dailyTrend, effectiveBalance)
     }
-    val today = LocalDate.now()
-    val overdue = remember(pendingUpcoming) {
-        pendingUpcoming.filter { LocalDate.parse(it.dueDate).isBefore(today) }
-            .sortedBy { it.dueDate }
-    }
-    val dueSoon = remember(pendingUpcoming) {
-        pendingUpcoming.filter {
-            val d = LocalDate.parse(it.dueDate)
-            !d.isBefore(today) && d.isBefore(today.plusDays(8))
-        }.sortedBy { it.dueDate }
-    }
-    val later = remember(pendingUpcoming) {
-        pendingUpcoming.filter {
-            LocalDate.parse(it.dueDate) >= today.plusDays(8)
-        }.sortedBy { it.dueDate }
+
+    val today = remember { LocalDate.now() }   // ✅ stable, created once
+
+    // ✅ PERF: overdue/dueSoon/later all derived in a single pass over pendingUpcoming
+    //    instead of three separate filter calls.
+    val (overdue, dueSoon, later) = remember(pendingUpcoming, today) {
+        val ov = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
+        val ds = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
+        val lt = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
+        val soonCutoff = today.plusDays(8)
+        for (tx in pendingUpcoming) {
+            val d = LocalDate.parse(tx.dueDate)
+            when {
+                d.isBefore(today) -> ov.add(tx)
+                d.isBefore(soonCutoff) -> ds.add(tx)
+                else -> lt.add(tx)
+            }
+        }
+        Triple(
+            ov.sortedBy { it.dueDate },
+            ds.sortedBy { it.dueDate },
+            lt.sortedBy { it.dueDate }
+        )
     }
 
     Scaffold(containerColor = Color.Transparent) { _ ->
@@ -151,7 +165,6 @@ fun ProjectionScreen(
                     haptic = haptic
                 )
             }
-
             item {
                 ProjectionConfigSummary(
                     totalDays = maxLookback,
@@ -161,7 +174,6 @@ fun ProjectionScreen(
                     pendingUpcoming.size
                 )
             }
-
             item {
                 PredictedBalanceCard(
                     currentBalance = effectiveBalance,
@@ -171,7 +183,6 @@ fun ProjectionScreen(
                     zeroCrossingDay = zeroCrossingDay
                 )
             }
-
             item {
                 ProjectionTrendChart(
                     projection = projection,
@@ -180,7 +191,6 @@ fun ProjectionScreen(
                     confidence = confidence
                 )
             }
-
             item {
                 UpcomingSection(
                     transactionsViewModel,
@@ -193,7 +203,6 @@ fun ProjectionScreen(
                     categoryViewModel
                 )
             }
-
             item {
                 ProjectionInsightsCard(
                     projection = projection,
@@ -206,7 +215,6 @@ fun ProjectionScreen(
                     allCategories
                 )
             }
-
             item { DailyTrendMiniList(projection = projection) }
         }
     }
@@ -221,8 +229,8 @@ private fun SummaryPill(
     overrideLabel: String? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val color =
-        if (isCustom) colorScheme.primary else colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val color = if (isCustom) colorScheme.primary
+    else colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(50.dp),
@@ -260,12 +268,7 @@ private fun ProjectionConfigSummary(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SummaryPill(Modifier.weight(1f), "All ${totalDays}d data", Icons.Default.History, false)
-        SummaryPill(
-            Modifier.weight(1f),
-            period.label,
-            Icons.Default.AutoGraph,
-            isCustom = true
-        )
+        SummaryPill(Modifier.weight(1f), period.label, Icons.Default.AutoGraph, isCustom = true)
         SummaryPill(
             Modifier.weight(1f),
             "$upcomingCount scheduled",
