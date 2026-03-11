@@ -36,10 +36,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.ui.theme.primaryGradient
 
 
 @Composable
@@ -56,20 +58,28 @@ fun GlassyTrendChart(
     var selectedKey by remember { mutableStateOf<String?>(null) }
 
     val groupedData = remember(transactions) {
-        val daily = transactions.groupBy { it.date }
-            .mapValues { it.value.sumOf { tx -> tx.amount } }
+        if (transactions.isEmpty()) return@remember sortedMapOf<String, Double>()
 
-        if (daily.size > 31) {
-            transactions.groupBy { it.date.substring(0, 7) }
+        val useMonthly = transactions.map { it.date }.distinct().size > 31
+
+        if (useMonthly) {
+            transactions
+                .groupBy { it.date.take(7) } // "yyyy-MM"
                 .mapValues { it.value.sumOf { tx -> tx.amount } }
                 .toSortedMap()
         } else {
-            daily.toSortedMap()
+            transactions
+                .groupBy { it.date }
+                .mapValues { it.value.sumOf { tx -> tx.amount } }
+                .toSortedMap()
         }
     }
+    if (groupedData.isEmpty()) return
 
     val keysList = remember(groupedData) { groupedData.keys.toList() }
-    val maxAmount = remember(groupedData) { (groupedData.values.maxOrNull() ?: 1.0).toFloat() }
+    val maxAmount = remember(groupedData) {
+        (groupedData.values.maxOrNull() ?: 1.0).toFloat().coerceAtLeast(1f)
+    }
     val yAxisLabels = listOf(maxAmount, maxAmount / 2, 0f)
 
     GlassySurface {
@@ -80,12 +90,7 @@ fun GlassyTrendChart(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        "Trend Analysis",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    SectionLabel("TREND ANALYSIS")
                     Text(
                         "Tap bars for details",
                         style = MaterialTheme.typography.labelSmall,
@@ -125,7 +130,6 @@ fun GlassyTrendChart(
                     }
                 }
 
-                // Chart area
                 BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)

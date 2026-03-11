@@ -1,35 +1,43 @@
 package com.example.cashia.models
 
 import android.app.Application
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.cashia.data.SettingsDataStore
+import com.example.cashia.Utility.PesaTimeConfiguration
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 
-class SettingsViewModel (app: Application): AndroidViewModel(app){
-    private val store = SettingsDataStore(app)
+class SettingsViewModel(app: Application) : AndroidViewModel(app) {
+    private val context = getApplication<Application>().applicationContext
 
-    val darkTheme = store.darkThemeFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val darkTheme = snapshotFlow { PesaTimeConfiguration.isDarkTheme }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isDarkTheme)
+    val use24Hour = snapshotFlow { PesaTimeConfiguration.use24HrsFormat }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.use24HrsFormat)
+    val firstDayOfWeek = snapshotFlow { PesaTimeConfiguration.firstDayOfWeek }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.firstDayOfWeek)
 
-    val use24Hour = store.use24HourFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val isBiometricEnabled = snapshotFlow { PesaTimeConfiguration.isBiometricEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isBiometricEnabled)
 
-    val firstDayOfWeek = store.firstDayOfWeekFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DayOfWeek.SUNDAY)
-
-    fun setDarkTheme(value: Boolean) {
-        viewModelScope.launch { store.setDarkTheme(value) }
+    fun setDarkTheme(enabled: Boolean) {
+        PesaTimeConfiguration.saveTheme(context, enabled)
     }
 
-    fun setUse24Hour(value: Boolean) {
-        viewModelScope.launch { store.setUse24Hour(value) }
+    fun setUse24Hour(enabled: Boolean) {
+        PesaTimeConfiguration.saveTimeFormat(context, enabled)
     }
 
     fun setFirstDayOfWeek(day: DayOfWeek) {
-        viewModelScope.launch { store.setFirstDayOfWeek(day) }
+        PesaTimeConfiguration.saveFirstDayOfWeek(context, day)
+    }
+
+    fun setBiometric(enabled: Boolean) {
+        viewModelScope.launch {
+            PesaTimeConfiguration.saveBiometric(context, enabled)
+        }
     }
 }

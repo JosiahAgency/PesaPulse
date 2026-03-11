@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 enum class TimeScope {
-    DAY, WEEK, MONTH, CUSTOM
+    DAY, WEEK, MONTH, CUSTOM, YEAR
 }
 
 enum class TransactionType {
@@ -43,23 +43,16 @@ object PesaActions {
         playSuccess(haptic)
         Toast.makeText(context, "$label Copied", Toast.LENGTH_SHORT).show()
     }
-
-    fun getGreeting(): String {
-        return when (LocalTime.now().hour) {
-            in 0..11 -> "Good Morning"
-            in 12..16 -> "Good Afternoon"
-            else -> "Good Evening"
-        }
-    }
 }
 
 object PesaTimeConfiguration {
-    var use24HrsFormat: Boolean = false
+    var use24HrsFormat by mutableStateOf(false)
     var datePattern: String = "dd MMM yyyy"
-
     var firstDayOfWeek by mutableStateOf(DayOfWeek.SUNDAY)
-
+    var isDarkTheme by mutableStateOf(true)
     const val CURRENCY = "KES"
+    var isBiometricEnabled by mutableStateOf(false)
+    private const val PREFS_NAME = "pesa_prefs"
 
     fun formatCurrency(amount: Double): String {
         return "$CURRENCY ${formatAmount(amount)}"
@@ -74,4 +67,39 @@ object PesaTimeConfiguration {
     fun getDateFormatter(): DateTimeFormatter {
         return DateTimeFormatter.ofPattern(datePattern, Locale.US)
     }
+
+    fun initialize(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        use24HrsFormat = prefs.getBoolean("use_24h", false)
+        isBiometricEnabled = prefs.getBoolean("biometric_on", false)
+        isDarkTheme = prefs.getBoolean("dark_theme", true)
+        val dayName = prefs.getString("start_day", DayOfWeek.SUNDAY.name)
+        firstDayOfWeek = DayOfWeek.valueOf(dayName ?: DayOfWeek.SUNDAY.name)
+    }
+
+    // Individual save methods to be called by ViewModel
+    fun saveTimeFormat(context: Context, enabled: Boolean) {
+        use24HrsFormat = enabled
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean("use_24h", enabled).apply()
+    }
+
+    fun saveTheme(context: Context, isDark: Boolean) {
+        isDarkTheme = isDark
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean("dark_theme", isDark).apply()
+    }
+
+    fun saveBiometric(context: Context, enabled: Boolean) {
+        isBiometricEnabled = enabled
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean("biometric_on", enabled).apply()
+    }
+
+    fun saveFirstDayOfWeek(context: Context, day: DayOfWeek) {
+        firstDayOfWeek = day
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString("start_day", day.name).apply()
+    }
 }
+

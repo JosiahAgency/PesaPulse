@@ -24,19 +24,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CalendarViewWeek
+import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,8 +57,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.example.cashia.Utility.BiometricAuthenticator
 import com.example.cashia.Utility.PesaActions
 import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 
@@ -70,15 +72,16 @@ import java.time.DayOfWeek
 fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
-    use24HourFormat: Boolean,
-    onToggle24Hour: (Boolean) -> Unit,
-    firstDayOfWeek: DayOfWeek,
-    onFirstDayOfWeekChange: (DayOfWeek) -> Unit
+    onFirstDayOfWeekChange: (DayOfWeek) -> Unit,
+    navController: NavController
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
+    val settingsViewModel: SettingsViewModel = viewModel()
+
+    val biometricAuthenticator = remember { BiometricAuthenticator(context) }
 
 
     if (showDayPicker) {
@@ -202,13 +205,18 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier.padding(bottom = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            SettingsSection(title = "Categories") {
+                SettingsActionItem(
+                    label = "Manage Categories",
+                    subtitle = "Add or update categories",
+                    icon = Icons.Rounded.Category,
+                    onClick = {
+                        PesaActions.playSuccess(haptic)
+                        navController.navigate("categories")
+                    },
+                    isExpanded = false
+                )
+            }
         }
 
         // Appearance Section
@@ -224,84 +232,42 @@ fun SettingsScreen(
                         onToggleTheme(it)
                     }
                 )
-//                SettingsToggleItem(
-//                    label = "Use 24-Hour Clock",
-//                    subtitle = "Toggle between 12h (AM/PM) and 24h Time Format",
-//                    icon = Icons.Rounded.Schedule,
-//                    checked = use24HourFormat,
-//                    onCheckedChange = {
-//                        PesaActions.playClick(haptic)
-//                        onToggle24Hour(it)
-//                    }
-//                )
-//                SettingsActionItem(
-//                    label = "Week Start",
-//                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
-//                        .replaceFirstChar { it.uppercase() },
-//                    icon = Icons.Rounded.CalendarMonth,
-//                    onClick = {
-//                        PesaActions.playClick(haptic)
-//                        showDayPicker = true
-//                    },
-//                    isExpanded = false
-//                )
             }
         }
 
-        // Security Section
-//        item {
-//            SettingsSection(title = "Security") {
-//                var biometricEnabled by remember { mutableStateOf(false) }
-//                SettingsToggleItem(
-//                    label = "Biometric Security",
-//                    subtitle = "Require fingerprint to occess your data",
-//                    icon = Icons.Rounded.Fingerprint,
-//                    checked = biometricEnabled,
-//                    onCheckedChange = {
-//                        PesaActions.playClick(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    }
-//                )
-//            }
-//        }
-//
-//        // Data Management
-//        item {
-//            SettingsSection(title = "Data & Storage") {
-//                SettingsActionItem(
-//                    label = "Sync SMS Transactions",
-//                    subtitle = "Manually refresh from inbox",
-//                    icon = Icons.Rounded.Sync,
-//                    onClick = {
-//                        PesaActions.playSuccess(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    },
-//                    isExpanded = false
-//                )
-//                SettingsActionItem(
-//                    label = "Export Data",
-//                    subtitle = "Save transactions as CSV",
-//                    icon = Icons.Rounded.IosShare,
-//                    onClick = {
-//                        PesaActions.playClick(haptic)
-//                        Toast.makeText(
-//                            context,
-//                            "Feature coming soon! Josiah is still polishing the pulse. ✨",
-//                            Toast.LENGTH_SHORT
-//                        ).show()
-//                    },
-//                    isExpanded = false
-//                )
-//            }
-//        }
+//         Security Section
+        item {
+            SettingsSection(title = "Security") {
+                // Inside SettingsScreen.composable
+                SettingsToggleItem(
+                    label = "App Lock",
+                    subtitle = "Secure your financial data with biometrics or device PIN.",
+                    icon = Icons.Rounded.Fingerprint,
+                    checked = PesaTimeConfiguration.isBiometricEnabled,
+                    onCheckedChange = { enable ->
+                        PesaActions.playClick(haptic)
+                        if (enable) {
+                            val activity = context as? FragmentActivity
+                            activity?.let {
+                                biometricAuthenticator.promptAuthenticator(
+                                    activity = it,
+                                    onSuccess = { settingsViewModel.setBiometric(true) },
+                                    onError = { msg ->
+                                        Toast.makeText(
+                                            context,
+                                            msg,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            }
+                        } else {
+                            settingsViewModel.setBiometric(false)
+                        }
+                    }
+                )
+            }
+        }
 
         // About
         item {

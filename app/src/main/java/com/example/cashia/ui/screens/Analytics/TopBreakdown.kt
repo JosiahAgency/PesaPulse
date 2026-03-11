@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,18 +41,22 @@ import androidx.compose.ui.unit.sp
 import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.Utility.TransactionType
 import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.ui.screens.AllTransactions.formatAmount
+import com.example.cashia.models.ResolvedCategory
 
 
 @Composable
 fun TopBreakdownSection(
     filteredTransactions: List<MpesaTransactions>,
-    selectedType: TransactionType
+    selectedType: TransactionType,
+    allCategories: List<ResolvedCategory>
 ) {
     var topNCount by remember { mutableIntStateOf(5) }
+    val categoryMap = remember(allCategories) {
+        allCategories.associateBy { it.id }
+    }
     val breakdownData = remember(filteredTransactions, topNCount) {
         filteredTransactions
-            .groupBy { it.recipient }
+            .groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
             .entries
             .sortedByDescending { it.value }
@@ -69,7 +75,7 @@ fun TopBreakdownSection(
         ) {
             Column {
                 Text(
-                    text = if (selectedType == TransactionType.INCOME) "TOP SOURCES" else "TOP RECIPIENTS",
+                    text = if (selectedType == TransactionType.INCOME) "TOP SOURCES" else "TOP CATEGORIES",
                     style = MaterialTheme.typography.labelLarge.copy(
                         letterSpacing = 2.sp,
                         fontWeight = FontWeight.Black
@@ -89,22 +95,16 @@ fun TopBreakdownSection(
                 onCountChange = { topNCount = it }
             )
         }
-
-        // --- Content Area ---
-        if (filteredTransactions.isEmpty()) {
-            GlassySurface(modifier = Modifier.fillMaxWidth()) {
-                Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("No data for this period", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        } else {
+        if (!filteredTransactions.isEmpty()) {
             GlassySurface {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     breakdownData.forEach { entry ->
-                        RecipientProgressRow(
+                        val resolved = categoryMap[entry.key]
+                        CategoryProgressRow(
+                            emoji = resolved?.emoji ?: "📦",
                             name = entry.key,
                             amount = entry.value,
                             total = totalAmountForType,
@@ -119,7 +119,8 @@ fun TopBreakdownSection(
 
 
 @Composable
-fun RecipientProgressRow(
+fun CategoryProgressRow(
+    emoji: String,
     name: String,
     amount: Double,
     total: Double,
@@ -137,6 +138,16 @@ fun RecipientProgressRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = color.copy(alpha = 0.1f),
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(emoji, fontSize = 16.sp)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyLarge,
