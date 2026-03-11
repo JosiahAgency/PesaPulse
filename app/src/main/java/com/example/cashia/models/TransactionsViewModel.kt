@@ -9,9 +9,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
-import com.example.cashia.Utility.PesaTimeConfiguration
-import com.example.cashia.Utility.TimeScope
-import com.example.cashia.Utility.syncTransactions
+import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.TimeScope
+import com.example.cashia.utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce

@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime

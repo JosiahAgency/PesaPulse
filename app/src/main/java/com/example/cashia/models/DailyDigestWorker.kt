@@ -17,7 +17,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.MainActivity
-import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime

@@ -6,7 +6,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
-import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch

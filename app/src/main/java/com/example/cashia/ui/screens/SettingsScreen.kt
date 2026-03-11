@@ -66,9 +66,9 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.cashia.Utility.BiometricAuthenticator
-import com.example.cashia.Utility.PesaActions
-import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.utility.BiometricAuthenticator
+import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
@@ -85,7 +85,7 @@ fun SettingsScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val appVersion = remember { getAppVersion(context) }
+    val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
     val settingsViewModel: SettingsViewModel = viewModel()
 
@@ -564,20 +564,3 @@ fun SettingsIconBox(icon: ImageVector) {
     }
 }
 
-fun getAppVersion(context: android.content.Context): String {
-    return try {
-        val packageInfo =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(
-                    context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            }
-        "v${packageInfo.versionName}"
-    } catch (e: Exception) {
-        "v1.0.0"
-    }
-}

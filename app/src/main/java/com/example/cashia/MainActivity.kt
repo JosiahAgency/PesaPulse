@@ -32,9 +32,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,9 +78,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.cashia.Utility.BiometricAuthenticator
-import com.example.cashia.Utility.PesaActions
-import com.example.cashia.Utility.PesaTimeConfiguration
+import com.example.cashia.utility.BiometricAuthenticator
+import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DailyDigestWorker
 import com.example.cashia.models.NotificationHelper
@@ -85,18 +88,17 @@ import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.navigation.AppDestinations
-import com.example.cashia.ui.screens.AllTransactions.TransactionScreen
-import com.example.cashia.ui.screens.Analytics.AnalyticsScreen
-import com.example.cashia.ui.screens.CalendarScreen
-import com.example.cashia.ui.screens.Categorys.CategoryManagementScreen
-import com.example.cashia.ui.screens.Dashboard.DashboardScreen
-import com.example.cashia.ui.screens.Projections.ProjectionScreen
+import com.example.cashia.ui.screens.allTransactions.TransactionScreen
+import com.example.cashia.ui.screens.analytics.AnalyticsScreen
+import com.example.cashia.ui.calendar.CalendarScreen
+import com.example.cashia.ui.screens.category.CategoryManagementScreen
+import com.example.cashia.ui.screens.dashboard.DashboardScreen
+import com.example.cashia.ui.screens.projections.ProjectionScreen
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
 
 class MainActivity : FragmentActivity() {
-
     private val permissionRequestCode = 100
     private var isUnlocked = mutableStateOf(false)
 
@@ -123,7 +125,7 @@ class MainActivity : FragmentActivity() {
                 if (unlocked) {
                     PesaPulseApp()
                 } else {
-                    LockPlaceholder()
+                    LockPlaceholder(onUnlockClick = { authenticateUser() })
                 }
             }
         }
@@ -156,41 +158,81 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-fun LockPlaceholder() {
+fun LockPlaceholder(onUnlockClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            "PesaPulse is Locked",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Black,
-                brush = primaryGradient(),
-            )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement =
+                Arrangement.spacedBy(32.dp)
         )
+        {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(
+                        MaterialTheme
+                            .colorScheme.primary.copy(alpha = 0.1f)
+                    ),
+                contentAlignment = Alignment.Center
+            )
+            {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = "Locked",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "PesaPulse is Locked",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        brush = primaryGradient(),
+                    )
+                )
+                Text(
+                    "Authenticate to access you finances",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        brush =
+                            primaryGradient()
+                    )
+                    .clickable { onUnlockClick() }
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Fingerprint,
+                        contentDescription = "Unlock",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+        }
     }
-}
-
-private fun screenSubtitle(route: String?): String = when (route) {
-    AppDestinations.Dashboard.route -> "Your financial pulse, today"
-    AppDestinations.Transactions.route -> "Full transaction history"
-    AppDestinations.Calendar.route -> "Activity across the month"
-    AppDestinations.Analytics.route -> "Breakdown by period & category"
-    AppDestinations.Projections.route -> "30-day balance forecast"
-    else -> ""
-}
-
-private fun screenTitle(route: String?): String = when (route) {
-    AppDestinations.Dashboard.route -> "Home"
-    AppDestinations.Transactions.route -> "History"
-    AppDestinations.Calendar.route -> "Calendar"
-    AppDestinations.Analytics.route -> "Insights"
-    AppDestinations.Projections.route -> "Forecast"
-    AppDestinations.Settings.route -> "Settings"
-    AppDestinations.Categories.route -> "Categories"
-    else -> "PesaPulse"
 }
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -253,7 +295,7 @@ fun PesaPulseApp() {
                         title = {
                             Column {
                                 AnimatedContent(
-                                    targetState = screenTitle(currentRoute),
+                                    targetState = PesaTimeConfiguration.screenTitle(currentRoute),
                                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                                     label = "title"
                                 ) { title ->
@@ -266,7 +308,8 @@ fun PesaPulseApp() {
                                     )
                                 }
                                 AnimatedContent(
-                                    targetState = screenSubtitle(currentRoute),
+                                    targetState = PesaTimeConfiguration.screenSubtitle
+                                        (currentRoute),
                                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                                     label = "subtitle"
                                 ) { subtitle ->
