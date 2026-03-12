@@ -50,15 +50,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingEditorSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionCard
+import com.example.cashia.utility.PesaActions
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -88,18 +90,8 @@ fun UpcomingSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(
-                    "SCHEDULED PAYMENTS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Black, letterSpacing = 1.5.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                )
-                Text(
-                    "$total factored into forecast",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                )
+                SectionLabel("SCHEDULED PAYMENTS")
+                Subtitles("$total Factored Into Forecast")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 var matchRunning by remember { mutableStateOf(false) }

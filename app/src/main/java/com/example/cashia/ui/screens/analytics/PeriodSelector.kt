@@ -27,12 +27,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.SelectableBox
+import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.showDatePicker
-import com.example.cashia.ui.reusedElements.SectionLabel
-import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -72,22 +73,14 @@ fun PeriodSelectorCard(
                     TimeScope.YEAR to "Year",
                 ).forEach { (scope, label) ->
                     val isSelected = selectedScope == scope
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = if (isSelected) colorScheme.primary
-                        else colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = if (isSelected) null
-                        else BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                PesaActions.playClick(haptic)
-                                onScopeChange(scope)
-                            }
+                    SelectableBox(
+                        haptic,
+                        isSelected,
+                        { onScopeChange(scope) },
+                        Modifier.weight(1f)
                     ) {
                         Text(
                             text = label,
-                            modifier = Modifier.padding(vertical = 9.dp),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) Color.White
@@ -102,7 +95,6 @@ fun PeriodSelectorCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Start date
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = if (selectedScope == TimeScope.CUSTOM)
@@ -121,12 +113,7 @@ fun PeriodSelectorCard(
                         }
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            text = "FROM",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            letterSpacing = 1.sp
-                        )
+                        Subtitles("FROM")
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = startDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
@@ -137,15 +124,12 @@ fun PeriodSelectorCard(
                         )
                     }
                 }
-
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
-
-                // End date
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = if (selectedScope == TimeScope.CUSTOM)
@@ -164,12 +148,7 @@ fun PeriodSelectorCard(
                         }
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            text = "TO",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            letterSpacing = 1.sp
-                        )
+                        Subtitles("TO")
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),

@@ -44,9 +44,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaActions
-import com.example.cashia.utility.ProjectionPeriod
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.SelectableBox
+import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.utility.ProjectionPeriod
 
 
 @Composable
@@ -106,12 +108,7 @@ fun ProjectionConfigCard(
                         }
                     }
                     Column {
-                        Text(
-                            "Projection Basis",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onSurface
-                        )
+                        SectionLabel("projection basis")
                         Text(
                             if (isExpanded) "Tap to collapse"
                             else "${period.label} · ends ${period.endLabel()}",
@@ -125,7 +122,6 @@ fun ProjectionConfigCard(
                     null, tint = colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
-
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = expandVertically(tween(300)) + fadeIn(),
@@ -136,8 +132,6 @@ fun ProjectionConfigCard(
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
-
-                    // ── Period selector ───────────────────────────────────
                     ConfigSection(
                         label = "FORECAST PERIOD",
                         sublabel = buildString {
@@ -152,26 +146,30 @@ fun ProjectionConfigCard(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ProjectionPeriod.entries.forEachIndexed { index, p ->
-                                // Use a short label so 4 chips fit in one row
                                 val shortLabel = when (p) {
                                     ProjectionPeriod.THIS_WEEK -> "Week"
                                     ProjectionPeriod.THIS_MONTH -> "Month"
                                     ProjectionPeriod.THIS_QUARTER -> "Quarter"
                                     ProjectionPeriod.THIS_YEAR -> "Year"
                                 }
-                                ConfigChip(
-                                    label = shortLabel,
-                                    selected = selectedPeriod == index,
-                                    modifier = Modifier.weight(1f)
+                                SelectableBox(
+                                    haptic,
+                                    selectedPeriod == index,
+                                    { onPeriodChange(index) },
+                                    Modifier.weight(1f)
                                 ) {
-                                    PesaActions.playClick(haptic)
-                                    onPeriodChange(index)
+                                    Text(
+                                        shortLabel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selectedPeriod == index) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selectedPeriod == index) Color.White
+                                        else colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
                         }
                     }
-
-                    // ── Starting balance ──────────────────────────────────
                     ConfigSection(
                         label = "STARTING BALANCE",
                         sublabel = buildString {
@@ -215,30 +213,27 @@ fun ProjectionConfigCard(
                             supportingText = when {
                                 overrideIsNegative -> {
                                     {
-                                        Text(
+                                        Subtitles(
                                             "Balance can't be negative",
-                                            color = colorScheme.error,
-                                            style = MaterialTheme.typography.labelSmall
+                                            color = colorScheme.error
                                         )
                                     }
                                 }
 
                                 overrideIsUnreasonable -> {
                                     {
-                                        Text(
+                                        Subtitles(
                                             "Seems unusually high — double check",
                                             color = colorScheme.error,
-                                            style = MaterialTheme.typography.labelSmall
                                         )
                                     }
                                 }
 
                                 overrideValue != null -> {
                                     {
-                                        Text(
+                                        Subtitles(
                                             "Using custom balance",
                                             color = colorScheme.primary.copy(alpha = 0.7f),
-                                            style = MaterialTheme.typography.labelSmall
                                         )
                                     }
                                 }
@@ -269,7 +264,6 @@ fun ProjectionConfigCard(
     }
 }
 
-
 @Composable
 private fun ConfigSection(label: String, sublabel: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -282,41 +276,8 @@ private fun ConfigSection(label: String, sublabel: String, content: @Composable 
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp
             )
-            Text(
-                sublabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-            )
+            Subtitles(sublabel)
         }
         content()
-    }
-}
-
-@Composable
-private fun ConfigChip(
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(50.dp),
-        color = if (selected) colorScheme.primary
-        else colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = if (selected) null else BorderStroke(
-            0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)
-        )
-    ) {
-        Text(
-            label,
-            modifier = Modifier.padding(vertical = 9.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) Color.White
-            else colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center
-        )
     }
 }

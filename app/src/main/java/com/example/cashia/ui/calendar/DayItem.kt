@@ -43,7 +43,7 @@ fun CalendarDayItem(
 
     Box(
         modifier = Modifier
-            .size(44.dp) // Slightly larger touch target
+            .size(44.dp)
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {

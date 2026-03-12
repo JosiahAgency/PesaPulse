@@ -3,12 +3,13 @@ package com.example.cashia.ui.reusedElements
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.cashia.ui.theme.primaryGradient
 
 @Composable
-fun SectionLabel(text: String) {
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text.uppercase(),
         style = MaterialTheme.typography.labelLarge.copy(
@@ -16,5 +17,6 @@ fun SectionLabel(text: String) {
             brush = primaryGradient()
         ),
         fontWeight = FontWeight.Black,
+        modifier = modifier
     )
 }

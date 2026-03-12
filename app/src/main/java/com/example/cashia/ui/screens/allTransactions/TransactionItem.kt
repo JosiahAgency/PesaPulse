@@ -120,7 +120,7 @@ fun TransactionItem(
 }
 
 @Composable
-private fun TransactionItemExpanded(
+fun TransactionItemExpanded(
     tx: MpesaTransactions,
     resolvedCategory: ResolvedCategory,
     expanded: Boolean,

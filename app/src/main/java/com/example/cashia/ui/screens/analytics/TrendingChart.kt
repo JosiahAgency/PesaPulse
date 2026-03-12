@@ -1,6 +1,14 @@
 package com.example.cashia.ui.screens.analytics
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,12 +26,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,13 +49,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TransactionType
 import com.example.cashia.utility.formatCompactAmount
 import com.example.cashia.utility.formatXLabel
-import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.ui.reusedElements.GlassySurface
-import com.example.cashia.ui.reusedElements.SectionLabel
 
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
@@ -85,163 +97,186 @@ fun GlassyTrendChart(
         (groupedData.values.maxOrNull() ?: 1.0).toFloat().coerceAtLeast(1f)
     }
     val yAxisLabels = listOf(maxAmount, maxAmount / 2, 0f)
+    val animated = remember { Animatable(0f) }
+    var expanded by remember { mutableStateOf(true) }
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            animated.snapTo(0f)
+            animated.animateTo(1f, tween(800, easing = FastOutSlowInEasing))
+        }
+    }
 
     GlassySurface {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     SectionLabel("TREND ANALYSIS")
-                    Text(
-                        "Tap bars for details",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Spacer(Modifier.height(4.dp))
+                    Subtitles("Tap Bars for Details")
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = null,
+                        tint = baseColor.copy(alpha = 0.5f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Icon(
+                        if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded
+                            .KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                     )
                 }
-
-                Icon(
-                    Icons.AutoMirrored.Filled.ShowChart,
-                    contentDescription = null,
-                    tint = baseColor.copy(alpha = 0.5f),
-                    modifier = Modifier.size(24.dp)
-                )
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier
-                    .height(200.dp)
-                    .fillMaxWidth()
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
             ) {
-                // Y-axis
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(end = 8.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    horizontalAlignment = Alignment.End
-                ) {
-                    yAxisLabels.forEach {
-                        Text(
-                            formatCompactAmount(it.toDouble()),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    // Grid lines
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        repeat(3) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                            )
-                        }
-                    }
-
-                    // Bars
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Spacer(Modifier.height(24.dp))
                     Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.Bottom
+                        modifier = Modifier
+                            .height(200.dp)
+                            .fillMaxWidth()
                     ) {
-                        groupedData.forEach { (key, amount) ->
-                            val isSelected = selectedKey == key
-                            val barHeightRatio =
-                                ((amount.toFloat() / maxAmount) * 0.8f).coerceAtLeast(0.05f)
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(barHeightRatio)
-                                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                                    .background(
-                                        if (isSelected)
-                                            baseColor
-                                        else
-                                            baseColor.copy(alpha = 0.4f)
-                                    )
-                                    .clickable {
-                                        if (selectedKey != key) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            selectedKey = key
-                                        } else {
-                                            selectedKey = null
-                                        }
-                                    }
-                            )
-                        }
-                    }
-
-                    // Tooltip
-                    selectedKey?.let { key ->
-                        val selectedIndex = keysList.indexOf(key)
-                        val amount = groupedData[key] ?: 0.0
-                        val totalItems = keysList.size
-                        val horizontalBias = if (totalItems > 1) {
-                            (selectedIndex.toFloat() / (totalItems - 1)) * 2f - 1f
-                        } else 0f
-
-                        Surface(
-                            color = baseColor,
-                            shape = RoundedCornerShape(8.dp),
-                            shadowElevation = 8.dp,
+                        Column(
                             modifier = Modifier
-                                .align(BiasAlignment(horizontalBias, -1f))
-                                .zIndex(1f)
+                                .fillMaxHeight()
+                                .padding(end = 8.dp),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            horizontalAlignment = Alignment.End
                         ) {
+                            yAxisLabels.forEach {
+                                Text(
+                                    formatCompactAmount(it.toDouble()),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                repeat(3) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                groupedData.forEach { (key, amount) ->
+                                    val isSelected = selectedKey == key
+                                    val barHeightRatio =
+                                        ((amount.toFloat() / maxAmount) * 0.8f).coerceAtLeast(0.05f)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(barHeightRatio)
+                                            .clip(
+                                                RoundedCornerShape(
+                                                    topStart = 6.dp,
+                                                    topEnd = 6.dp
+                                                )
+                                            )
+                                            .background(
+                                                if (isSelected)
+                                                    baseColor
+                                                else
+                                                    baseColor.copy(alpha = 0.4f)
+                                            )
+                                            .clickable {
+                                                if (selectedKey != key) {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    selectedKey = key
+                                                } else {
+                                                    selectedKey = null
+                                                }
+                                            }
+                                    )
+                                }
+                            }
+                            selectedKey?.let { key ->
+                                val selectedIndex = keysList.indexOf(key)
+                                val amount = groupedData[key] ?: 0.0
+                                val totalItems = keysList.size
+                                val horizontalBias = if (totalItems > 1) {
+                                    (selectedIndex.toFloat() / (totalItems - 1)) * 2f - 1f
+                                } else 0f
+
+                                Surface(
+                                    color = baseColor,
+                                    shape = RoundedCornerShape(8.dp),
+                                    shadowElevation = 8.dp,
+                                    modifier = Modifier
+                                        .align(BiasAlignment(horizontalBias, -1f))
+                                        .zIndex(1f)
+                                ) {
+                                    Text(
+                                        text = PesaTimeConfiguration.formatCurrency(amount),
+                                        modifier = Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 6.dp
+                                        ),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // X-axis
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, start = 48.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        if (keysList.isNotEmpty()) {
                             Text(
-                                text = PesaTimeConfiguration.formatCurrency(amount),
-                                modifier = Modifier.padding(
-                                    horizontal = 12.dp,
-                                    vertical = 6.dp
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                formatXLabel(keysList.first()),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (keysList.size > 2) {
+                                Text(
+                                    formatXLabel(keysList[keysList.size / 2]),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                formatXLabel(keysList.last()),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                }
-            }
-
-            // X-axis
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp, start = 48.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                if (keysList.isNotEmpty()) {
-                    Text(
-                        formatXLabel(keysList.first()),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (keysList.size > 2) {
-                        Text(
-                            formatXLabel(keysList[keysList.size / 2]),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        formatXLabel(keysList.last()),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }

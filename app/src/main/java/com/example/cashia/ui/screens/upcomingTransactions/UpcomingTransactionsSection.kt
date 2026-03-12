@@ -72,8 +72,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaActions
-import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.RecurrenceType
 import com.example.cashia.models.ResolvedCategory
@@ -83,7 +81,10 @@ import com.example.cashia.models.UpcomingUiState
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -115,11 +116,7 @@ fun UpcomingTransactionsSection(
         ) {
             Column {
                 SectionLabel("upcoming payments")
-                Text(
-                    "${upcoming.size} pending",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
+                Subtitles("${upcoming.size} pending")
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -163,17 +160,7 @@ fun UpcomingTransactionsSection(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("📅", fontSize = 32.sp)
-                        Text(
-                            "No upcoming payments",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "Tap + to add rent, subscriptions, or any planned expense",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
+                        Subtitles("No Upcoming Payments Added")
                     }
                 }
             } else {

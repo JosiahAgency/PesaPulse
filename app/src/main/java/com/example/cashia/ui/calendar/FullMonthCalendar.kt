@@ -169,7 +169,7 @@ fun FullMonthCalendar(
                             color = colorScheme.primary.copy(alpha = 0.1f)
                         ) {
                             Text(
-                                "$upcomingThisMonth scheduled",
+                                "$upcomingThisMonth Scheduled",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colorScheme.primary,

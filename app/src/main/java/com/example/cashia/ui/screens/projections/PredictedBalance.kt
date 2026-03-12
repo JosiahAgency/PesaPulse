@@ -35,10 +35,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.ProjectionPeriod
 import com.example.cashia.models.FinanceProjection
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.ProjectionPeriod
 
 
 @SuppressLint("DefaultLocale")
@@ -76,30 +77,20 @@ fun PredictedBalanceCard(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            // Period label — "Predicted Balance · This Month"
-            Text(
-                "Predicted Balance · ${period.label}",
-                style = MaterialTheme.typography.labelLarge,
-                color = colorScheme.onSurfaceVariant
-            )
+            Subtitles("Predicted Balance · ${period.label}")
             Text(
                 "by ${period.endLabel()}",
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
-
             Spacer(Modifier.height(12.dp))
-
             Text(
                 PesaTimeConfiguration.formatCurrency(animatedBalance.value.toDouble()),
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Black,
                 color = balanceColor
             )
-
             Spacer(Modifier.height(8.dp))
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -109,16 +100,12 @@ fun PredictedBalanceCard(
                     null, tint = balanceColor, modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(4.dp))
-                Text(
+                Subtitles(
                     "${if (changePercent >= 0) "+" else ""}${
                         String.format("%.1f", changePercent)
-                    }% from today's balance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurfaceVariant
+                    }% From Today's Balance",
                 )
             }
-
-            // ── Zero-crossing warning ─────────────────────────────────────────
             if (zeroCrossingDay != null) {
                 Spacer(Modifier.height(10.dp))
                 Surface(
@@ -137,21 +124,16 @@ fun PredictedBalanceCard(
                             tint = colorScheme.error,
                             modifier = Modifier.size(14.dp)
                         )
-                        Text(
+                        Subtitles(
                             "Balance may reach zero in ~${zeroCrossingDay}d",
-                            style = MaterialTheme.typography.labelSmall,
                             color = colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
-
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
             Spacer(Modifier.height(12.dp))
-
-            // ── Current / Net Change row ──────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -173,12 +155,9 @@ fun PredictedBalanceCard(
                     if (projection.predictedNet >= 0) colorScheme.tertiary else colorScheme.error
                 )
             }
-
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
             Spacer(Modifier.height(12.dp))
-
-            // ── Confidence bar ────────────────────────────────────────────────
             ConfidenceBar(confidence = confidence)
         }
     }
@@ -187,11 +166,7 @@ fun PredictedBalanceCard(
 @Composable
 private fun MiniStat(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Subtitles(label)
         Spacer(Modifier.height(2.dp))
         Text(
             value,
@@ -211,9 +186,9 @@ private fun ConfidenceBar(confidence: Int) {
         else -> colorScheme.error
     }
     val label = when {
-        confidence >= 70 -> "High confidence"
-        confidence >= 45 -> "Moderate confidence"
-        else -> "Low confidence — limited data"
+        confidence >= 70 -> "High Confidence"
+        confidence >= 45 -> "Moderate Confidence"
+        else -> "Low Confidence — Limited Data"
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -221,11 +196,9 @@ private fun ConfidenceBar(confidence: Int) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
+            Subtitles(
                 label,
-                style = MaterialTheme.typography.labelSmall,
                 color = barColor,
-                fontWeight = FontWeight.SemiBold
             )
             Text(
                 "${confidence}%",

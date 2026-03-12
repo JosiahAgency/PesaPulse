@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,15 +35,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cashia.models.CategoryViewModel
+import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UpcomingStatus
+import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.utility.FinanceProjectionEngine
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.ProjectionPeriod
 import com.example.cashia.utility.computeConfidence
 import com.example.cashia.utility.daysUntilZero
-import com.example.cashia.models.CategoryViewModel
-import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.models.UpcomingStatus
-import com.example.cashia.models.UpcomingViewModel
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -122,10 +121,8 @@ fun ProjectionScreen(
         daysUntilZero(projection.dailyTrend, effectiveBalance)
     }
 
-    val today = remember { LocalDate.now() }   // ✅ stable, created once
+    val today = remember { LocalDate.now() }
 
-    // ✅ PERF: overdue/dueSoon/later all derived in a single pass over pendingUpcoming
-    //    instead of three separate filter calls.
     val (overdue, dueSoon, later) = remember(pendingUpcoming, today) {
         val ov = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
         val ds = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
@@ -169,7 +166,6 @@ fun ProjectionScreen(
             }
             item {
                 ProjectionConfigSummary(
-                    totalDays = maxLookBack,
                     period = period,
                     isBalanceOverridden = balanceOverride.toDoubleOrNull() != null,
                     pendingUpcoming.size
@@ -257,7 +253,6 @@ private fun SummaryPill(
 
 @Composable
 private fun ProjectionConfigSummary(
-    totalDays: Int,
     period: ProjectionPeriod,
     isBalanceOverridden: Boolean,
     upcomingCount: Int
@@ -266,11 +261,10 @@ private fun ProjectionConfigSummary(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SummaryPill(Modifier.weight(1f), "All ${totalDays}d data", Icons.Default.History, false)
         SummaryPill(Modifier.weight(1f), period.label, Icons.Default.AutoGraph, isCustom = true)
         SummaryPill(
             Modifier.weight(1f),
-            "$upcomingCount scheduled",
+            "$upcomingCount Scheduled",
             Icons.Default.CalendarToday,
             upcomingCount > 0,
             if (isBalanceOverridden) "Custom bal." else null

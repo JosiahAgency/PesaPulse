@@ -2,7 +2,6 @@ package com.example.cashia.ui.screens.projections
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,13 +35,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaActions
-import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.ProjectionPeriod
 import com.example.cashia.models.FinanceProjection
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.SelectableBox
+import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.ProjectionPeriod
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -139,12 +139,7 @@ fun ProjectionInsightsCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "Projection Insights",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colorScheme.onSurfaceVariant
-                )
-                // Period chips — same selection drives the whole screen
+                SectionLabel("Projection Insights")
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     ProjectionPeriod.entries.forEachIndexed { i, p ->
                         val shortLabel = when (p) {
@@ -153,18 +148,14 @@ fun ProjectionInsightsCard(
                             ProjectionPeriod.THIS_QUARTER -> "Qtr"
                             ProjectionPeriod.THIS_YEAR -> "Yr"
                         }
-                        Surface(
-                            modifier = Modifier.clickable {
-                                PesaActions.playClick(haptic)
-                                onPeriodChange(i)
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selectedPeriodIndex == i) colorScheme.primary
-                            else colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        SelectableBox(
+                            haptic,
+                            selectedPeriodIndex == i,
+                            { onPeriodChange(i) }
+
                         ) {
                             Text(
                                 shortLabel,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (selectedPeriodIndex == i) FontWeight.Bold
                                 else FontWeight.Normal,
@@ -175,10 +166,7 @@ fun ProjectionInsightsCard(
                     }
                 }
             }
-
             Spacer(Modifier.height(8.dp))
-
-            // Context note
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = colorScheme.primary.copy(alpha = 0.05f)
@@ -193,7 +181,6 @@ fun ProjectionInsightsCard(
                     lineHeight = 16.sp
                 )
             }
-
             if (projection.dataQualityNote.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Surface(

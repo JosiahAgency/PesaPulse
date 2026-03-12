@@ -29,12 +29,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.cashia.utility.TimeScope
-import com.example.cashia.utility.TransactionType
-import com.example.cashia.utility.calculatePreviousPeriod
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.screens.allTransactions.LargestTransactions
+import com.example.cashia.ui.screens.allTransactions.TransactionActivity
+import com.example.cashia.utility.TimeScope
+import com.example.cashia.utility.TransactionType
+import com.example.cashia.utility.calculatePreviousPeriod
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -173,16 +175,25 @@ fun AnalyticsScreen(
                         )
                     }
                 }
-                item { CategoryPieChart(filteredTransactions, allCategories, selectedType) }
+                item {
+                    CategoryPieChart(
+                        filteredTransactions,
+                        allCategories,
+                        selectedType,
+                        hapticFeedback
+                    )
+                }
 
                 if (filteredTransactions.isNotEmpty()) {
-                    item {
-                        SpendingVelocityCard(
-                            filteredTransactions = filteredTransactions,
-                            startDate = startDate,
-                            endDate = endDate,
-                            type = selectedType
-                        )
+                    if (selectedType == TransactionType.EXPENSE) {
+                        item {
+                            SpendingVelocityCard(
+                                filteredTransactions = filteredTransactions,
+                                startDate = startDate,
+                                endDate = endDate,
+                                type = selectedType
+                            )
+                        }
                     }
                     item {
                         TopMerchantsCard(
@@ -191,7 +202,7 @@ fun AnalyticsScreen(
                         )
                     }
                     item {
-                        LargestTransactionsCard(
+                        LargestTransactions(
                             filteredTransactions = filteredTransactions,
                             allCategories = allCategories,
                             type = selectedType
@@ -207,7 +218,7 @@ fun AnalyticsScreen(
 
                 if (allInPeriod.isNotEmpty()) {
                     item {
-                        TransactionActivityCard(
+                        TransactionActivity(
                             allTransactionsInPeriod = allInPeriod,
                             startDate = startDate,
                             endDate = endDate

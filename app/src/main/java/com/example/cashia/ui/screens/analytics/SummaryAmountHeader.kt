@@ -28,11 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TransactionType
-import com.example.cashia.ui.reusedElements.GlassySurface
-import com.example.cashia.ui.reusedElements.SectionLabel
 import kotlin.math.roundToInt
 
 
@@ -70,11 +71,7 @@ fun SummaryAmountHeader(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Total ${type.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Subtitles("Total ${type.name.lowercase().replaceFirstChar { it.uppercase() }}")
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = PesaTimeConfiguration.formatCurrency(totalAmount),
@@ -82,7 +79,6 @@ fun SummaryAmountHeader(
                         fontWeight = FontWeight.ExtraBold,
                         color = color
                     )
-
                     if (percentageChange != 0.0) {
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,10 +89,11 @@ fun SummaryAmountHeader(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = "${if (percentageChange > 0) "+" else ""}${percentageChange.roundToInt()}% vs previous period",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Subtitles(
+                                "${if (percentageChange > 0) "+" else ""}${
+                                    percentageChange
+                                        .roundToInt()
+                                }% vs Previous Period"
                             )
                         }
                     }

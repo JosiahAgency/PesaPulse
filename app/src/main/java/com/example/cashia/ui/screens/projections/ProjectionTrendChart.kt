@@ -42,10 +42,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.ProjectionPeriod
 import com.example.cashia.models.FinanceProjection
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.ProjectionPeriod
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -101,23 +103,15 @@ fun ProjectionTrendChart(
 
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
-
-            // ── Header row ────────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        "Balance Trajectory",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "${period.label} · through ${period.endLabel()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    SectionLabel("Balance Trajectory")
+                    Subtitles(
+                        "${period.label} · Through ${period.endLabel()}",
                     )
                 }
                 Surface(
@@ -215,7 +209,6 @@ fun ProjectionTrendChart(
                 Spacer(Modifier.height(64.dp))
             }
 
-            // ── Canvas ────────────────────────────────────────────────────
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -369,16 +362,8 @@ fun ProjectionTrendChart(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "Today",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    period.endLabel(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Subtitles("Today")
+                Subtitles(period.endLabel())
             }
 
             if (projection.upcomingMarkers.isNotEmpty()) {
@@ -396,11 +381,7 @@ fun ProjectionTrendChart(
                         }
                         drawPath(diamond, color = tertiary)
                     }
-                    Text(
-                        "Scheduled payment",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
+                    Subtitles("Scheduled Payments")
                 }
             }
         }
