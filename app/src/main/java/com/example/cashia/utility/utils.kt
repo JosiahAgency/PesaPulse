@@ -120,7 +120,7 @@ object PesaTimeConfiguration {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit {
                 putInt("reminder_hour", hour)
-                    .putInt("reminder_minute", minute)
+                putInt("reminder_minute", minute)
             }
     }
 

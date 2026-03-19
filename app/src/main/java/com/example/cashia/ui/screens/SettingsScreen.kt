@@ -66,11 +66,11 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.cashia.models.SettingsViewModel
+import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.models.SettingsViewModel
-import com.example.cashia.ui.theme.primaryGradient
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
