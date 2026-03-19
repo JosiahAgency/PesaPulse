@@ -27,10 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.Utility.PesaActions
-import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 

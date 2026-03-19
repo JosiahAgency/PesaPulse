@@ -33,6 +33,8 @@ import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,7 +43,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,12 +66,14 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.cashia.Utility.BiometricAuthenticator
-import com.example.cashia.Utility.PesaActions
-import com.example.cashia.Utility.PesaTimeConfiguration
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.utility.BiometricAuthenticator
+import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,20 +85,25 @@ fun SettingsScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val appVersion = remember { getAppVersion(context) }
+    val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
     val settingsViewModel: SettingsViewModel = viewModel()
 
+    // Collect all state flows from ViewModel — this is the single source of truth
+    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
+    val is24Hour by settingsViewModel.use24Hour.collectAsState()
+
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
-
+    // Day picker dialog
     if (showDayPicker) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showDayPicker = false }) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(32.dp), // More rounded for modern feel
+                shape = RoundedCornerShape(32.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp,
                 border = BorderStroke(
@@ -102,7 +115,6 @@ fun SettingsScreen(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Header with Icon
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -140,18 +152,14 @@ fun SettingsScreen(
                     val sortedDays = remember(PesaTimeConfiguration.firstDayOfWeek) {
                         val allDays = DayOfWeek.entries.toMutableList()
                         val selected = PesaTimeConfiguration.firstDayOfWeek
-
                         allDays.remove(selected)
                         allDays.add(0, selected)
                         allDays
                     }
 
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(sortedDays) { day ->
                             val isSelected = PesaTimeConfiguration.firstDayOfWeek == day
-
                             val backgroundColor = if (isSelected)
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                             else
@@ -163,7 +171,7 @@ fun SettingsScreen(
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(backgroundColor)
                                     .clickable {
-                                        PesaActions.playClick(haptic) // Add haptic feedback
+                                        PesaActions.playClick(haptic)
                                         onFirstDayOfWeekChange(day)
                                         showDayPicker = false
                                     }
@@ -179,10 +187,9 @@ fun SettingsScreen(
                                     ),
                                     color = if (!isSelected) MaterialTheme.colorScheme.onSurface else Color.Unspecified
                                 )
-
                                 if (isSelected) {
                                     Icon(
-                                        imageVector = Icons.Rounded.CheckCircle, // Using a filled check for more weight
+                                        imageVector = Icons.Rounded.CheckCircle,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(24.dp)
@@ -198,12 +205,57 @@ fun SettingsScreen(
         }
     }
 
+    // Time picker dialog
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = PesaTimeConfiguration.reminderHour,
+            initialMinute = PesaTimeConfiguration.reminderMinute,
+            is24Hour = is24Hour  // Respect the user's time format preference
+        )
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showTimePicker = false }) {
+            Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    TimePicker(state = timePickerState)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                        TextButton(
+                            onClick = {
+                                settingsViewModel.updateReminderTime(
+                                    timePickerState.hour,
+                                    timePickerState.minute
+                                )
+                                showTimePicker = false
+                            }
+                        ) { Text("Confirm") }
+                    }
+                }
+            }
+        }
+    }
+
+    // Format reminder time display based on current 24h/12h preference
+    val reminderTimeText = remember(
+        PesaTimeConfiguration.reminderHour,
+        PesaTimeConfiguration.reminderMinute,
+        is24Hour
+    ) {
+        val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
+        LocalTime.of(PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute)
+            .format(DateTimeFormatter.ofPattern(pattern))
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        // Categories
         item {
             SettingsSection(title = "Categories") {
                 SettingsActionItem(
@@ -219,7 +271,7 @@ fun SettingsScreen(
             }
         }
 
-        // Appearance Section
+        // Appearance
         item {
             SettingsSection(title = "Appearance") {
                 SettingsToggleItem(
@@ -232,17 +284,40 @@ fun SettingsScreen(
                         onToggleTheme(it)
                     }
                 )
+                SettingsActionItem(
+                    label = "Week Starts On",
+                    subtitle = PesaTimeConfiguration.firstDayOfWeek.name.lowercase()
+                        .replaceFirstChar { it.uppercase() },
+                    icon = Icons.Rounded.CalendarViewWeek,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        showDayPicker = true
+                    },
+                    isExpanded = false
+                )
+                // ✅ NEW: 24-hour clock toggle
+                SettingsToggleItem(
+                    label = "24-Hour Clock",
+                    subtitle = if (is24Hour) "Time shown in 24-hour format." else "Time shown in 12-hour format.",
+                    icon = Icons.Rounded.Schedule,
+                    checked = is24Hour,
+                    onCheckedChange = {
+                        PesaActions.playClick(haptic)
+                        settingsViewModel.setUse24Hour(it)
+                    }
+                )
             }
         }
 
-//         Security Section
+        // Security
         item {
             SettingsSection(title = "Security") {
-                // Inside SettingsScreen.composable
                 SettingsToggleItem(
                     label = "App Lock",
                     subtitle = "Secure your financial data with biometrics or device PIN.",
                     icon = Icons.Rounded.Fingerprint,
+                    // ✅ FIX: Read directly from PesaTimeConfiguration (backed by mutableStateOf,
+                    //    so Compose will recompose when it changes — no crash from stale state)
                     checked = PesaTimeConfiguration.isBiometricEnabled,
                     onCheckedChange = { enable ->
                         PesaActions.playClick(haptic)
@@ -253,11 +328,7 @@ fun SettingsScreen(
                                     activity = it,
                                     onSuccess = { settingsViewModel.setBiometric(true) },
                                     onError = { msg ->
-                                        Toast.makeText(
-                                            context,
-                                            msg,
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
@@ -265,6 +336,37 @@ fun SettingsScreen(
                             settingsViewModel.setBiometric(false)
                         }
                     }
+                )
+            }
+        }
+
+        // Notifications
+        item {
+            SettingsSection("Notifications") {
+                SettingsToggleItem(
+                    label = "Daily Payment Digest",
+                    subtitle = "Get a morning summary of upcoming bills and dues.",
+                    icon = Icons.Rounded.NotificationsActive,
+                    checked = isDailyDigestOn,
+                    onCheckedChange = { enable ->
+                        PesaActions.playClick(haptic)
+                        // ✅ FIX: setDailyDigestEnabled now safely handles WorkManager internally
+                        settingsViewModel.setDailyDigestEnabled(enable)
+                        if (enable) {
+                            Toast.makeText(
+                                context,
+                                "Reminders set for $reminderTimeText",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                )
+                SettingsActionItem(
+                    label = "Reminder Time",
+                    subtitle = "Currently set for $reminderTimeText",
+                    icon = Icons.Rounded.Schedule,
+                    onClick = { showTimePicker = true },
+                    isExpanded = false
                 )
             }
         }
@@ -356,9 +458,7 @@ fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) 
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column {
-                content()
-            }
+            Column { content() }
         }
     }
 }
@@ -442,7 +542,6 @@ fun SettingsActionItem(
             imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.ChevronRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
-
         )
     }
 }
@@ -465,20 +564,3 @@ fun SettingsIconBox(icon: ImageVector) {
     }
 }
 
-fun getAppVersion(context: android.content.Context): String {
-    return try {
-        val packageInfo =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(
-                    context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            }
-        "v${packageInfo.versionName}"
-    } catch (e: Exception) {
-        "v1.0.0" // Fallback
-    }
-}
