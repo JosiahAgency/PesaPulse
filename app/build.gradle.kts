@@ -70,12 +70,14 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    implementation(libs.androidx.fragment.ktx)
 
     // Other UI/Utility
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
     // Testing
     testImplementation(libs.junit)
