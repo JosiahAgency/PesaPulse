@@ -32,15 +32,13 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            freeCompilerArgs.add("-opt-in=androidx.compose.foundation.ExperimentalFoundationApi")
         }
     }
     java {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(17))
         }
-    }
-    kotlinOptions {
-        freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
     }
     lint {
         checkReleaseBuilds = false
@@ -53,6 +51,7 @@ android {
 }
 
 dependencies {
+    // Core & Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -62,36 +61,26 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
+    // Navigation & Work
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // Room - USE ONLY THE LIBS REFERENCES (removes the 2.6.1 conflict)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    implementation(libs.androidx.work.runtime.ktx)
     ksp(libs.room.compiler)
+    implementation(libs.androidx.fragment.ktx)
 
+    // Other UI/Utility
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.core:core-splashscreen:1.2.0")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.google.accompanist:accompanist-pager:0.32.0")
-
-    val roomVersion = "2.6.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
-    implementation("androidx.core:core-splashscreen:1.2.0")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
-    implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
-
-    implementation("androidx.credentials:credentials:1.5.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
-
 }
