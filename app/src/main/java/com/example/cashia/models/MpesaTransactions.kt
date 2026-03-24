@@ -17,8 +17,6 @@ private val regexBalanceInquiry = Regex(
     RegexOption.IGNORE_CASE
 )
 
-// Handles: "KSH1.00 sent to Daraja-Sandbox for account S00002 on 6/3/26 at 9:35 AM"
-// "for account <ref>" is optional — consumed before the date so it doesn't pollute recipient.
 private val regexSentTo = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+sent\s+to\s+(.+?)(?:\s+for\s+account\s+\S+)?\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
@@ -39,39 +37,21 @@ private val regexWithdraw = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s*Withdraw\s+[Kk][Ss][Hh]([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
     RegexOption.IGNORE_CASE
 )
-
-// Matches any of:
-//   "New M-PESA balance is KSH12,673.66"       ← no space before amount
-//   "New M-PESA account balance is Ksh 12,673.66"
-//   "M-PESA account balance is Ksh12,673.66"
-// \s* makes the space between KSH and digits optional.
 private val balanceRegex = Regex(
     """(?:New\s+)?M-PESA\s+(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
     RegexOption.IGNORE_CASE
 )
-
 private val costRegex =
     """(?:Transaction\s+cost|cost),?\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)""".toRegex(RegexOption.IGNORE_CASE)
-
-// ── Reversal v1 ───────────────────────────────────────────────────────────────
-// "XYZ Confirmed. Your original transaction ABC in favour of John Doe has been
-//  reversed successfully on 6/3/26 at 10:00 AM and Ksh1.00 has been credited"
 private val regexReversal = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Your\s+original\s+transaction\s+[A-Z0-9]+\s+in\s+favour\s+of\s+(.+?)\s+has\s+been\s+reversed\s+successfully\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s+and\s+[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+has\s+been\s+credited""",
     RegexOption.IGNORE_CASE
 )
-
-// ── Reversal v2 ───────────────────────────────────────────────────────────────
-// "XYZ confirmed. Reversal of transaction ABC has been successfully reversed
-//  on 6/3/26 at 10:00 AM and Ksh1.00 is credited to your M-PESA account.
-//  New M-PESA account balance is Ksh12,674.66."
 private val regexReversalV2 = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Reversal\s+of\s+transaction\s+([A-Z0-9]+)\s+has\s+been\s+successfully\s+reversed\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s+and\s+[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+is\s+credited""",
     RegexOption.IGNORE_CASE
 )
 
-// Dedicated extractor for the new-balance line present in most modern M-Pesa messages
-// Handles both "New M-PESA balance is KSH..." and "New M-PESA account balance is Ksh..."
 private val regexNewBalance = Regex(
     """New\s+M-PESA\s+(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
     RegexOption.IGNORE_CASE
@@ -119,140 +99,163 @@ data class MpesaTransactions(
     }
 }
 
-fun parseMpesaMessage(message: String): MpesaTransactions? {
-    try {
-        // Use the dedicated new-balance extractor first (most reliable in modern messages),
-        // then fall back to the generic balance regex for older formats.
+sealed class ParseResult {
+    data class Success(val transactions: MpesaTransactions) : ParseResult()
+    data class Unmatched(val rawBody: String) : ParseResult()
+    object Irrelevant : ParseResult()
+}
+
+fun parseMpesaMessage(message: String): ParseResult {
+    val looksLikeMpesa = message.contains("Confirmed", ignoreCase = true) ||
+            message.contains("M-PESA", ignoreCase = true)
+    if (!looksLikeMpesa) return ParseResult.Irrelevant
+
+    return try {
         val balance = (regexNewBalance.find(message) ?: balanceRegex.find(message))
             ?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-
         val transactionCost = costRegex.find(message)?.groupValues?.get(1)
             ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
 
-        return when {
+        when {
             regexSentTo.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexSentTo.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        recipient,
+                        date,
+                        time,
+                        "expense",
+                        balance,
+                        transactionCost
+                    )
                 )
             }
 
             regexPaidTo.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexPaidTo.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        recipient,
+                        date,
+                        time,
+                        "expense",
+                        balance,
+                        transactionCost
+                    )
                 )
             }
 
             regexAirtime.find(message) != null -> {
                 val (id, amount, date, time) = regexAirtime.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    "Safaricom Airtime",
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        "Safaricom Airtime",
+                        date,
+                        time,
+                        "expense",
+                        balance,
+                        transactionCost
+                    )
                 )
             }
 
             regexWithdraw.find(message) != null -> {
                 val (id, date, time, amount, recipient) = regexWithdraw.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "expense",
-                    balance,
-                    transactionCost
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        recipient,
+                        date,
+                        time,
+                        "expense",
+                        balance,
+                        transactionCost
+                    )
                 )
             }
 
             regexReceived.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexReceived.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    recipient,
-                    date,
-                    time,
-                    "income",
-                    balance,
-                    transactionCost
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        recipient,
+                        date,
+                        time,
+                        "income",
+                        balance,
+                        transactionCost
+                    )
                 )
             }
 
             // ── Reversal v1: "in favour of <name>" ────────────────────────
             regexReversal.find(message) != null -> {
                 val (id, recipient, date, time, amount) = regexReversal.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    "Reversal: $recipient",
-                    date,
-                    time,
-                    "income",
-                    balance,
-                    transactionCost,
-                    forcedCategory = TransactionCategory.RECEIVED.name
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        "Reversal: $recipient",
+                        date,
+                        time,
+                        "income",
+                        balance,
+                        transactionCost,
+                        forcedCategory = TransactionCategory.RECEIVED.name
+                    )
                 )
             }
 
             // ── Reversal v2: "Reversal of transaction <txId>" ─────────────
             regexReversalV2.find(message) != null -> {
                 val (id, reversedTxId, date, time, amount) = regexReversalV2.find(message)!!.destructured
-                buildTransaction(
-                    id,
-                    amount,
-                    "Reversal of $reversedTxId",
-                    date,
-                    time,
-                    "income",
-                    balance,
-                    transactionCost,
-                    forcedCategory = TransactionCategory.RECEIVED.name
+                ParseResult.Success(
+                    buildTransaction(
+                        id,
+                        amount,
+                        "Reversal of $reversedTxId",
+                        date,
+                        time,
+                        "income",
+                        balance,
+                        transactionCost,
+                        forcedCategory = TransactionCategory.RECEIVED.name
+                    )
                 )
             }
 
             // ── Balance inquiry ────────────────────────────────────────────
             regexBalanceInquiry.find(message) != null -> {
                 val (id, balAmount, date, time) = regexBalanceInquiry.find(message)!!.destructured
-                buildTransaction(
-                    id = id,
-                    amountStr = "0.00",
-                    recipient = "Balance Inquiry",
-                    dateStr = date,
-                    timeStr = time,
-                    type = "neutral",
-                    balance = balAmount.replace(",", "").toDouble(),
-                    cost = transactionCost,
-                    forcedCategory = TransactionCategory.BALANCE_INQUIRY.name
+                ParseResult.Success(
+                    buildTransaction(
+                        id = id,
+                        amountStr = "0.00",
+                        recipient = "Balance Inquiry",
+                        dateStr = date,
+                        timeStr = time,
+                        type = "neutral",
+                        balance = balAmount.replace(",", "").toDouble(),
+                        cost = transactionCost,
+                        forcedCategory = TransactionCategory.BALANCE_INQUIRY.name
+                    )
                 )
             }
 
-            else -> null
+            else -> ParseResult.Unmatched(message)
         }
     } catch (e: Exception) {
         Log.e("Transactions", "Parsing error: ${e.message}")
-        return null
+        ParseResult.Unmatched(message)
     }
 }
 

@@ -5,13 +5,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,14 +22,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -39,16 +48,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.utility.ParsedTx
-import com.example.cashia.utility.weekBucket
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
+import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.utility.ParsedTx
+import com.example.cashia.utility.weekBucket
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -151,6 +163,25 @@ fun TransactionScreen(
         derivedStateOf { listState.firstVisibleItemIndex > 3 }
     }
     var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
+    val pendingCount by viewModel.pendingReviewCount.collectAsState()
+    val nextPending by viewModel.nextPending.collectAsState()
+    var showUnmatchedModal by remember { mutableStateOf(false) }
+    var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
+    val allUnmatched by viewModel.allUnmatched.collectAsState()
+    var unmatchedExpanded by remember { mutableStateOf(false) }
+
+    var hasAutoOpened by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingCount) {
+        if (pendingCount > 0 && !hasAutoOpened) {
+            modalTargetSms = nextPending
+            hasAutoOpened = true
+            showUnmatchedModal = true
+        }
+    }
+
+    LaunchedEffect(nextPending) {
+        if (nextPending != null) showUnmatchedModal = false
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -165,6 +196,29 @@ fun TransactionScreen(
                     onDismiss = { swipeCategoryTarget = null },
                     categoryViewModel = categoryViewModel
                 )
+            }
+
+            if (showUnmatchedModal) {
+                modalTargetSms?.let { target ->
+                    UnmatchedSmsModal(
+                        sms = target,
+                        pendingCount = pendingCount,
+                        allCategories = allCategories,
+                        categoryViewModel = categoryViewModel,
+                        onSave = { type, category ->
+                            viewModel.saveManualTransaction(target, type, category)
+                            modalTargetSms = nextPending
+                        },
+                        onSkip = {
+                            viewModel.markSkipped(target.id)
+                            modalTargetSms = nextPending
+                        },
+                        onDismiss = { showUnmatchedModal = false }
+                    )
+                }
+            }
+            LaunchedEffect(nextPending) {
+                if (nextPending == null) showUnmatchedModal = false
             }
 
             PullToRefreshBox(
@@ -220,6 +274,76 @@ fun TransactionScreen(
                             EmptyStateMessage(
                                 if (hasFilters) "No matching transactions" else "No History Found"
                             )
+                        }
+                    }
+                    item(key = "pending_badge") {
+                        PendingReviewBadge(
+                            count = pendingCount,
+                            onClick = {
+                                modalTargetSms = nextPending
+                                showUnmatchedModal = true
+                            },
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    if (allUnmatched.isNotEmpty()) {
+                        item(key = "unmatched_header") {
+                            Surface(
+                                onClick = { unmatchedExpanded = !unmatchedExpanded },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(
+                                    0.5.dp,
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(
+                                        horizontal = 14.dp,
+                                        vertical = 10.dp
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        "Unrecognised Messages (${allUnmatched.size})",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Icon(
+                                        if (unmatchedExpanded) Icons.Rounded.KeyboardArrowUp
+                                        else Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        }
+                        if (unmatchedExpanded) {
+                            items(
+                                items = allUnmatched,
+                                key = { "unmatched_${it.id}" }
+                            ) { sms ->
+                                UnmatchedSmsItem(
+                                    sms = sms,
+                                    onReviewClick = { clicked ->
+                                        modalTargetSms =
+                                            clicked    // open modal for this specific message
+                                        showUnmatchedModal = true
+                                    }
+                                )
+                            }
+                            item(key = "unmatched_divider") {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                )
+                            }
                         }
                     }
                     weekGroups.forEach { weekGroup ->

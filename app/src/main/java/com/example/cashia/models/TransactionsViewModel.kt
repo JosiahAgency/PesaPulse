@@ -8,15 +8,20 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import com.example.cashia.AppDatabase
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.syncTransactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -45,6 +50,14 @@ data class SummaryData(
     val endDate: LocalDate
 )
 
+@Entity(tableName = "UnmatchedSms")
+data class UnmatchedSms(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val rawBody: String,
+    val receivedAt: Long = System.currentTimeMillis(),
+    val reviewed: Boolean = false
+)
+
 
 @OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
@@ -54,14 +67,19 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     var state by mutableStateOf(TransactionState())
         private set
 
-//    private var transactionsByDate: Map<LocalDate, List<MpesaTransactions>> = emptyMap()
-
     var isBalanceVisible by mutableStateOf(false)
         private set
 
     var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
-
-    private val prefs = context.getSharedPreferences("pesa_prefs", Context.MODE_PRIVATE)
+    val pendingReviewCount: StateFlow<Int> = database.unmatchedSmsDao()
+        .pendingCountFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val nextPending: StateFlow<UnmatchedSms?> = database.unmatchedSmsDao()
+        .nextPendingFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val allUnmatched: StateFlow<List<UnmatchedSms>> = database.unmatchedSmsDao()
+        .allUnmatchedFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
         observeDatabase()
@@ -191,8 +209,12 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 val end = startOfWeek.plusDays(6)
                 startOfWeek to end
             }
+
             TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
-            TimeScope.YEAR -> selectedDate.withDayOfYear(1) to selectedDate.withDayOfYear(selectedDate.lengthOfYear())
+            TimeScope.YEAR -> selectedDate.withDayOfYear(1) to selectedDate.withDayOfYear(
+                selectedDate.lengthOfYear()
+            )
+
             TimeScope.CUSTOM -> selectedDate to selectedDate
         }
 
@@ -208,6 +230,40 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             startDate = startDate,
             endDate = enDate
         )
+    }
+
+    fun saveManualTransaction(source: UnmatchedSms, type: String, category: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val transaction = when (val r = parseMpesaMessage(source.rawBody)) {
+                is ParseResult.Success -> r.transactions.copy(type = type, category = category)
+                else -> MpesaTransactions(
+                    id = "MANUAL_${source.id}_${source.receivedAt}",
+                    amount = 0.0,
+                    transactionCost = 0.0,
+                    recipient = "Unknown (manual entry)",
+                    date = LocalDate.now().toString(),
+                    time = java.time.LocalTime.now()
+                        .format(
+                            DateTimeFormatter.ofPattern(
+                                "h:mm a",
+                                Locale.US
+                            )
+                        ),
+                    timestamp = source.receivedAt,
+                    type = type,
+                    balance = 0.0,
+                    category = category
+                )
+            }
+            database.transactionDao().insertTransactions(listOf(transaction))
+            database.unmatchedSmsDao().delete(source)
+        }
+    }
+
+    fun markSkipped(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            database.unmatchedSmsDao().markReviewed(id)
+        }
     }
 
     companion object {

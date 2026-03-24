@@ -9,15 +9,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.cashia.daos.CustomCategoryDao
 import com.example.cashia.daos.SystemCategoryOverrideDao
 import com.example.cashia.daos.TransactionDao
+import com.example.cashia.daos.UnmatchedSmsDao
 import com.example.cashia.daos.UpcomingTransactionDao
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.SystemCategoryOverride
+import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingTransaction
 
 @Database(
-    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class],
-    version = 5,
+    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class],
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,6 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun customCategoryDao(): CustomCategoryDao
     abstract fun systemCategoryOverrideDao(): SystemCategoryOverrideDao
     abstract fun upcomingTransactionDao(): UpcomingTransactionDao
+    abstract fun unmatchedSmsDao(): UnmatchedSmsDao
 
     companion object {
         @Volatile
@@ -87,13 +90,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+            CREATE TABLE IF NOT EXISTS UnmatchedSms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                rawBody TEXT NOT NULL,
+                receivedAt INTEGER NOT NULL,
+                reviewed INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "pesa_pulse_db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
                     .also { INSTANCE = it }
