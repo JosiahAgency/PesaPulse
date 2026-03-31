@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
@@ -234,14 +236,17 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     fun saveManualTransaction(source: UnmatchedSms, type: String, category: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val transaction = when (val r = parseMpesaMessage(source.rawBody)) {
+            val transaction = when (val r = parseMpesaMessage(source.rawBody, source.receivedAt)) {
                 is ParseResult.Success -> r.transactions.copy(type = type, category = category)
                 else -> MpesaTransactions(
                     id = "MANUAL_${source.id}_${source.receivedAt}",
                     amount = 0.0,
                     transactionCost = 0.0,
                     recipient = "Unknown (manual entry)",
-                    date = LocalDate.now().toString(),
+                    date = Instant.ofEpochMilli(source.receivedAt)  // ← use receivedAt, not LocalDate.now()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                        .toString(),
                     time = java.time.LocalTime.now()
                         .format(
                             DateTimeFormatter.ofPattern(

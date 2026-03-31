@@ -396,7 +396,7 @@ fun TransactionScreen(
                 modifier = Modifier
                     .size(44.dp)
                     .clickable {
-                        coroutineScope.launch { listState.animateScrollToItem(0) }
+                        coroutineScope.launch { listState.scrollToItem(0) }
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
             ) {

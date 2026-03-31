@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.cashia.utility.PesaTimeConfiguration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -26,7 +27,7 @@ private val regexPaidTo = Regex(
     RegexOption.IGNORE_CASE
 )
 private val regexAirtime = Regex(
-    """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+of\s+airtime\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.?\s*You\s+bought\s+[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+of\s+airtime(?:\s+for\s+\S+)?\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})""",
     RegexOption.IGNORE_CASE
 )
 private val regexReceived = Regex(
@@ -35,10 +36,6 @@ private val regexReceived = Regex(
 )
 private val regexWithdraw = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s*Withdraw\s+[Kk][Ss][Hh]([\d,]+\.\d{2})\s+from\s+(.+?)\s+New""",
-    RegexOption.IGNORE_CASE
-)
-private val balanceRegex = Regex(
-    """(?:New\s+)?M-PESA\s+(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
     RegexOption.IGNORE_CASE
 )
 private val costRegex =
@@ -51,11 +48,50 @@ private val regexReversalV2 = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Reversal\s+of\s+transaction\s+([A-Z0-9]+)\s+has\s+been\s+successfully\s+reversed\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+at\s+(\d{1,2}:\d{2}\s*[APM]{2})\s+and\s+[Kk][Ss][Hh]([\d,]+(?:\.\d{2})?)\s+is\s+credited""",
     RegexOption.IGNORE_CASE
 )
-
 private val regexNewBalance = Regex(
     """New\s+M-PESA\s+(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
     RegexOption.IGNORE_CASE
 )
+private val balanceRegex = Regex(
+    """(?:New\s+)?(?:M-PESA\s+)?(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
+    RegexOption.IGNORE_CASE
+)
+private val regexFulizaBorrow = Regex(
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Fuliza\s+M-PESA\s+amount\s+is\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\.\s*(?:Access\s+Fee|Interest)\s+charged\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\.\s*Total\s+Fuliza\s+M-PESA\s+outstanding\s+amount\s+is\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\s+due\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
+    RegexOption.IGNORE_CASE
+)
+
+private val regexFulizaRepay = Regex(
+    """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\s+from\s+your\s+M-PESA\s+has\s+been\s+used\s+to\s+(?:fully\s+)?pay\s+your\s+(?:outstanding\s+)?Fuliza\s+M-PESA""",
+    RegexOption.IGNORE_CASE
+)
+private val regexConcurrentUnderway = Regex(
+    "M-PESA is unable to process your request because a similar transaction is currently underway",
+    RegexOption.IGNORE_CASE
+)
+
+private val regexFulizaLimit = Regex(
+    "Dear .*, your Fuliza M-PESA limit is KSH [\\d,.]+",
+    RegexOption.IGNORE_CASE
+)
+
+private val regexWrongPin = Regex(
+    "Failed, you have entered the wrong PIN",
+    RegexOption.IGNORE_CASE
+)
+private val regexCancelled = Regex(
+    "You have cancelled the transaction of KSH[\\d,.]+\\. .* Your M-PESA balance is KSH[\\d,.]+",
+    RegexOption.IGNORE_CASE
+)
+private val regexInsufficientFunds = Regex(
+    "Failed\\. You do not have enough money in your M-PESA account to pay KSH[\\d,.]+ to .* Your M-PESA balance is KSH[\\d,.]+",
+    RegexOption.IGNORE_CASE
+)
+private val regexInvalidInput = Regex(
+    "Invalid input\\. To complete the transaction of KSH[\\d,.]+ please select 1 to SEND.*Your M-PESA balance is KSH[\\d,.]+",
+    RegexOption.IGNORE_CASE
+)
+private val phoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
 
 @Entity(
     tableName = "MpesaTransactions", indices = [
@@ -77,6 +113,15 @@ data class MpesaTransactions(
     val timestamp: Long,
     val category: String = TransactionCategory.OTHER.name,
 ) {
+    @get:androidx.room.Ignore
+    val recipientName: String by lazy {
+        recipient.replace(phoneRegex, "").trim()
+    }
+
+    @get:androidx.room.Ignore
+    val recipientPhone: String? by lazy {
+        phoneRegex.find(recipient)?.value?.trim()
+    }
     @get:androidx.room.Ignore
     val displayTime: String by lazy {
         try {
@@ -105,10 +150,22 @@ sealed class ParseResult {
     object Irrelevant : ParseResult()
 }
 
-fun parseMpesaMessage(message: String): ParseResult {
+fun parseMpesaMessage(
+    message: String,
+    smsReceivedAt: Long = System.currentTimeMillis()
+): ParseResult {
     val looksLikeMpesa = message.contains("Confirmed", ignoreCase = true) ||
-            message.contains("M-PESA", ignoreCase = true)
+            message.contains("M-PESA", ignoreCase = true) ||
+            message.contains("HAKIKISHA", ignoreCase = true)
     if (!looksLikeMpesa) return ParseResult.Irrelevant
+
+    val isSystemNoise = regexConcurrentUnderway.containsMatchIn(message) ||
+            regexFulizaLimit.containsMatchIn(message) ||
+            regexWrongPin.containsMatchIn(message) ||
+            regexCancelled.containsMatchIn(message) ||      // New: Cancellation
+            regexInsufficientFunds.containsMatchIn(message) ||
+            regexInvalidInput.containsMatchIn(message)
+    if (isSystemNoise) return ParseResult.Irrelevant
 
     return try {
         val balance = (regexNewBalance.find(message) ?: balanceRegex.find(message))
@@ -247,6 +304,68 @@ fun parseMpesaMessage(message: String): ParseResult {
                         balance = balAmount.replace(",", "").toDouble(),
                         cost = transactionCost,
                         forcedCategory = TransactionCategory.BALANCE_INQUIRY.name
+                    )
+                )
+            }
+
+            regexFulizaBorrow.find(message) != null -> {
+                val match = regexFulizaBorrow.find(message)!!
+                val (id, amount, fee, outstandingTotal, dueDate) = match.destructured
+
+                val txDate = Instant.ofEpochMilli(smsReceivedAt)
+                    .atZone(ZoneId.systemDefault()).toLocalDate().toString()
+                val txTime = Instant.ofEpochMilli(smsReceivedAt)
+                    .atZone(ZoneId.systemDefault()).toLocalTime()
+                    .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+
+                val datePattern = if (dueDate.length <= 8) "d/M/yy" else "d/M/yyyy"
+                val dueDateFormatted = try {
+                    LocalDate.parse(dueDate, DateTimeFormatter.ofPattern(datePattern))
+                        .format(DateTimeFormatter.ofPattern("d MMM yy"))
+                } catch (e: Exception) { dueDate }
+
+                ParseResult.Success(
+                    MpesaTransactions(
+                        id = id.trim(),
+                        amount = amount.replace(",", "").toDouble(),
+                        transactionCost = fee.replace(",", "").toDouble(),
+                        recipient = "Fuliza M-PESA (due $dueDateFormatted)",
+                        date = txDate,
+                        type = "expense",       // ← was "income", corrected: it's debt taken on, money OUT eventually
+                        balance = 0.0,          // ← don't store debt here; it would corrupt latestBalance
+                        time = txTime,
+                        timestamp = smsReceivedAt,
+                        category = TransactionCategory.FULIZA_LOAN.name
+                    )
+                )
+            }
+
+            regexFulizaRepay.find(message) != null -> {
+                val match = regexFulizaRepay.find(message)!!
+                val (id, amount) = match.destructured
+
+                // Same fix: use actual SMS received time, not LocalDate.now()
+                val txDate = Instant.ofEpochMilli(smsReceivedAt)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .toString()
+                val txTime = Instant.ofEpochMilli(smsReceivedAt)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalTime()
+                    .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+
+                ParseResult.Success(
+                    MpesaTransactions(
+                        id = id.trim(),
+                        amount = amount.replace(",", "").toDouble(),
+                        transactionCost = transactionCost,
+                        recipient = "Fuliza Repayment",
+                        date = txDate,
+                        type = "expense",
+                        balance = balance,
+                        time = txTime,
+                        timestamp = smsReceivedAt,
+                        category = TransactionCategory.FULIZA_REPAYMENT.name
                     )
                 )
             }

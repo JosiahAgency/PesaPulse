@@ -18,6 +18,10 @@
         android:roundIcon="@mipmap/pesapulse_logo_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PesaPulse">
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:exported="false"
+            tools:node="merge"/>
         <activity
             android:name="com.example.cashia.MainActivity"
             android:exported="true"

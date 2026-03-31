@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -187,12 +188,27 @@ fun TransactionItemExpanded(
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        tx.recipient,
+                        tx.recipientName.ifBlank { tx.recipient },
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         color = accentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    tx.recipientPhone?.let { phone ->
+                        val isRedacted = phone.contains("*")
+                        Text(
+                            phone,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = if (isRedacted)
+                                accentColor.copy(alpha = 0.4f)   // dim redacted numbers
+                            else
+                                accentColor.copy(alpha = 0.65f),
+                            maxLines = 1
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Subtitles("${tx.displayDate} · ${tx.displayTime}")
                     Surface(
@@ -279,6 +295,9 @@ fun TransactionItemExpanded(
                             bold = true
                         )
                     }
+                    tx.recipientPhone?.takeIf { it.contains("*") }?.let {
+                        InlineDetailRow("MOBILE NUMBER", "Redacted — forward SMS to 334")
+                    }
                     if (tx.balance > 0) {
                         InlineDetailRow(
                             "BALANCE AFTER",
@@ -293,7 +312,7 @@ fun TransactionItemExpanded(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         QuickActionChip(
-                            label = "Copy Ref",
+                            label = "Reference",
                             icon = Icons.Rounded.ContentCopy,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -306,12 +325,22 @@ fun TransactionItemExpanded(
                             )
                         }
                         QuickActionChip(
-                            label = "Copy Amount",
+                            label = "Amount",
                             icon = Icons.Rounded.AttachMoney,
                             modifier = Modifier.weight(1f)
                         ) {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             clipboard.setText(AnnotatedString(formattedAmount))
+                        }
+                        tx.recipientPhone?.takeIf { !it.contains("*") }?.let { phone ->
+                            QuickActionChip(
+                                label = "Mobile Number",
+                                Icons.Rounded.Phone,
+                                Modifier.weight(1f)
+                            ) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                clipboard.setText(AnnotatedString(phone))
+                            }
                         }
                         QuickActionChip(
                             label = "Change",

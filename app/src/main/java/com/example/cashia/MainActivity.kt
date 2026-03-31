@@ -77,10 +77,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DailyDigestWorker
+import com.example.cashia.models.MonthlySummaryWorker
 import com.example.cashia.models.NotificationHelper
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.models.WeeklySummaryWorker
 import com.example.cashia.ui.calendar.CalendarScreen
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.Subtitles
@@ -108,8 +110,10 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         handlePermissions()
         PesaTimeConfiguration.initialize(this)
-        NotificationHelper.createNotificationChannel(this)
+        NotificationHelper.createAllChannels(this)
         DailyDigestWorker.schedule(this)
+        WeeklySummaryWorker.schedule(this)
+        MonthlySummaryWorker.schedule(this)
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
             isUnlocked.value = true

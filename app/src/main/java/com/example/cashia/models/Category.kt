@@ -21,6 +21,8 @@ enum class TransactionCategory(val label: String, val emoji: String, val isSyste
     INSURANCE("Insurance", "🛡️"),
     INVESTMENT("Investment", "📈"),
     BALANCE_INQUIRY("Balance Inquiry", "🔍"),
+    FULIZA_LOAN("Fuliza Loan", "💰"),
+    FULIZA_REPAYMENT("Fuliza Repayment", "💰"),
     OTHER("Other", "📦");
 
 }
