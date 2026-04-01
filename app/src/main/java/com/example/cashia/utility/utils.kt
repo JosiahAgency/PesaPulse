@@ -126,11 +126,9 @@ object PesaTimeConfiguration {
 
 
     fun screenSubtitle(route: String?): String = when (route) {
-        AppDestinations.Dashboard.route -> "Your financial pulse, today"
-        AppDestinations.Transactions.route -> "Full transaction history"
-        AppDestinations.Calendar.route -> "Activity across the month"
-        AppDestinations.Analytics.route -> "Breakdown by period & category"
-        AppDestinations.Projections.route -> "30-day balance forecast"
+        AppDestinations.Dashboard.route -> "Your Financial Pulse, Today"
+        AppDestinations.Transactions.route -> "Full Transaction History"
+        AppDestinations.Calendar.route -> "Activity Across The Month"
         else -> ""
     }
 
@@ -138,10 +136,7 @@ object PesaTimeConfiguration {
         AppDestinations.Dashboard.route -> "Home"
         AppDestinations.Transactions.route -> "History"
         AppDestinations.Calendar.route -> "Calendar"
-        AppDestinations.Analytics.route -> "Insights"
-        AppDestinations.Projections.route -> "Forecast"
         AppDestinations.Settings.route -> "Settings"
-        AppDestinations.Categories.route -> "Categories"
         else -> "PesaPulse"
     }
 

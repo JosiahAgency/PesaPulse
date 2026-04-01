@@ -6,15 +6,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -24,8 +21,6 @@ import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +37,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 
@@ -53,14 +47,11 @@ fun EnhancedSearchBar(
     query: String,
     expanded: Boolean,
     recentSearches: List<String>,
-    allCategories: List<ResolvedCategory>,
-    selectedCategory: String?,
     dateRangeStart: LocalDate?,
     dateRangeEnd: LocalDate?,
     onQueryChange: (String) -> Unit,
     onExpandChange: (Boolean) -> Unit,
     onRecentPick: (String) -> Unit,
-    onCategoryPick: (String?) -> Unit,
     onDateRange: (LocalDate?, LocalDate?) -> Unit,
 ) {
     val context = LocalContext.current
@@ -133,8 +124,7 @@ fun EnhancedSearchBar(
                 ) {
                     Icon(
                         Icons.Rounded.FilterList, null, modifier = Modifier.size(18.dp),
-                        tint = if (selectedCategory != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 }
 
@@ -203,64 +193,6 @@ fun EnhancedSearchBar(
                                 term,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Category filter dropdown
-        AnimatedVisibility(visible = showCategoryDropdown) {
-            GlassySurface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Text(
-                        "FILTER BY CATEGORY",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        fontWeight = FontWeight.Black
-                    )
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = selectedCategory == null,
-                                onClick = { onCategoryPick(null); showCategoryDropdown = false },
-                                label = {
-                                    Text(
-                                        "✦ All",
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            )
-                        }
-                        items(allCategories, key = { it.id }) { cat ->
-                            FilterChip(
-                                selected = selectedCategory == cat.id,
-                                onClick = {
-                                    onCategoryPick(if (selectedCategory == cat.id) null else cat.id)
-                                    showCategoryDropdown = false
-                                },
-                                label = {
-                                    Text(
-                                        "${cat.emoji} ${cat.label}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(
-                                        alpha = 0.15f
-                                    ),
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
-                                )
                             )
                         }
                     }

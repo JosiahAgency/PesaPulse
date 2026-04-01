@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -35,7 +34,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -50,14 +48,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
-import com.example.cashia.ui.reusedElements.PendingReviewBadge
-import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.weekBucket
@@ -78,20 +72,17 @@ private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
 @Composable
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
-    categoryViewModel: CategoryViewModel,
 ) {
     val state = viewModel.state
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
     var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
     var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
-    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val today = remember { LocalDate.now() }
     val parsedAll by remember(state.allTransactions) {
         derivedStateOf {
@@ -111,10 +102,7 @@ fun TransactionScreen(
                 val textMatch = searchQuery.isBlank() ||
                         tx.recipient.contains(searchQuery, ignoreCase = true) ||
                         tx.id.contains(searchQuery, ignoreCase = true) ||
-                        (amountQuery != null && tx.amount == amountQuery) ||
-                        categoryMap[tx.category]?.label?.contains(
-                            searchQuery, ignoreCase = true
-                        ) == true
+                        (amountQuery != null && tx.amount == amountQuery)
                 val catMatch =
                     selectedCategoryFilter == null || tx.category == selectedCategoryFilter
                 val dateMatch = (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
@@ -162,65 +150,13 @@ fun TransactionScreen(
     val showBackToTop by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 3 }
     }
-    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
-    val pendingCount by viewModel.pendingReviewCount.collectAsState()
-    val nextPending by viewModel.nextPending.collectAsState()
-    var showUnmatchedModal by remember { mutableStateOf(false) }
-    var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     val allUnmatched by viewModel.allUnmatched.collectAsState()
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
-    var hasAutoOpened by remember { mutableStateOf(false) }
-    LaunchedEffect(pendingCount) {
-        if (pendingCount > 0 && !hasAutoOpened) {
-            modalTargetSms = nextPending
-            hasAutoOpened = true
-            showUnmatchedModal = true
-        }
-    }
 
-    LaunchedEffect(nextPending) {
-        if (nextPending != null) showUnmatchedModal = false
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
-            swipeCategoryTarget?.let { tx ->
-                CategoryPickerSheet(
-                    allCategories = allCategories,
-                    currentCategoryId = tx.category,
-                    onPick = { newId ->
-                        categoryViewModel.updateTransactionCategory(tx.id, newId)
-                        swipeCategoryTarget = null
-                    },
-                    onDismiss = { swipeCategoryTarget = null },
-                    categoryViewModel = categoryViewModel
-                )
-            }
-
-            if (showUnmatchedModal) {
-                modalTargetSms?.let { target ->
-                    UnmatchedSmsModal(
-                        sms = target,
-                        pendingCount = pendingCount,
-                        allCategories = allCategories,
-                        categoryViewModel = categoryViewModel,
-                        onSave = { type, category ->
-                            viewModel.saveManualTransaction(target, type, category)
-                            modalTargetSms = nextPending
-                        },
-                        onSkip = {
-                            viewModel.markSkipped(target.id)
-                            modalTargetSms = nextPending
-                        },
-                        onDismiss = { showUnmatchedModal = false }
-                    )
-                }
-            }
-            LaunchedEffect(nextPending) {
-                if (nextPending == null) showUnmatchedModal = false
-            }
-
             PullToRefreshBox(
                 isRefreshing = state.isLoading,
                 onRefresh = { viewModel.refreshFromSms() },
@@ -232,7 +168,7 @@ fun TransactionScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp
+                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
@@ -241,14 +177,11 @@ fun TransactionScreen(
                             query = searchQuery,
                             expanded = searchExpanded,
                             recentSearches = recentSearches,
-                            allCategories = allCategories,
-                            selectedCategory = selectedCategoryFilter,
                             dateRangeStart = dateRangeStart,
                             dateRangeEnd = dateRangeEnd,
                             onQueryChange = { searchQuery = it },
                             onExpandChange = { searchExpanded = it },
                             onRecentPick = { searchQuery = it; searchExpanded = false },
-                            onCategoryPick = { selectedCategoryFilter = it },
                             onDateRange = { s, e -> dateRangeStart = s; dateRangeEnd = e },
                         )
                         Spacer(Modifier.height(8.dp))
@@ -259,11 +192,9 @@ fun TransactionScreen(
                         item(key = "filter_pills") {
                             ActiveFilterPills(
                                 searchQuery = searchQuery,
-                                selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
                                 dateRangeStart = dateRangeStart,
                                 dateRangeEnd = dateRangeEnd,
                                 onClearSearch = { searchQuery = "" },
-                                onClearCategory = { selectedCategoryFilter = null },
                                 onClearDate = { dateRangeStart = null; dateRangeEnd = null }
                             )
                             Spacer(Modifier.height(8.dp))
@@ -275,16 +206,6 @@ fun TransactionScreen(
                                 if (hasFilters) "No matching transactions" else "No History Found"
                             )
                         }
-                    }
-                    item(key = "pending_badge") {
-                        PendingReviewBadge(
-                            count = pendingCount,
-                            onClick = {
-                                modalTargetSms = nextPending
-                                showUnmatchedModal = true
-                            },
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
                     }
                     if (allUnmatched.isNotEmpty()) {
                         item(key = "unmatched_header") {
@@ -324,27 +245,6 @@ fun TransactionScreen(
                                 }
                             }
                         }
-                        if (unmatchedExpanded) {
-                            items(
-                                items = allUnmatched,
-                                key = { "unmatched_${it.id}" }
-                            ) { sms ->
-                                UnmatchedSmsItem(
-                                    sms = sms,
-                                    onReviewClick = { clicked ->
-                                        modalTargetSms =
-                                            clicked    // open modal for this specific message
-                                        showUnmatchedModal = true
-                                    }
-                                )
-                            }
-                            item(key = "unmatched_divider") {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 12.dp),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                )
-                            }
-                        }
                     }
                     weekGroups.forEach { weekGroup ->
                         val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
@@ -362,7 +262,6 @@ fun TransactionScreen(
                                 }
                             )
                         }
-
                         if (!bucketCollapsed) {
                             weekGroup.days.forEach { dayGroup ->
                                 items(
@@ -371,8 +270,6 @@ fun TransactionScreen(
                                 ) { tx ->
                                     TransactionItem(
                                         tx,
-                                        allCategories,
-                                        categoryViewModel,
                                         hapticFeedback = haptic,
                                     )
                                 }

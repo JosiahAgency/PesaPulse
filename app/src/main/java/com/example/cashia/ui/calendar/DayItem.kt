@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,13 +32,11 @@ fun CalendarDayItem(
     isCurrentMonth: Boolean,
     hasIncome: Boolean,
     hasExpense: Boolean,
-    hasUpcoming: Boolean = false,
-    isOverdueUpcoming: Boolean = false,
     onDateSelected: (LocalDate) -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val isToday = day == today
-    val isFuture = day != null && day.isAfter(today)
+    day != null && day.isAfter(today)
 
     Box(
         modifier = Modifier
@@ -78,7 +75,6 @@ fun CalendarDayItem(
                         isSelected -> Color.White
                         isToday -> colorScheme.primary
                         !isCurrentMonth -> colorScheme.onSurface.copy(alpha = 0.25f)
-                        isFuture && hasUpcoming -> colorScheme.onSurface
                         else -> colorScheme.onSurface
                     }
                 )
@@ -90,20 +86,6 @@ fun CalendarDayItem(
                 ) {
                     if (hasIncome) IndicatorDot(if (isSelected) Color.White else MaterialTheme.colorScheme.tertiary)
                     if (hasExpense) IndicatorDot(if (isSelected) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.error)
-                    if (hasUpcoming) {
-                        val dotSize = if (!hasIncome && !hasExpense) 4.dp else 3.dp
-                        val upcomingColor = when {
-                            isSelected -> Color.White.copy(alpha = if (!hasIncome && !hasExpense) 1f else 0.8f)
-                            isOverdueUpcoming -> colorScheme.error
-                            else -> colorScheme.primary
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(dotSize)
-                                .clip(RoundedCornerShape(1.dp))
-                                .background(upcomingColor)
-                        )
-                    }
                 }
             }
         }

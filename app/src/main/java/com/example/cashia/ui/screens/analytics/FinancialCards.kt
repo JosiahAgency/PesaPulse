@@ -117,7 +117,7 @@ fun SmallMetricCard(
     isSelected: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
-    val backgroundAlpha by animateFloatAsState(if (isSelected) 0.12f else 0.04f, label = "bg")
+    val backgroundAlpha by animateFloatAsState(0.12f, label = "bg")
 
     GlassySurface(
         modifier = modifier.height(100.dp)

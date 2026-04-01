@@ -45,7 +45,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,24 +74,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.cashia.models.CategoryViewModel
-import com.example.cashia.models.DailyDigestWorker
-import com.example.cashia.models.MonthlySummaryWorker
-import com.example.cashia.models.NotificationHelper
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.models.UpcomingViewModel
-import com.example.cashia.models.WeeklySummaryWorker
 import com.example.cashia.ui.calendar.CalendarScreen
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.LockPlaceholder
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.screens.allTransactions.TransactionScreen
-import com.example.cashia.ui.screens.analytics.AnalyticsScreen
-import com.example.cashia.ui.screens.category.CategoryManagementScreen
 import com.example.cashia.ui.screens.dashboard.DashboardScreen
-import com.example.cashia.ui.screens.projections.ProjectionScreen
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
@@ -110,10 +100,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         handlePermissions()
         PesaTimeConfiguration.initialize(this)
-        NotificationHelper.createAllChannels(this)
-        DailyDigestWorker.schedule(this)
-        WeeklySummaryWorker.schedule(this)
-        MonthlySummaryWorker.schedule(this)
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
             isUnlocked.value = true
@@ -136,9 +122,6 @@ class MainActivity : FragmentActivity() {
 
     private fun handlePermissions() {
         val permissions = mutableListOf(Manifest.permission.READ_SMS)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
         val permissionsToRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
@@ -173,8 +156,6 @@ fun PesaPulseApp() {
             AppDestinations.Dashboard,
             AppDestinations.Transactions,
             AppDestinations.Calendar,
-            AppDestinations.Analytics,
-            AppDestinations.Projections,
         )
     }
 
@@ -183,23 +164,10 @@ fun PesaPulseApp() {
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
-    val categoryViewModel: CategoryViewModel = viewModel(
-        factory = CategoryViewModel.provideFactory(context)
-    )
-    val upcomingViewModel: UpcomingViewModel = viewModel(
-        factory = UpcomingViewModel.provideFactory(context)
-    )
     val settingsViewModel: SettingsViewModel = viewModel()
-
     val isDark by settingsViewModel.darkTheme.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-
-    LaunchedEffect(Unit) {
-        sharedViewModel.onNewTransactionsSynced = { newTxs ->
-            newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -207,7 +175,6 @@ fun PesaPulseApp() {
             .background(MaterialTheme.colorScheme.background)
     ) {
         BackgroundGlow(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-//        AnimatedMeshBg()
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -270,8 +237,7 @@ fun PesaPulseApp() {
                 }
             },
             bottomBar = {
-                if (currentRoute != AppDestinations.Settings.route &&
-                    currentRoute != AppDestinations.Categories.route
+                if (currentRoute != AppDestinations.Settings.route
                 ) {
                     GlassNavigationBar(haptic, navController, navItems)
                 }
@@ -283,38 +249,20 @@ fun PesaPulseApp() {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(AppDestinations.Dashboard.route) {
-                    DashboardScreen(viewModel = sharedViewModel, categoryViewModel)
+                    DashboardScreen(viewModel = sharedViewModel)
                 }
                 composable(AppDestinations.Transactions.route) {
-                    TransactionScreen(viewModel = sharedViewModel, categoryViewModel)
+                    TransactionScreen(viewModel = sharedViewModel)
                 }
                 composable(AppDestinations.Calendar.route) {
-                    CalendarScreen(
-                        viewModel = sharedViewModel,
-                        categoryViewModel,
-                        upcomingViewModel
-                    )
-                }
-                composable(AppDestinations.Analytics.route) {
-                    AnalyticsScreen(categoryViewModel, sharedViewModel)
-                }
-                composable(AppDestinations.Projections.route) {
-                    ProjectionScreen(
-                        sharedViewModel,
-                        upcomingViewModel,
-                        categoryViewModel
-                    )
+                    CalendarScreen(viewModel = sharedViewModel)
                 }
                 composable(AppDestinations.Settings.route) {
                     SettingsScreen(
                         isDarkTheme = isDark,
                         onToggleTheme = settingsViewModel::setDarkTheme,
-                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek,
-                        navController
+                        onFirstDayOfWeekChange = settingsViewModel::setFirstDayOfWeek
                     )
-                }
-                composable(AppDestinations.Categories.route) {
-                    CategoryManagementScreen(categoryViewModel)
                 }
             }
         }
@@ -360,7 +308,7 @@ fun GlassNavigationBar(
 
     Surface(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .padding(horizontal = 16.dp)
             .navigationBarsPadding()
             .fillMaxWidth()
             .height(72.dp),

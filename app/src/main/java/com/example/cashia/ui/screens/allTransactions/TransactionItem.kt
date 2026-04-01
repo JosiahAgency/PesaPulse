@@ -20,13 +20,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachMoney
-import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Phone
@@ -44,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,12 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.models.ResolvedCategory
-import com.example.cashia.models.TransactionCategory
 import com.example.cashia.ui.reusedElements.Subtitles
-import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.formatAmount
@@ -70,52 +62,21 @@ import com.example.cashia.utility.formatAmount
 @Composable
 fun TransactionItem(
     tx: MpesaTransactions,
-    allCategories: List<ResolvedCategory>,
-    categoryViewModel: CategoryViewModel,
     hapticFeedback: HapticFeedback,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var currentCategoryId by remember(tx.id) { mutableStateOf(tx.category) }
-
-    val resolvedCategory = remember(currentCategoryId, allCategories) {
-        allCategories.find { it.id == currentCategoryId }
-            ?: ResolvedCategory(
-                TransactionCategory.OTHER.name,
-                TransactionCategory.OTHER.label,
-                TransactionCategory.OTHER.emoji,
-                isSystem = true
-            )
-    }
-
-    var showCategoryPicker by remember { mutableStateOf(false) }
-
-    if (showCategoryPicker) {
-        CategoryPickerSheet(
-            allCategories = allCategories,
-            currentCategoryId = currentCategoryId,
-            onPick = { newId ->
-                currentCategoryId = newId
-                categoryViewModel.updateTransactionCategory(tx.id, newId)
-                showCategoryPicker = false
-            },
-            onDismiss = { showCategoryPicker = false },
-            categoryViewModel = categoryViewModel,
-        )
-    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(20.dp))
     ) {
         TransactionItemExpanded(
             tx = tx,
-            resolvedCategory = resolvedCategory,
             expanded = expanded,
             hapticFeedback = hapticFeedback,
             onExpandToggle = { expanded = !expanded },
-            onCategoryTap = { showCategoryPicker = true }
         )
     }
 }
@@ -123,16 +84,13 @@ fun TransactionItem(
 @Composable
 fun TransactionItemExpanded(
     tx: MpesaTransactions,
-    resolvedCategory: ResolvedCategory,
     expanded: Boolean,
     hapticFeedback: HapticFeedback,
     onExpandToggle: () -> Unit,
-    onCategoryTap: () -> Unit
 ) {
     val isIncome = tx.type == "income"
     val isExpense = tx.type == "expense"
     val colorScheme = MaterialTheme.colorScheme
-    val glassAlpha = if (colorScheme.background.luminance() > 0.5f) 0.6f else 0.4f
     val accentColor = when {
         isIncome -> colorScheme.tertiary
         isExpense -> colorScheme.error
@@ -141,7 +99,6 @@ fun TransactionItemExpanded(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    // Pre-format amount once — avoids repeated string building in text composition
     val formattedAmount = remember(tx.amount) { formatAmount(tx.amount) }
     val amountPrefix = if (isIncome) "+" else if (isExpense) "-" else ""
 
@@ -164,7 +121,7 @@ fun TransactionItemExpanded(
                 )
             },
         shape = RoundedCornerShape(20.dp),
-        color = colorScheme.surface.copy(alpha = glassAlpha),
+        color = accentColor.copy(alpha = 0.12f),
         border = BorderStroke(
             if (expanded) 1.dp else 0.5.dp,
             if (expanded) accentColor.copy(alpha = 0.3f) else colorScheme.onSurface.copy(alpha = 0.08f)
@@ -177,14 +134,6 @@ fun TransactionItemExpanded(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .background(accentColor.copy(alpha = 0.12f), CircleShape)
-                ) {
-                    Text(resolvedCategory.emoji, fontSize = 21.sp)
-                }
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -210,35 +159,10 @@ fun TransactionItemExpanded(
                         )
                     }
                     Spacer(Modifier.height(4.dp))
-                    Subtitles("${tx.displayDate} · ${tx.displayTime}")
-                    Surface(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable(onClick = onCategoryTap),
-                        shape = RoundedCornerShape(8.dp),
-                        color = accentColor.copy(alpha = 0.08f),
-                        border = BorderStroke(0.5.dp, accentColor.copy(alpha = 0.2f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(resolvedCategory.emoji, fontSize = 11.sp)
-                            Text(
-                                resolvedCategory.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = accentColor.copy(alpha = 0.8f),
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Icon(
-                                Icons.Rounded.Edit, null,
-                                modifier = Modifier.size(9.dp),
-                                tint = accentColor.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
+                    Subtitles(
+                        "${tx.displayDate} · ${tx.displayTime}",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
                 }
                 Column(
                     horizontalAlignment = Alignment.End,
@@ -257,7 +181,10 @@ fun TransactionItemExpanded(
                         ),
                         color = accentColor
                     )
-                    Subtitles(PesaTimeConfiguration.CURRENCY)
+                    Subtitles(
+                        PesaTimeConfiguration.CURRENCY,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
                 }
                 Spacer(Modifier.width(6.dp))
                 Icon(
@@ -341,15 +268,6 @@ fun TransactionItemExpanded(
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 clipboard.setText(AnnotatedString(phone))
                             }
-                        }
-                        QuickActionChip(
-                            label = "Change",
-                            icon = Icons.Rounded.Category,
-                            modifier = Modifier.weight(1f),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                        ) {
-                            onCategoryTap()
                         }
                     }
                 }

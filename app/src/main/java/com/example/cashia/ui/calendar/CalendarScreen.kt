@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,14 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
-import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -65,17 +61,11 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun CalendarScreen(
     viewModel: TransactionsViewModel,
-    categoryViewModel: CategoryViewModel,
-    upcomingViewModel: UpcomingViewModel
 ) {
     val today = remember { LocalDate.now() }
-
     var selectedDate by remember { mutableStateOf(today) }
     val state = viewModel.state
     val hapticFeedback = LocalHapticFeedback.current
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val upcomingAll by upcomingViewModel.upcoming.collectAsState()
-
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -85,13 +75,6 @@ fun CalendarScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val upcomingForDay by remember(upcomingAll, selectedDate) {
-        derivedStateOf {
-            val dateStr = selectedDate.toString()
-            upcomingAll.filter { it.dueDate == dateStr }
-        }
-    }
-
     val transactionsForDay by remember(state.allTransactions, selectedDate) {
         derivedStateOf {
             val dateStr = selectedDate.toString()
@@ -99,73 +82,64 @@ fun CalendarScreen(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            if (selectedDate != today) {
-                ExtendedFloatingActionButton(
-                    onClick = { selectedDate = today },
-                    icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
-                    text = { Text("Today", fontWeight = FontWeight.SemiBold) },
-                    containerColor = Color.Transparent,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp
-                    ),
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(brush = primaryGradient())
-                )
-            }
-        }
-    ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = state.isLoading,
-            onRefresh = { viewModel.refreshFromSms() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding()
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    FinancialOverviewCards(state.allTransactions, selectedDate)
-                }
-                item {
-                    FullMonthCalendar(
-                        state.allTransactions,
-                        selectedDate,
-                        upcomingAll
-                    ) { selectedDate = it }
-                }
-                item {
-                    TransactionFrequencyCard(state.allTransactions, selectedDate)
-                }
-                item {
-                    UpcomingTransactionsSection(
-                        upcomingViewModel = upcomingViewModel,
-                        categoryViewModel = categoryViewModel,
-                        allCategories = allCategories
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            floatingActionButton = {
+                if (selectedDate != today) {
+                    ExtendedFloatingActionButton(
+                        onClick = { selectedDate = today },
+                        icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
+                        text = { Text("Today", fontWeight = FontWeight.SemiBold) },
+                        containerColor = Color.Transparent,
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 0.dp,
+                            focusedElevation = 0.dp,
+                            hoveredElevation = 0.dp
+                        ),
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(brush = primaryGradient())
                     )
                 }
-                item {
-                    DayHeader(selectedDate = selectedDate)
-                }
-                if (transactionsForDay.isEmpty() && upcomingForDay.isEmpty()) {
-                    item { EmptyStateMessage("No Transactions On This Day") }
-                } else {
-                    items(transactionsForDay, key = { it.id }) { tx ->
-                        TransactionItem(
-                            tx,
-                            allCategories,
-                            categoryViewModel,
-                            hapticFeedback,
-                        )
+            }
+        ) { padding ->
+            PullToRefreshBox(
+                isRefreshing = state.isLoading,
+                onRefresh = { viewModel.refreshFromSms() },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding()
+            ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        FinancialOverviewCards(state.allTransactions, selectedDate)
+                    }
+                    item {
+                        FullMonthCalendar(
+                            state.allTransactions,
+                            selectedDate,
+                        ) { selectedDate = it }
+                    }
+                    item {
+                        DayHeader(selectedDate = selectedDate)
+                    }
+                    if (transactionsForDay.isEmpty()) {
+                        item { EmptyStateMessage("No Transactions On This Day") }
+                    } else {
+                        items(transactionsForDay, key = { it.id }) { tx ->
+                            TransactionItem(
+                                tx,
+                                hapticFeedback,
+                            )
+                        }
                     }
                 }
             }

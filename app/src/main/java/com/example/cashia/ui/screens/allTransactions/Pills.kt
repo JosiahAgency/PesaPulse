@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.models.ResolvedCategory
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -33,11 +32,9 @@ private val SHORT_DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd 
 @Composable
 fun ActiveFilterPills(
     searchQuery: String,
-    selectedCategory: ResolvedCategory?,
     dateRangeStart: LocalDate?,
     dateRangeEnd: LocalDate?,
     onClearSearch: () -> Unit,
-    onClearCategory: () -> Unit,
     onClearDate: () -> Unit
 ) {
     LazyRow(
@@ -47,14 +44,6 @@ fun ActiveFilterPills(
         if (searchQuery.isNotBlank()) {
             item {
                 FilterPill(label = "\"$searchQuery\"", onDismiss = onClearSearch)
-            }
-        }
-        if (selectedCategory != null) {
-            item {
-                FilterPill(
-                    label = "${selectedCategory.emoji} ${selectedCategory.label}",
-                    onDismiss = onClearCategory
-                )
             }
         }
         if (dateRangeStart != null || dateRangeEnd != null) {

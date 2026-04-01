@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.screens.WeeklyCalendar
@@ -53,14 +51,13 @@ import java.time.temporal.TemporalAdjusters
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel,
+    viewModel: TransactionsViewModel
 ) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
     val state = viewModel.state
     val hapticFeedback = LocalHapticFeedback.current
     var isListExpanded by remember { mutableStateOf(true) }
-    val allCategories by categoryViewModel.allCategories.collectAsState()
 
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
     val startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
@@ -98,10 +95,10 @@ fun DashboardScreen(
             TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
             TimeScope.WEEK -> "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))} " +
                     "– ${
-                endOfWeek.format(
-                    DateTimeFormatter.ofPattern("dd MMM yyyy")
-                )
-            }"
+                        endOfWeek.format(
+                            DateTimeFormatter.ofPattern("dd MMM yyyy")
+                        )
+                    }"
             TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
             TimeScope.YEAR -> selectedDate.format(DateTimeFormatter.ofPattern("yyyy"))
             else -> ""
@@ -176,13 +173,10 @@ fun DashboardScreen(
                         }
                     )
                 }
-
                 if (transactionsForScope.isNotEmpty() && isListExpanded) {
                     items(transactionsForScope, key = { it.id }) { tx ->
                         TransactionItem(
                             tx,
-                            allCategories,
-                            categoryViewModel,
                             hapticFeedback,
                         )
                     }

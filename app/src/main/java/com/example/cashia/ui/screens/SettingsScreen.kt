@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarViewWeek
-import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
@@ -33,7 +32,6 @@ import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
@@ -81,16 +78,12 @@ fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
     onFirstDayOfWeekChange: (DayOfWeek) -> Unit,
-    navController: NavController
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
     val settingsViewModel: SettingsViewModel = viewModel()
-
-    // Collect all state flows from ViewModel — this is the single source of truth
-    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
     val is24Hour by settingsViewModel.use24Hour.collectAsState()
 
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
@@ -240,7 +233,7 @@ fun SettingsScreen(
     }
 
     // Format reminder time display based on current 24h/12h preference
-    val reminderTimeText = remember(
+    remember(
         PesaTimeConfiguration.reminderHour,
         PesaTimeConfiguration.reminderMinute,
         is24Hour
@@ -255,22 +248,6 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Categories
-        item {
-            SettingsSection(title = "Categories") {
-                SettingsActionItem(
-                    label = "Manage Categories",
-                    subtitle = "Add or update categories",
-                    icon = Icons.Rounded.Category,
-                    onClick = {
-                        PesaActions.playSuccess(haptic)
-                        navController.navigate("categories")
-                    },
-                    isExpanded = false
-                )
-            }
-        }
-
         // Appearance
         item {
             SettingsSection(title = "Appearance") {
@@ -336,37 +313,6 @@ fun SettingsScreen(
                             settingsViewModel.setBiometric(false)
                         }
                     }
-                )
-            }
-        }
-
-        // Notifications
-        item {
-            SettingsSection("Notifications") {
-                SettingsToggleItem(
-                    label = "Daily Payment Digest",
-                    subtitle = "Get a morning summary of upcoming bills and dues.",
-                    icon = Icons.Rounded.NotificationsActive,
-                    checked = isDailyDigestOn,
-                    onCheckedChange = { enable ->
-                        PesaActions.playClick(haptic)
-                        // ✅ FIX: setDailyDigestEnabled now safely handles WorkManager internally
-                        settingsViewModel.setDailyDigestEnabled(enable)
-                        if (enable) {
-                            Toast.makeText(
-                                context,
-                                "Reminders set for $reminderTimeText",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                )
-                SettingsActionItem(
-                    label = "Reminder Time",
-                    subtitle = "Currently set for $reminderTimeText",
-                    icon = Icons.Rounded.Schedule,
-                    onClick = { showTimePicker = true },
-                    isExpanded = false
                 )
             }
         }

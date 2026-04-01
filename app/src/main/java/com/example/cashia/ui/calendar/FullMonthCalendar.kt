@@ -118,11 +118,11 @@ fun FullMonthCalendar(
         inc to exp
     }
 
-    val upcomingDates = remember(upcomingTransactions) {
+    remember(upcomingTransactions) {
         upcomingTransactions.map { it.dueDate }.toHashSet()
     }
     val todayStr = remember { LocalDate.now().toString() }
-    val overdueUpcomingDates = remember(upcomingTransactions, todayStr) {
+    remember(upcomingTransactions, todayStr) {
         upcomingTransactions.filter { it.dueDate < todayStr }.map { it.dueDate }.toHashSet()
     }
     val today = remember { LocalDate.now() }
@@ -232,10 +232,6 @@ fun FullMonthCalendar(
                                     isCurrentMonth = day?.month == monthOfPage.month,
                                     hasIncome = day != null && incomeDates.contains(day.toString()),
                                     hasExpense = day != null && expenseDates.contains(day.toString()),
-                                    hasUpcoming = day != null && upcomingDates.contains(day.toString()),
-                                    isOverdueUpcoming = day != null && overdueUpcomingDates.contains(
-                                        day.toString()
-                                    ),
                                     onDateSelected
                                 )
                             }
@@ -252,8 +248,6 @@ fun FullMonthCalendar(
                 LegendItem(colorScheme.tertiary, "Income")
                 Spacer(Modifier.width(16.dp))
                 LegendItem(colorScheme.error, "Expense")
-                Spacer(Modifier.width(16.dp))
-                LegendDiamond(colorScheme.primary, "Scheduled")
             }
             Spacer(Modifier.height(4.dp))
         }
