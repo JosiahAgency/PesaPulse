@@ -319,7 +319,7 @@ private fun InlineDetailRow(
         Text(
             label,
             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             fontWeight = FontWeight.Bold
         )
         Text(

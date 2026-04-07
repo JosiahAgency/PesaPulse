@@ -156,6 +156,7 @@ fun PesaPulseApp() {
             AppDestinations.Dashboard,
             AppDestinations.Transactions,
             AppDestinations.Calendar,
+            AppDestinations.Settings,
         )
     }
 
@@ -215,32 +216,11 @@ fun PesaPulseApp() {
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
                         ),
-                        actions = {
-                            IconButton(onClick = {
-                                PesaActions.playClick(haptic)
-                                navController.navigate(AppDestinations.Settings.route) {
-                                    launchSingleTop = true
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                    restoreState = true
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
                     )
                 }
             },
             bottomBar = {
-                if (currentRoute != AppDestinations.Settings.route
-                ) {
-                    GlassNavigationBar(haptic, navController, navItems)
-                }
+                GlassNavigationBar(haptic, navController, navItems)
             }
         ) { innerPadding ->
             NavHost(
