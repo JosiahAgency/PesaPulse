@@ -93,6 +93,7 @@ fun TransactionScreen(
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val today = remember { LocalDate.now() }
+
     val parsedAll by remember(state.allTransactions) {
         derivedStateOf {
             state.allTransactions.map { tx ->
@@ -113,12 +114,14 @@ fun TransactionScreen(
                         tx.id.contains(searchQuery, ignoreCase = true) ||
                         (amountQuery != null && tx.amount == amountQuery) ||
                         categoryMap[tx.category]?.label?.contains(
-                            searchQuery, ignoreCase = true
+                            searchQuery,
+                            ignoreCase = true
                         ) == true
                 val catMatch =
                     selectedCategoryFilter == null || tx.category == selectedCategoryFilter
-                val dateMatch = (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
-                        (dateRangeEnd == null || !p.date.isAfter(dateRangeEnd!!))
+                val dateMatch =
+                    (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
+                            (dateRangeEnd == null || !p.date.isAfter(dateRangeEnd!!))
                 textMatch && catMatch && dateMatch
             }
         }
@@ -136,7 +139,6 @@ fun TransactionScreen(
                         .sortedByDescending { it.key }
                         .map { (date, dayRows) ->
                             val txs = dayRows.map { it.tx }
-                            // Single pass: accumulate income + expense simultaneously
                             var inc = 0.0
                             var exp = 0.0
                             for (tx in txs) {
@@ -150,41 +152,62 @@ fun TransactionScreen(
                                 transactions = txs,
                                 dayIncome = inc,
                                 dayExpense = exp,
-                                dayBalance = txs.lastOrNull { it.balance > 0 }?.balance
-                                    ?: 0.0
+                                dayBalance = txs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
                             )
                         }
                     WeekGroup(bucket, days)
                 }
         }
     }
+
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
-    val showBackToTop by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 3 }
-    }
+    val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
     var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
+
     val pendingCount by viewModel.pendingReviewCount.collectAsState()
     val nextPending by viewModel.nextPending.collectAsState()
-    var showUnmatchedModal by remember { mutableStateOf(false) }
-    var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     val allUnmatched by viewModel.allUnmatched.collectAsState()
+
+    var showUnmatchedModal by remember { mutableStateOf(false) }
+    // Holds whichever specific SMS the modal is currently showing.
+    // Kept separate from nextPending so the user can tap any item in the list to open it.
+    var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
+    // ── Auto-open: show modal once on first load if there are pending items ──
+    // Uses a flag so navigating away and back doesn't re-open it.
     var hasAutoOpened by remember { mutableStateOf(false) }
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
-            modalTargetSms = nextPending
             hasAutoOpened = true
+            modalTargetSms = nextPending   // snapshot current value; nextPending may change later
             showUnmatchedModal = true
         }
     }
 
+    // ── After save/skip: advance to the next pending item ────────────────────
+    // When the ViewModel emits a new nextPending we update the modal target
+    // WITHOUT closing it, so the user flows through the queue seamlessly.
+    // If nextPending becomes null the queue is empty — close the modal.
     LaunchedEffect(nextPending) {
-        if (nextPending != null) showUnmatchedModal = false
+        if (showUnmatchedModal) {
+            if (nextPending == null) {
+                showUnmatchedModal = false
+                modalTargetSms = null
+            } else {
+                // Only advance automatically when the modal is already open (i.e. user
+                // just saved/skipped). If they opened a specific item from the list we
+                // don't want to replace it mid-interaction — that's handled by onSave/onSkip.
+                // So we only update here when modalTargetSms is null (queue just emptied)
+                // or matches the previous nextPending (we were in auto-advance mode).
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
+
+            // ── Category swipe sheet ──────────────────────────────────────
             swipeCategoryTarget?.let { tx ->
                 CategoryPickerSheet(
                     allCategories = allCategories,
@@ -198,27 +221,44 @@ fun TransactionScreen(
                 )
             }
 
+            // ── Unmatched SMS modal ───────────────────────────────────────
+            // Guard on both showUnmatchedModal AND modalTargetSms != null so we
+            // never render the modal with a null target (which would crash or show stale data).
             if (showUnmatchedModal) {
                 modalTargetSms?.let { target ->
                     UnmatchedSmsModal(
-                        sms = target,
-                        pendingCount = pendingCount,
-                        allCategories = allCategories,
-                        categoryViewModel = categoryViewModel,
-                        onSave = { type, category ->
+                        target,
+                        pendingCount,
+                        allCategories,
+                        categoryViewModel,
+                        { type, category ->
                             viewModel.saveManualTransaction(target, type, category)
-                            modalTargetSms = nextPending
+                            val next = nextPending?.takeIf { it.id != target.id }
+                            if (next != null) {
+                                modalTargetSms = next
+                            } else {
+                                showUnmatchedModal = false
+                                modalTargetSms = null
+                            }
                         },
-                        onSkip = {
+                        {
                             viewModel.markSkipped(target.id)
-                            modalTargetSms = nextPending
+                            val next = nextPending?.takeIf { it.id != target.id }
+                            if (next != null) {
+                                modalTargetSms = next
+                            } else {
+                                showUnmatchedModal = false
+                                modalTargetSms = null
+                            }
                         },
-                        onDismiss = { showUnmatchedModal = false }
+                        {
+                            showUnmatchedModal = false
+                        },
+                        {
+                            showUnmatchedModal = false
+                        }
                     )
                 }
-            }
-            LaunchedEffect(nextPending) {
-                if (nextPending == null) showUnmatchedModal = false
             }
 
             PullToRefreshBox(
@@ -236,6 +276,7 @@ fun TransactionScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
+                    // ── Search bar ────────────────────────────────────────
                     item(key = "search") {
                         EnhancedSearchBar(
                             query = searchQuery,
@@ -253,6 +294,8 @@ fun TransactionScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                     }
+
+                    // ── Active filter pills ───────────────────────────────
                     val hasFilters = selectedCategoryFilter != null ||
                             dateRangeStart != null || searchQuery.isNotBlank()
                     if (hasFilters) {
@@ -269,6 +312,8 @@ fun TransactionScreen(
                             Spacer(Modifier.height(8.dp))
                         }
                     }
+
+                    // ── Empty state ───────────────────────────────────────
                     if (filtered.isEmpty() && !state.isLoading) {
                         item(key = "empty") {
                             EmptyStateMessage(
@@ -276,16 +321,22 @@ fun TransactionScreen(
                             )
                         }
                     }
+
+                    // ── Pending review badge ──────────────────────────────
                     item(key = "pending_badge") {
                         PendingReviewBadge(
                             count = pendingCount,
                             onClick = {
+                                // Always snap to the current nextPending when tapping the badge,
+                                // not whatever stale modalTargetSms might be sitting there.
                                 modalTargetSms = nextPending
                                 showUnmatchedModal = true
                             },
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
+
+                    // ── Unmatched SMS list ────────────────────────────────
                     if (allUnmatched.isNotEmpty()) {
                         item(key = "unmatched_header") {
                             Surface(
@@ -324,17 +375,17 @@ fun TransactionScreen(
                                 }
                             }
                         }
+
                         if (unmatchedExpanded) {
-                            items(
-                                items = allUnmatched,
-                                key = { "unmatched_${it.id}" }
-                            ) { sms ->
+                            items(items = allUnmatched, key = { "unmatched_${it.id}" }) { sms ->
                                 UnmatchedSmsItem(
-                                    sms = sms,
-                                    onReviewClick = { clicked ->
-                                        modalTargetSms =
-                                            clicked    // open modal for this specific message
+                                    sms,
+                                    { clicked ->
+                                        modalTargetSms = clicked
                                         showUnmatchedModal = true
+                                    },
+                                    { clicked ->
+                                        viewModel.markIgnored(clicked)
                                     }
                                 )
                             }
@@ -346,6 +397,8 @@ fun TransactionScreen(
                             }
                         }
                     }
+
+                    // ── Transactions grouped by week then day ─────────────
                     weekGroups.forEach { weekGroup ->
                         val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
 
@@ -358,17 +411,15 @@ fun TransactionScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     collapsedBuckets = if (bucketCollapsed)
                                         collapsedBuckets - weekGroup.bucket
-                                    else collapsedBuckets + weekGroup.bucket
+                                    else
+                                        collapsedBuckets + weekGroup.bucket
                                 }
                             )
                         }
 
                         if (!bucketCollapsed) {
                             weekGroup.days.forEach { dayGroup ->
-                                items(
-                                    items = dayGroup.transactions,
-                                    key = { it.id }
-                                ) { tx ->
+                                items(items = dayGroup.transactions, key = { it.id }) { tx ->
                                     TransactionItem(
                                         tx,
                                         allCategories,
@@ -382,6 +433,8 @@ fun TransactionScreen(
                 }
             }
         }
+
+        // ── Back-to-top FAB ───────────────────────────────────────────────
         AnimatedVisibility(
             visible = showBackToTop,
             enter = fadeIn() + slideInVertically { it },

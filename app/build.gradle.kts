@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.pesapulse"
-    compileSdk = 36
+    compileSdk = 37
 
 
     defaultConfig {
@@ -15,7 +15,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "2.1.3"
+        versionName = "2.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -73,11 +73,11 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
 
     // Other UI/Utility
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.core:core-splashscreen:1.2.0")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.biometric)
 
     // Testing
     testImplementation(libs.junit)

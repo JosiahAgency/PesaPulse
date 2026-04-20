@@ -8,12 +8,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.room.Entity
-import androidx.room.PrimaryKey
 import com.example.cashia.AppDatabase
+import com.example.cashia.utility.ParserLearningService
 import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.RichParseResult
 import com.example.cashia.utility.TimeScope
+import com.example.cashia.utility.parseMpesaMessageRich
 import com.example.cashia.utility.syncTransactions
+import com.example.cashia.utility.toUnmatchedSms
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,19 +54,11 @@ data class SummaryData(
     val endDate: LocalDate
 )
 
-@Entity(tableName = "UnmatchedSms")
-data class UnmatchedSms(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val rawBody: String,
-    val receivedAt: Long = System.currentTimeMillis(),
-    val reviewed: Boolean = false
-)
-
-
 @OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val database = AppDatabase.getDatabase(context)
     private val dao = database.transactionDao()
+    private val unmatchedDao = database.unmatchedSmsDao()
 
     var state by mutableStateOf(TransactionState())
         private set
@@ -73,19 +67,22 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         private set
 
     var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
-    val pendingReviewCount: StateFlow<Int> = database.unmatchedSmsDao()
+    val pendingReviewCount: StateFlow<Int> = unmatchedDao
         .pendingCountFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-    val nextPending: StateFlow<UnmatchedSms?> = database.unmatchedSmsDao()
+    val nextPending: StateFlow<UnmatchedSms?> = unmatchedDao
         .nextPendingFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-    val allUnmatched: StateFlow<List<UnmatchedSms>> = database.unmatchedSmsDao()
+    val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
         observeDatabase()
-        refreshFromSms()
+        viewModelScope.launch {
+            refreshFromSms()
+            triggerLearningPipeline()
+        }
         reCategorizeExisting()
     }
 
@@ -94,7 +91,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     fun onPermissionGranted() {
-        refreshFromSms()
+        viewModelScope.launch { refreshFromSms() }
     }
 
     private fun observeDatabase() {
@@ -113,24 +110,67 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     fun refreshFromSms() {
+        viewModelScope.launch {
+            refreshFromSmsInternal()
+        }
+    }
+
+    suspend fun refreshFromSmsInternal() {
+        withContext(Dispatchers.Main) { state = state.copy(isLoading = true) }
+        try {
+            val beforeIds = withContext(Dispatchers.IO) { dao.getAllTransactionIdsOnce() }
+            withContext(Dispatchers.IO) { syncTransactions(context, database) }
+            val afterIds = withContext(Dispatchers.IO) { dao.getAllTransactionIdsOnce() }
+            val newIds = afterIds - beforeIds.toSet()
+            if (newIds.isNotEmpty()) {
+                val newTxs =
+                    withContext(Dispatchers.IO) { dao.getTransactionsByIds(newIds.toList()) }
+                withContext(Dispatchers.Main) {
+                    onNewTransactionsSynced?.invoke(newTxs)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PesaPulse", "SMS Sync failed", e)
+        } finally {
+            withContext(Dispatchers.Main) { state = state.copy(isLoading = false) }
+        }
+    }
+
+    fun triggerLearningPipeline() {
         viewModelScope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) { state = state.copy(isLoading = true) }
             try {
-                val beforeIds = dao.getAllTransactionIdsOnce()
-                syncTransactions(context, database)
-                val afterIds = dao.getAllTransactionIdsOnce()
-                val newIds = afterIds - beforeIds.toSet()
-                if (newIds.isNotEmpty()) {
-                    val newTxs = dao.getTransactionsByIds(newIds.toList())
-                    withContext(Dispatchers.Main) {
-                        onNewTransactionsSynced?.invoke(newTxs)
+                val summary = ParserLearningService.reprocessOutdated(database)
+                if (summary.promoted > 0) {
+                    Log.i(
+                        "Learning Pipeline",
+                        "Promoted ${summary.promoted} messages to transactions"
+                    )
+                }
+                ParserLearningService.clusterByStructure(unmatchedDao)
+            } catch (e: Exception) {
+                Log.e("Learning Pipeline", "Pipeline error", e)
+            }
+        }
+    }
+
+    fun processIncomingSms(rawBody: String, receivedAt: Long = System.currentTimeMillis()) {
+        viewModelScope.launch(Dispatchers.IO) {
+            when (val result = parseMpesaMessageRich(rawBody, receivedAt)) {
+                is RichParseResult.FullMatch -> {
+                    dao.insertTransactions(listOf(result.transaction))
+                }
+
+                is RichParseResult.LowConfidence, is RichParseResult.Unmatched -> {
+                    result.toUnmatchedSms(rawBody, receivedAt)?.let { row ->
+                        val existing = unmatchedDao.getByHash(row.contentHash)
+                        if (existing.isEmpty()) {
+                            unmatchedDao.insert(row)
+                        }
                     }
                 }
 
-            } catch (e: Exception) {
-                Log.e("PesaPulse", "Sync failed", e)
-            } finally {
-                withContext(Dispatchers.Main) { state = state.copy(isLoading = false) }
+                is RichParseResult.Irrelevant -> {/*Discard*/
+                }
             }
         }
     }
@@ -177,16 +217,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             } ${now.year}",
             isLoading = false
         )
-    }
-
-    fun filterByCategory(category: String?) {
-        state = state.copy(selectedCategory = category)
-    }
-
-    fun updateCategory(txId: String, newCategory: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.updateCategory(txId, newCategory)
-        }
     }
 
     fun reCategorizeExisting() {
@@ -236,38 +266,48 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     fun saveManualTransaction(source: UnmatchedSms, type: String, category: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val transaction = when (val r = parseMpesaMessage(source.rawBody, source.receivedAt)) {
-                is ParseResult.Success -> r.transactions.copy(type = type, category = category)
-                else -> MpesaTransactions(
-                    id = "MANUAL_${source.id}_${source.receivedAt}",
-                    amount = 0.0,
-                    transactionCost = 0.0,
-                    recipient = "Unknown (manual entry)",
-                    date = Instant.ofEpochMilli(source.receivedAt)  // ← use receivedAt, not LocalDate.now()
-                        .atZone(ZoneId.systemDefault())
-                        .toLocalDate()
-                        .toString(),
-                    time = java.time.LocalTime.now()
-                        .format(
-                            DateTimeFormatter.ofPattern(
-                                "h:mm a",
-                                Locale.US
-                            )
-                        ),
-                    timestamp = source.receivedAt,
-                    type = type,
-                    balance = 0.0,
-                    category = category
-                )
-            }
-            database.transactionDao().insertTransactions(listOf(transaction))
-            database.unmatchedSmsDao().delete(source)
+            val transaction =
+                when (val r = parseMpesaMessageRich(source.rawBody, source.receivedAt)) {
+                    is RichParseResult.FullMatch -> r.transaction.copy(
+                        type = type,
+                        category = category
+                    )
+
+                    else -> MpesaTransactions(
+                        id = "MANUAL_${source.id}_${source.receivedAt}",
+                        amount = 0.0,
+                        transactionCost = 0.0,
+                        recipient = "Manual Entry",
+                        date = Instant.ofEpochMilli(source.receivedAt)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .toString(),
+                        time = java.time.LocalTime.now()
+                            .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US)),
+                        timestamp = source.receivedAt,
+                        type = type,
+                        balance = 0.0,
+                        category = category
+                    )
+                }
+            dao.insertTransactions(listOf(transaction))
+            unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
         }
     }
 
     fun markSkipped(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            database.unmatchedSmsDao().markReviewed(id)
+            unmatchedDao.setStatus(id, SmsStatus.SKIPPED)
+        }
+    }
+
+    fun markIgnored(sms: UnmatchedSms) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (sms.contentHash.isNotBlank()) {
+                unmatchedDao.ignoreAllByHash(sms.contentHash)
+            } else {
+                unmatchedDao.setStatus(sms.id, SmsStatus.IGNORED)
+            }
         }
     }
 

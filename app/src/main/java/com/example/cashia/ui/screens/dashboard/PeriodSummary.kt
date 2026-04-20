@@ -47,8 +47,9 @@ fun PeriodSummaryCard(
         ) {
             // Period scope tabs
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 listOf(
                     TimeScope.DAY,
