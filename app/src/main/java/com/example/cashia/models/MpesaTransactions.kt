@@ -122,6 +122,7 @@ data class MpesaTransactions(
     val recipientPhone: String? by lazy {
         phoneRegex.find(recipient)?.value?.trim()
     }
+
     @get:androidx.room.Ignore
     val displayTime: String by lazy {
         try {
@@ -310,7 +311,7 @@ fun parseMpesaMessage(
 
             regexFulizaBorrow.find(message) != null -> {
                 val match = regexFulizaBorrow.find(message)!!
-                val (id, amount, fee, outstandingTotal, dueDate) = match.destructured
+                val (id, amount, fee, _, dueDate) = match.destructured
 
                 val txDate = Instant.ofEpochMilli(smsReceivedAt)
                     .atZone(ZoneId.systemDefault()).toLocalDate().toString()
@@ -322,7 +323,9 @@ fun parseMpesaMessage(
                 val dueDateFormatted = try {
                     LocalDate.parse(dueDate, DateTimeFormatter.ofPattern(datePattern))
                         .format(DateTimeFormatter.ofPattern("d MMM yy"))
-                } catch (e: Exception) { dueDate }
+                } catch (e: Exception) {
+                    dueDate
+                }
 
                 ParseResult.Success(
                     MpesaTransactions(

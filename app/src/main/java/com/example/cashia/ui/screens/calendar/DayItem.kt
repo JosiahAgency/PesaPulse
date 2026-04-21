@@ -1,4 +1,4 @@
-package com.example.cashia.ui.calendar
+package com.example.cashia.ui.screens.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

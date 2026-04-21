@@ -1,4 +1,4 @@
-package com.example.cashia.ui.calendar
+package com.example.cashia.ui.screens.calendar
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
@@ -59,6 +59,7 @@ import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSe
 import com.example.cashia.ui.theme.primaryGradient
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)

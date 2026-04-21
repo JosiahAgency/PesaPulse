@@ -83,7 +83,7 @@ import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.models.WeeklySummaryWorker
-import com.example.cashia.ui.calendar.CalendarScreen
+import com.example.cashia.ui.screens.calendar.CalendarScreen
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.LockPlaceholder

@@ -91,7 +91,7 @@ fun TransactionItem(
 
     if (showCategoryPicker) {
         CategoryPickerSheet(
-            allCategories = allCategories,
+            allCategories,
             currentCategoryId = currentCategoryId,
             onPick = { newId ->
                 currentCategoryId = newId
@@ -113,9 +113,9 @@ fun TransactionItem(
             tx = tx,
             resolvedCategory = resolvedCategory,
             expanded = expanded,
-            hapticFeedback = hapticFeedback,
-            onExpandToggle = { expanded = !expanded },
-            onCategoryTap = { showCategoryPicker = true }
+            hapticFeedback,
+            { expanded = !expanded },
+            { showCategoryPicker = true }
         )
     }
 }
@@ -359,7 +359,7 @@ fun TransactionItemExpanded(
 }
 
 @Composable
-private fun QuickActionChip(
+fun QuickActionChip(
     label: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
@@ -386,7 +386,7 @@ private fun QuickActionChip(
 }
 
 @Composable
-private fun InlineDetailRow(
+fun InlineDetailRow(
     label: String,
     value: String,
     bold: Boolean = false,
