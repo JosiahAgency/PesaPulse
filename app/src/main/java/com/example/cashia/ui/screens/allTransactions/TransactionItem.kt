@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens.allTransactions
 
+import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -140,10 +141,12 @@ fun TransactionItemExpanded(
     }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    context.applicationContext as Application
 
     // Pre-format amount once — avoids repeated string building in text composition
     val formattedAmount = remember(tx.amount) { formatAmount(tx.amount) }
     val amountPrefix = if (isIncome) "+" else if (isExpense) "-" else ""
+
 
     Surface(
         modifier = Modifier

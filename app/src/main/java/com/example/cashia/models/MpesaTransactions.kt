@@ -124,16 +124,18 @@ data class MpesaTransactions(
     }
 
     @get:androidx.room.Ignore
-    val displayTime: String by lazy {
-        try {
-            val storedTime = LocalTime.parse(
-                time, DateTimeFormatter.ofPattern("h:mm a", Locale.US)
-            )
-            storedTime.format(PesaTimeConfiguration.getTimeFormatter())
-        } catch (e: Exception) {
-            time
+    val displayTime: String
+        get() {
+            return try {
+                val storedTime = LocalTime.parse(
+                    time,
+                    DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+                )
+                storedTime.format(PesaTimeConfiguration.getTimeFormatter())
+            } catch (e: Exception) {
+                time
+            }
         }
-    }
 
     @get:androidx.room.Ignore
     val displayDate: String by lazy {
@@ -268,7 +270,7 @@ fun parseMpesaMessage(
                         "income",
                         balance,
                         transactionCost,
-                        forcedCategory = TransactionCategory.RECEIVED.name
+                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name
                     )
                 )
             }
@@ -286,7 +288,7 @@ fun parseMpesaMessage(
                         "income",
                         balance,
                         transactionCost,
-                        forcedCategory = TransactionCategory.RECEIVED.name
+                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name
                     )
                 )
             }

@@ -50,11 +50,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -62,16 +63,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.ALL_EMOJIS
-import com.example.cashia.utility.EmojiPicker
-import com.example.cashia.utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.ResolvedCategory
+import com.example.cashia.utility.ALL_EMOJIS
+import com.example.cashia.utility.EmojiPicker
+import com.example.cashia.utility.PesaActions
 import java.util.UUID
 
-
-// ── Inline edit state ────────────────────────────────────────────────────────
 
 private data class InlineEditState(
     val categoryId: String,
@@ -79,6 +78,13 @@ private data class InlineEditState(
     val emoji: String,
     val keywords: String
 )
+
+private sealed class PickerItem {
+    data class SectionLabel(val text: String) : PickerItem()
+    data class CustomCat(val cat: ResolvedCategory) : PickerItem()
+    data class SystemParent(val cat: ResolvedCategory) : PickerItem()
+    data class SystemChild(val cat: ResolvedCategory) : PickerItem()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +98,6 @@ fun CategoryPickerSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colorScheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
-    rememberCoroutineScope()
 
     // Inline editing state
     var inlineEdit by remember { mutableStateOf<InlineEditState?>(null) }
@@ -104,6 +109,17 @@ fun CategoryPickerSheet(
     var newEmoji by remember { mutableStateOf("📦") }
     var newKeywords by remember { mutableStateOf("") }
     var newError by remember { mutableStateOf<String?>(null) }
+
+    val pickerItems = remember(allCategories) {
+        buildList {
+            val customCats = allCategories.filter { !it.isSystem }
+            categoryViewModel.topLevelCategories(allCategories).filter { it.isSystem }
+            if (customCats.isNotEmpty()) {
+                add(PickerItem.SectionLabel("YOUR CATEGORIES"))
+                customCats.forEach { add(PickerItem.SystemChild(it)) }
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -149,7 +165,7 @@ fun CategoryPickerSheet(
                     else colorScheme.primary.copy(alpha = 0.1f)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(12.dp, 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -212,7 +228,6 @@ fun CategoryPickerSheet(
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable {
-                                    // cycle through suggestions
                                     val idx = ALL_EMOJIS.indexOf(newEmoji)
                                     newEmoji = ALL_EMOJIS.getOrElse(idx + 1) { ALL_EMOJIS.first() }
                                 },
@@ -311,108 +326,80 @@ fun CategoryPickerSheet(
             // ── Category list ─────────────────────────────────────────────
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                // System categories (non-editable labels, but show clearly)
-                val systemCats = allCategories.filter { it.isSystem }
-                val customCats = allCategories.filter { !it.isSystem }
-
-                if (customCats.isNotEmpty()) {
-                    item {
-                        Text(
-                            "YOUR CATEGORIES",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.primary.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                items(pickerItems, key = { item ->
+                    when (item) {
+                        is PickerItem.SectionLabel -> "label_${item.text}"
+                        is PickerItem.CustomCat -> "custom_${item.cat.id}"
+                        is PickerItem.SystemParent -> "sparent_${item.cat.id}"
+                        is PickerItem.SystemChild -> "schild_${item.cat.id}"
                     }
-
-                    items(customCats, key = { "custom_${it.id}" }) { cat ->
-                        PickerCategoryRow(
-                            cat = cat,
-                            isSelected = cat.id == currentCategoryId,
-                            isEditing = inlineEdit?.categoryId == cat.id,
-                            inlineEdit = inlineEdit,
-                            onPick = { onPick(cat.id) },
-                            onEdit = {
-                                inlineEdit = if (inlineEdit?.categoryId == cat.id) null
-                                else InlineEditState(cat.id, cat.label, cat.emoji, "")
-                                showAddForm = false
-                            },
-                            onEditChange = { inlineEdit = it },
-                            onSave = { state ->
-                                categoryViewModel.saveInlineCategory(
-                                    CustomCategory(
-                                        id = state.categoryId,
-                                        label = state.label.trim(),
-                                        emoji = state.emoji,
-                                        keywords = state.keywords.trim()
-                                    )
-                                )
-                                inlineEdit = null
-                            },
-                            onDelete = { deleteTarget = cat },
-                        )
-                    }
-
-                    item { Spacer(Modifier.height(4.dp)) }
-                }
-
-                item {
-                    Text(
-                        "BUILT-IN",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-
-                items(systemCats, key = { "sys_${it.id}" }) { cat ->
-                    val isSelected = cat.id == currentCategoryId
-                    val bgColor by animateColorAsState(
-                        if (isSelected) colorScheme.primary.copy(alpha = 0.1f)
-                        else colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        label = "catBg"
-                    )
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onPick(cat.id) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = bgColor,
-                        border = if (isSelected)
-                            BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.35f)) else null
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(cat.emoji, fontSize = 20.sp)
+                }) { item ->
+                    when (item) {
+                        is PickerItem.SectionLabel -> {
                             Text(
-                                cat.label,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold
-                                    else FontWeight.Normal
-                                ),
-                                modifier = Modifier.weight(1f)
+                                item.text,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(vertical = 4.dp)
                             )
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Rounded.Check, null,
-                                    tint = colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
+                        }
+
+                        is PickerItem.CustomCat -> {
+                            PickerCategoryRow(
+                                item.cat,
+                                item.cat.id == currentCategoryId,
+                                inlineEdit?.categoryId == item.cat.id,
+                                inlineEdit,
+                                { onPick(item.cat.id) },
+                                {
+                                    inlineEdit =
+                                        if (inlineEdit?.categoryId == item.cat.id) null else InlineEditState(
+                                            item.cat.id,
+                                            item.cat.label,
+                                            item.cat.emoji,
+                                            ""
+                                        )
+                                    showAddForm = false
+                                },
+                                { inlineEdit = it },
+                                { state ->
+                                    categoryViewModel.saveInlineCategory(
+                                        CustomCategory(
+                                            state.categoryId,
+                                            state.label.trim(),
+                                            state.emoji,
+                                            state.keywords.trim()
+                                        )
+                                    )
+                                    inlineEdit = null
+                                },
+                                { deleteTarget = item.cat }
+                            )
+                        }
+
+                        is PickerItem.SystemParent -> {
+                            PickerSystemRow(
+                                item.cat,
+                                item.cat.id == currentCategoryId,
+                                false,
+                                { onPick(item.cat.id) }
+                            )
+                        }
+
+                        is PickerItem.SystemChild -> {
+                            PickerSystemRow(
+                                item.cat,
+                                item.cat.id == currentCategoryId,
+                                true,
+                                { onPick(item.cat.id) }
+                            )
                         }
                     }
                 }
-
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }
@@ -445,7 +432,88 @@ fun CategoryPickerSheet(
     }
 }
 
-// ── Single row in picker with inline expand-to-edit ───────────────────────────
+@Composable
+private fun PickerSystemRow(
+    cat: ResolvedCategory,
+    isSelected: Boolean,
+    isSubcategory: Boolean,
+    onPick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val lineColor = colorScheme.onSurface.copy(alpha = 0.1f)
+
+    val bgColor by animateColorAsState(
+        when {
+            isSelected -> colorScheme.primary.copy(alpha = 0.1f)
+            isSubcategory -> colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            else -> colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        },
+        label = "pickerBg"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isSubcategory) Modifier
+                    .padding(start = 16.dp)
+                    .drawBehind {
+                        val x = 6.dp.toPx()
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height / 2f),
+                            strokeWidth = 1.5.dp.toPx()
+                        )
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(x, size.height / 2f),
+                            end = Offset(x + 10.dp.toPx(), size.height / 2f),
+                            strokeWidth = 1.5.dp.toPx()
+                        )
+                    }
+                    .padding(start = 16.dp)
+                else Modifier
+            ), verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(if (isSubcategory) 12.dp else 14.dp))
+                .clickable(onClick = onPick),
+            shape = RoundedCornerShape(if (isSubcategory) 12.dp else 14.dp),
+            color = bgColor,
+            border = if (isSelected) BorderStroke(
+                1.dp,
+                colorScheme.primary.copy(alpha = 0.35f)
+            ) else null
+        ) {
+            Text(
+                cat.label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = when {
+                        isSelected -> FontWeight.Bold
+                        isSubcategory -> FontWeight.Normal
+                        else -> FontWeight.SemiBold
+                    },
+                    fontSize = if (isSubcategory) 13.sp else 15.sp
+                ),
+                color = colorScheme.onSurface.copy(
+                    alpha = if (isSubcategory) 0.65f else 0.85f
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            if (isSelected) {
+                Icon(
+                    Icons.Rounded.Check,
+                    null,
+                    tint = colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+
+}
 
 @Composable
 private fun PickerCategoryRow(
@@ -484,7 +552,7 @@ private fun PickerCategoryRow(
             }
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier.padding(14.dp, 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {

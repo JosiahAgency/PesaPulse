@@ -60,7 +60,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                     id = cat.name,
                     label = ov?.label ?: cat.label,
                     emoji = ov?.emoji ?: cat.emoji,
-                    isSystem = true
+                    isSystem = true,
+                    parentId = cat.parentId
                 )
             } + customs.map { it.toResolved() }
         }
@@ -74,7 +75,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                         id = cat.name,
                         label = cat.label,
                         emoji = cat.emoji,
-                        isSystem = true
+                        isSystem = true,
+                        parentId = cat.parentId
                     )
                 }
             )
@@ -230,6 +232,24 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
             txDao.updateCategory(txId, categoryId)
         }
     }
+
+    fun topLevelCategories(all: List<ResolvedCategory>): List<ResolvedCategory> =
+        all.filter { cat ->
+            if (cat.isSystem) {
+                TransactionCategory.entries.find { it.name == cat.id }?.parentId == null
+            } else {
+                cat.parentId == null
+            }
+        }
+
+    fun childCategories(all: List<ResolvedCategory>, parentId: String): List<ResolvedCategory> =
+        all.filter { cat ->
+            if (cat.isSystem) {
+                TransactionCategory.entries.find { it.name == cat.id }?.parentId == parentId
+            } else {
+                cat.parentId == parentId
+            }
+        }
 
     companion object {
         fun provideFactory(context: Context): ViewModelProvider.Factory =

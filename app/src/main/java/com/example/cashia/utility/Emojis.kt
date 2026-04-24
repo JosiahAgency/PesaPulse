@@ -91,6 +91,11 @@ val EMOJI_GROUPS = listOf(
         )
     ),
     EmojiGroup(
+        "Business", "📊", listOf(
+            "📊", "📈", "📉", "💼", "🏪", "🧑‍💼", "📦", "🧾", "🗂️", "💰"
+        )
+    ),
+    EmojiGroup(
         "Tech", "💻", listOf(
             "💻", "🖥️", "📱", "⌚", "🖱️", "⌨️", "🔌", "🔋", "📡", "🛜",
             "🖨️", "📷", "🎮", "🕹️", "📺", "📻", "🎧", "📸", "🔭", "🧑‍💻"
@@ -109,15 +114,19 @@ val EMOJI_GROUPS = listOf(
         )
     ),
     EmojiGroup(
-        "Nature", "🌿", listOf(
-            "🌿", "🌳", "🌸", "🌞", "🌧️", "⛄", "🔥", "⚡", "🌊", "🏔️",
-            "🌙", "⭐", "🌈", "🍀", "🐾", "🌺", "🦋", "🐝", "🌻", "🍂"
+        "Family & Support", "👨‍👩‍👧", listOf(
+            "👨‍👩‍👧", "👶", "👵", "👴", "🙏", "🤝", "💞", "🏠", "🫂", "❤️"
         )
     ),
     EmojiGroup(
-        "People", "👤", listOf(
-            "👤", "👨‍👩‍👧", "👴", "👶", "🧑‍💼", "👨‍⚕️", "👩‍🏫", "👨‍🍳", "🧑‍🔧", "👮",
-            "💆", "🤝", "👏", "🙏", "💪", "🫂", "👨‍👦", "👩‍👧", "🧑‍🤝‍🧑", "🏠"
+        "Entertainment", "🎉", listOf(
+            "🎉", "🎬", "🎵", "⚽", "🏀", "🎮", "🎤", "🎧", "🍿", "🎲"
+        )
+    ),
+
+    EmojiGroup(
+        "Personal", "🧍", listOf(
+            "🧍", "💇", "💅", "🧴", "🪞", "🛁", "🧼", "👕", "🧢", "🕶️"
         )
     ),
     EmojiGroup(
@@ -126,11 +135,15 @@ val EMOJI_GROUPS = listOf(
             "📢", "🔔", "🪖", "🚔", "🚒", "🚁", "🏴", "🎌", "🇰🇪", "🗺️"
         )
     ),
+    EmojiGroup(
+        "Bills & Utilities", "💡", listOf(
+            "💡", "🔌", "📶", "📡", "💧", "🚰", "🔥", "🏠", "📺", "🧾"
+        )
+    ),
 )
 
 val ALL_EMOJIS = EMOJI_GROUPS.flatMap { it.emojis }.distinct()
 
-// ── Recently used store (in-memory, reset per session) ───────────────────────
 private val recentlyUsed = mutableListOf<String>()
 
 fun recordEmojiUse(emoji: String) {

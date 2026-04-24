@@ -48,10 +48,25 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.CustomCategory
+import com.example.cashia.models.ResolvedCategory
+import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.TransactionCategory
+import com.example.cashia.utility.PesaActions
+
+private sealed class CatListItem {
+    data class Header(val title: String) : CatListItem()
+    data class CustomRow(val cat: CustomCategory) : CatListItem()
+    data class SystemParent(val cat: ResolvedCategory, val override: SystemCategoryOverride?) :
+        CatListItem()
+
+    data class SystemChild(val cat: ResolvedCategory, val override: SystemCategoryOverride?) :
+        CatListItem()
+
+    object Spacer : CatListItem()
+    object ReclassifyButton : CatListItem()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,11 +74,34 @@ fun CategoryManagementScreen(
     viewModel: CategoryViewModel
 ) {
     val customCategories by viewModel.customCategories.collectAsState()
+    val allCategories by viewModel.allCategories.collectAsState()
     val uiState = viewModel.uiState
     val haptic = LocalHapticFeedback.current
     val systemOverrides by viewModel.systemOverrides.collectAsState()
-
     var deleteTarget by remember { mutableStateOf<CustomCategory?>(null) }
+
+    val listItems = remember(customCategories, allCategories, systemOverrides) {
+        buildList {
+            add(CatListItem.ReclassifyButton)
+            if (customCategories.isNotEmpty()) {
+                add(CatListItem.Header("Your Custom Categories"))
+                customCategories.forEach { add(CatListItem.CustomRow(it)) }
+                add(CatListItem.Spacer)
+            }
+            add(CatListItem.Header("Built-in Categories"))
+            val topLevel = viewModel.topLevelCategories(allCategories).filter { it.isSystem }
+            topLevel.forEach { parent ->
+                TransactionCategory.entries.find { it.name == parent.id }
+                add(CatListItem.SystemParent(parent, systemOverrides[parent.id]))
+                val children =
+                    viewModel.childCategories(allCategories, parent.id).filter { it.isSystem }
+                children.forEach { child ->
+                    add(CatListItem.SystemChild(child, systemOverrides[child.id]))
+                }
+            }
+            add(CatListItem.Spacer)
+        }
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -81,102 +119,106 @@ fun CategoryManagementScreen(
             }
         }
     ) { padding ->
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // ── Re-classify button ─────────────────────────────────────
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                    border = BorderStroke(
-                        0.5.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                PesaActions.playSuccess(haptic)
-                                viewModel.reclassifyAll()
-                            }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.AutoFixHigh,
-                            null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Auto-classify transactions",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
+            items(listItems, key = { item ->
+                when (item) {
+                    is CatListItem.Header -> "header_${item.title}"
+                    is CatListItem.CustomRow -> "custom_${item.cat.id}"
+                    is CatListItem.SystemParent -> "parent_${item.cat.id}"
+                    is CatListItem.SystemChild -> "child_${item.cat.id}"
+                    is CatListItem.Spacer -> "spacer_${listItems.indexOf(item)}"
+                    CatListItem.ReclassifyButton -> "reclassify"
+                }
+            }) { item ->
+                when (item) {
+                    CatListItem.ReclassifyButton -> {
+                        Column {
+                            ReclassifyBanner(
+                                {
+                                    PesaActions.playSuccess(haptic)
+                                    viewModel.reclassifyAll()
+                                }
                             )
-                            Text(
-                                "Re-runs smart detection on uncategorized transactions",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
 
-            // ── Custom categories section ──────────────────────────────
-            if (customCategories.isNotEmpty()) {
-                item {
-                    SectionHeader("Your Custom Categories")
-                }
-                items(customCategories, key = { it.id }) { cat ->
-                    CustomCategoryRow(
-                        category = cat,
-                        onEdit = {
-                            PesaActions.playClick(haptic)
-                            viewModel.openEditSheet(cat)
-                        },
-                        onDelete = {
-                            PesaActions.playClick(haptic)
-                            deleteTarget = cat
-                        }
-                    )
-                }
-                item { Spacer(Modifier.height(8.dp)) }
-            }
+                    is CatListItem.Header -> SectionHeader(item.title)
+                    is CatListItem.CustomRow -> {
+                        CustomCategoryRow(
+                            item.cat,
+                            {
+                                PesaActions.playClick(haptic)
+                                viewModel.openEditSheet(item.cat)
+                            },
+                            {
+                                PesaActions.playClick(haptic)
+                                deleteTarget = item.cat
+                            }
+                        )
+                    }
 
-            // ── System categories section ──────────────────────────────
-            item { SectionHeader("Built-in Categories") }
-            items(TransactionCategory.entries) { cat ->
-                val override = systemOverrides[cat.name]
-                SystemCategoryRow(
-                    emoji = override?.emoji ?: cat.emoji,
-                    label = override?.label ?: cat.label,
-                    isModified = override != null,
-                    onEdit = {
-                        PesaActions.playClick(haptic)
-                        viewModel.openEditSystemSheet(cat)
-                    },
-                    onReset = if (override != null) {
-                        {
-                            PesaActions.playClick(haptic)
-                            viewModel.resetSystemCategory(cat)
-                        }
-                    } else null
-                )
-            }
+                    is CatListItem.SystemParent -> {
+                        val ov = item.override
+                        SystemCategoryRow(
+                            ov?.emoji ?: item.cat.emoji,
+                            ov?.label ?: item.cat.label,
+                            ov != null,
+                            false,
+                            {
+                                PesaActions.playClick(haptic)
+                                val enumCat =
+                                    TransactionCategory.entries.find { it.name == item.cat.id }
+                                        ?: return@SystemCategoryRow
+                                viewModel.openEditSystemSheet(enumCat)
+                            },
+                            if (ov != null) {
+                                {
+                                    PesaActions.playClick(haptic)
+                                    val enumCat =
+                                        TransactionCategory.entries.find { it.name == item.cat.id }
+                                            ?: return@SystemCategoryRow
+                                    viewModel.resetSystemCategory(enumCat)
+                                }
+                            } else null
+                        )
+                    }
 
-            item { Spacer(Modifier.height(80.dp)) }
+                    is CatListItem.SystemChild -> {
+                        val ov = item.override
+                        SystemCategoryRow(
+                            ov?.emoji ?: item.cat.emoji,
+                            ov?.label ?: item.cat.label,
+                            ov != null,
+                            true,
+                            {
+                                PesaActions.playClick(haptic)
+                                val enumCat =
+                                    TransactionCategory.entries.find { it.name == item.cat.id }
+                                        ?: return@SystemCategoryRow
+                                viewModel.openEditSystemSheet(enumCat)
+                            },
+                            if (ov != null) {
+                                {
+                                    PesaActions.playClick(haptic)
+                                    val enumCat =
+                                        TransactionCategory.entries.find { it.name == item.cat.id }
+                                            ?: return@SystemCategoryRow
+                                    viewModel.resetSystemCategory(enumCat)
+                                }
+                            } else null
+                        )
+                    }
+
+                    is CatListItem.Spacer -> Spacer(Modifier.height(6.dp))
+                }
+            }
         }
 
         // ── Bottom sheet: create / edit ────────────────────────────────
@@ -188,25 +230,23 @@ fun CategoryManagementScreen(
                 containerColor = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             ) {
-                val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(scrollState)
+                        .verticalScroll(rememberScrollState())
                         .navigationBarsPadding()
                 ) {
 
                     CategoryEditorSheet(
-                        uiState = uiState,
-                        onLabelChange = viewModel::onLabelChange,
-                        onEmojiChange = viewModel::onEmojiChange,
-                        onKeywordsChange = viewModel::onKeywordsChange,
-                        onSave = viewModel::saveCategory,
-                        onDismiss = viewModel::closeSheet,
-                        haptic = haptic
+                        uiState,
+                        viewModel::onLabelChange,
+                        viewModel::onEmojiChange,
+                        viewModel::onKeywordsChange,
+                        viewModel::saveCategory,
+                        viewModel::closeSheet,
+                        haptic
                     )
                 }
-
             }
         }
 
@@ -247,7 +287,39 @@ private fun SectionHeader(title: String) {
         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
         fontWeight = FontWeight.Black,
-        modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)
+        modifier = Modifier.padding(4.dp)
     )
+}
+
+@Composable
+private fun ReclassifyBanner(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Rounded.AutoFixHigh,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Auto-classify Transactions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
 }
 
