@@ -13,7 +13,7 @@ enum class TransactionCategory(
     // ── OUTGOING: TOP-LEVEL ───────────────────────────────────────────────
 
     FOOD("Food & Drinks", "🍽️"),
-    TRANSPORT("Matatu & Rides", "🚌"),
+    TRANSPORT("Transport", "🚌"),
     FUEL("Fuel & Petrol", "⛽"),
     CAR_MAINTENANCE("Car Maintenance", "🔧"),
     UTILITIES("Utilities & Bills", "💡"),
@@ -49,8 +49,11 @@ enum class TransactionCategory(
     // ── OUTGOING: TRANSPORT SUBCATEGORIES ────────────────────────────────
 
     RIDE_HAILING("Ride Hailing (Uber/Bolt)", "🚕", parentId = "TRANSPORT"),
-    MATATU("Matatu & Bus", "🚌", parentId = "TRANSPORT"),
+    PUBLIC_TRANSPORT("Matatu & Bus", "🚌", parentId = "TRANSPORT"),
     PARKING("Parking", "🅿️", parentId = "TRANSPORT"),
+    TOLLS("Tolls & Expressway", "🛣️", parentId = "TRANSPORT"),
+    TRAIN("Train / SGR", "🚆", parentId = "TRANSPORT"),
+    MATATU("Matatu & Bus", "🚌", parentId = "TRANSPORT"),
     SGR("SGR / Train", "🚆", parentId = "TRANSPORT"),
 
     // ── OUTGOING: FUEL SUBCATEGORIES ─────────────────────────────────────
@@ -107,6 +110,23 @@ data class CustomCategory(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * Stores explicit user overrides: when the user manually re-assigns a
+ * transaction to a different category we save the normalized recipient string
+ * so the same merchant is auto-assigned correctly in the future.
+ *
+ * [recipient] is stored lower-cased and trimmed so look-ups are O(1).
+ * [categoryId] is either a [TransactionCategory.name] or a [CustomCategory.id].
+ * [hitCount] lets the UI surface "frequently corrected" merchants for review.
+ */
+@Entity(tableName = "UserCorrections")
+data class UserCorrection(
+    @PrimaryKey val recipient: String,   // normalised: lowercase + trimmed
+    val categoryId: String,
+    val hitCount: Int = 1,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 data class ResolvedCategory(
     val id: String,          // TransactionCategory.name OR CustomCategory.id
     val label: String,
@@ -118,12 +138,43 @@ data class ResolvedCategory(
 fun TransactionCategory.toResolved() = ResolvedCategory(name, label, emoji, true, parentId)
 fun CustomCategory.toResolved() = ResolvedCategory(id, label, emoji, false, parentId)
 
+/**
+ * Guess the best category for a transaction.
+ *
+ * Resolution order (first match wins):
+ *   0. Exact user correction  (highest priority – explicit human feedback)
+ *   1. Custom category keywords
+ *   2. Income-specific rules
+ *   3. Airtime & Data
+ *   4. **Food** (groceries → delivery → fast food → restaurants)  ← moved UP
+ *   5. Parking                                                     ← strengthened
+ *   6. Fuel                                                        ← before generic transport
+ *   7. Car maintenance
+ *   8. Withdrawal
+ *   9. Savings & Banking
+ *  10. Fuliza repayment
+ *  11. Government & Tax
+ *  12. Insurance
+ *  13. Investment
+ *  14. Utilities
+ *  15. Education
+ *  16. Health
+ *  17. Tolls / Expressway
+ *  18. Transport (ride-hailing → public)
+ *  19. Entertainment
+ *  20. Shopping  ← now AFTER food; no risk of pizza bleeding into shopping
+ *  21. Send Money (person name heuristic)
+ *  22. OTHER
+ */
 fun guessCategory(
     recipient: String,
     type: String,
-    customCategories: List<CustomCategory> = emptyList()
+    customCategories: List<CustomCategory> = emptyList(),
+    userCorrections: Map<String, String> = emptyMap()
 ): String {
     val r = recipient.lowercase().trim()
+
+    userCorrections[r]?.let { return it }
 
     // ── 1. Check user custom categories first ──────────────────────────────
     for (custom in customCategories) {
@@ -137,31 +188,26 @@ fun guessCategory(
     // ── 2. Income types ────────────────────────────────────────────────────
     if (type == "income") {
         return when {
-            // Salary
             r.containsAny(
                 "salary", "payroll", "wage", "basic pay", "net pay",
                 "stipend", "allowance"
             ) -> TransactionCategory.SALARY.name
 
-            // Business / till
             r.containsAny(
                 "till", "paybill", "lipa na mpesa", "lipa mpesa",
-                "business", "merchant", "pos receipt", "buy goods"
+                "business", "merchant", "pos receipt"
             ) -> TransactionCategory.BUSINESS_INCOME.name
 
-            // Investment returns
             r.containsAny(
                 "dividend", "interest earned", "returns", "profit",
                 "unit trust", "mmf", "money market", "t-bill"
             ) -> TransactionCategory.INVESTMENT_RETURNS.name
 
-            // Government refunds / NHIF
             r.containsAny(
                 "nhif refund", "nssf refund", "kra refund", "tax refund",
                 "government refund", "county refund"
             ) -> TransactionCategory.GOVERNMENT_REFUND.name
 
-            // Loan disbursements
             r.containsAny(
                 "fuliza", "m-shwari loan", "mshwari loan",
                 "kcb m-pesa loan", "hustler fund"
@@ -172,18 +218,61 @@ fun guessCategory(
                 "timiza loan", "haraka loan", "berry loan"
             ) -> TransactionCategory.MOBILE_LOAN.name
 
-            // Generic received (person-to-person)
             else -> TransactionCategory.RECEIVED_MONEY.name
         }
     }
 
+    if (type == "expense" && r.contains("buy goods"))
+        return TransactionCategory.GROCERIES.name
+
     // ── 3. Airtime & Data ─────────────────────────────────────────────────
     if (r == "safaricom airtime" || r.containsAny(
-            "airtime", "data bundle", "safaricom data", "airtel data",
-            "telkom data", "faiba data", "youtube go", "bonga points",
-            "internet bundle"
+            "airtime", "data bundle", "safaricom", "airtel",
+            "telkom ", "faiba", "bonga points", "internet bundle"
         )
     ) return TransactionCategory.AIRTIME.name
+
+    // ── 4. FOOD  (checked before Shopping to avoid pizza → SHOPPING) ──────
+
+    // 4a. Supermarkets / grocery → GROCERIES  (strict, named merchants first)
+    if (r.containsAny(
+            "naivas", "quickmart", "carrefour", "chandarana",
+            "tuskys", "cleanshelf", "eastmatt",
+            "supermarket", "mini mart", "grocery", "duka"
+        )
+    ) return TransactionCategory.GROCERIES.name
+
+    // 4b. Delivery platforms → FOOD_DELIVERY
+    if (r.containsAny(
+            "glovo", "jumia food", "uber eats", "food delivery",
+            "chowdeck", "sendy food"
+        )
+    ) return TransactionCategory.FOOD_DELIVERY.name
+
+    // 4c. Named fast-food chains → FAST_FOOD  (explicit names, no generic "food")
+    if (r.containsAny(
+            "kfc", "pizza inn", "pizza hut", "chicken inn",
+            "galitos", "debonairs", "burger king", "subway",
+            "steers", "fishaways", "smokie", "nyama choma"
+        )
+    ) return TransactionCategory.FAST_FOOD.name
+
+    // 4d. Sit-down restaurants & cafes → RESTAURANTS
+    if (r.containsAny(
+            "java", "artcaffe", "dormans", "java house", "k'osewe",
+            "carnivore", "restaurant", "cafe", "coffee", "bakery",
+            "hotel dining", "food court", "canteen", "mess", "eatery",
+            "mama's", "brew bistro", "roast house"
+        )
+    ) return TransactionCategory.RESTAURANTS.name
+
+// ── 5. PARKING  (before Transport so it isn't swallowed by MATATU) ────
+    if (r.containsAny(
+            "parking", "e-parking", "county parking",
+            "nairobi parking", "parking fee", "parking ticket",
+            "evopay"
+        )
+    ) return TransactionCategory.PARKING.name
 
     // ── 4. FUEL — checked BEFORE generic transport ────────────────────────
     if (r.containsAny(
@@ -191,7 +280,7 @@ fun guessCategory(
             "shell", "energies", "kenol", "oil libya", "rubis",
             "lake oil", "hashi energy", "galana", "vivo energy",
             "petro station", "gulf energy", "total",
-            "petrol", "diesel", "fuel", "pump", "litre of fuel",
+            "petrol", "diesel", "fuel",
         )
     ) {
         return if (r.containsAny("diesel", "gasoil"))
@@ -212,9 +301,6 @@ fun guessCategory(
             // Tyres
             "tyre", "tire", "wheel alignment", "wheel balance",
             "puncture", "rim",
-            // Parking (own-car context, not ride-hail)
-            "parking fee", "parking ticket", "nairobi parking",
-            "county parking", "e-parking"
         )
     ) {
         return when {
@@ -234,7 +320,7 @@ fun guessCategory(
     // ── 6. WITHDRAWAL ─────────────────────────────────────────────────────
     if (r.containsAny(
             "withdraw", "agent", "atm", "pochi la biashara",
-            "cash out", "cashout", "mpesa agent"
+            "cash out", "cashout", "mpesa agent", "pochi"
         )
     ) return TransactionCategory.WITHDRAW.name
 
@@ -275,33 +361,6 @@ fun guessCategory(
             "nema", "kebs", "knec"
         )
     ) return TransactionCategory.GOVERNMENT.name
-
-    // ── 11. INSURANCE ─────────────────────────────────────────────────────
-    if (r.containsAny(
-            "insurance", "jubilee", "britam", "madison", "cic insurance",
-            "aaa insurance", "resolution insurance", "sanlam", "aar",
-            "heritage insurance", "pioneer assurance", "icea lion",
-            "liberty life", "old mutual", "ga insurance",
-            "motor insurance", "comprehensive", "third party"
-        )
-    ) {
-        // Vehicle insurance → under CAR_MAINTENANCE tree
-        return if (r.containsAny("motor", "vehicle", "car", "third party", "comprehensive"))
-            TransactionCategory.INSURANCE_CAR.name
-        else
-            TransactionCategory.INSURANCE.name
-    }
-
-    // ── 12. INVESTMENT ────────────────────────────────────────────────────
-    if (r.containsAny(
-            "nse", "nairobi securities", "cdsc", "cma",
-            "cytonn", "genghis", "stocksmaster", "zimele", "amana",
-            "britam asset", "old mutual invest", "cic asset",
-            "equity investment", "nabo", "sanlam invest",
-            "mmf", "money market", "unit trust", "t-bill", "treasury bill",
-            "treasury bond", "fixed deposit"
-        )
-    ) return TransactionCategory.INVESTMENT.name
 
     // ── 13. UTILITIES ─────────────────────────────────────────────────────
     if (r.containsAny("kplc", "kenya power", "umeme", "stima"))
@@ -362,79 +421,43 @@ fun guessCategory(
         )
     ) return TransactionCategory.GYM.name
 
+    // ── TOLLS / EXPRESSWAY ─────────────────────────────
+    if (r.containsAny(
+            "expressway", "toll", "nairobi expressway"
+        )
+    ) return TransactionCategory.TOLLS.name
+
     // ── 16. TRANSPORT (ride-hailing & public transit) ─────────────────────
     if (r.containsAny(
             // Ride-hailing
-            "uber", "bolt", "little cab", "littlecab", "faras",
-            "mondo ride", "wasili", "ndovu",
-            // Nairobi expressway / toll
-            "nairobi expressway", "westlands expressway", "mlolongo",
-            // SGR / train
-            "sgr", "madaraka express", "kenya railways",
-            // Ferry
-            "likoni ferry", "ferry",
-            // Airport
-            "jkia", "wilson airport", "airport transfer",
-            // Matatu / PSV keywords
-            "matatu", "psvs", "bus fare", "shuttle", "pss",
-            "citi hoppa", "kbs", "2nk", "forward travellers",
-            "easy coach", "modern coast", "dreamline",
-            "mash", "guardian angel", "trans nzoia"
+            "uber",
+            "bolt",
+            "little cab",
+            "faras",
+            "matatu",
+            "bus fare",
+            "shuttle",
+            "citi hoppa",
+            "kbs",
+            "2nk",
+            "easy coach",
+            "modern coast",
+            "likoni ferry",
+            "ferry",
+            "jkia",
+            "airport transfer"
         )
     ) {
         return when {
             r.containsAny("uber", "bolt", "little cab", "littlecab", "faras", "wasili", "ndovu")
                 -> TransactionCategory.RIDE_HAILING.name
 
-            r.containsAny("sgr", "madaraka", "kenya railways")
-                -> TransactionCategory.SGR.name
+            r.containsAny("sgr", "train")
+                -> TransactionCategory.TRAIN.name
 
-            r.containsAny(
-                "parking fee",
-                "parking ticket",
-                "nairobi parking",
-                "county parking",
-                "e-parking"
-            )
-                -> TransactionCategory.PARKING.name
-
-            else -> TransactionCategory.MATATU.name
+            else -> TransactionCategory.PUBLIC_TRANSPORT.name
         }
     }
-
-    // ── 17. FOOD ──────────────────────────────────────────────────────────
-    // Supermarkets → GROCERIES
-    if (r.containsAny(
-            "naivas", "quickmart", "carrefour", "chandarana", "tuskys",
-            "cleanshelf", "eastmatt", "highrise", "food plus",
-            "market", "supermarket", "grocery", "mini mart", "duka"
-        )
-    ) return TransactionCategory.GROCERIES.name
-
-    // Delivery platforms → FOOD_DELIVERY
-    if (r.containsAny(
-            "glovo", "jumia food", "uber eats", "food delivery",
-            "chowdeck", "sendy food"
-        )
-    ) return TransactionCategory.FOOD_DELIVERY.name
-
-    // Fast food chains → FAST_FOOD
-    if (r.containsAny(
-            "kfc", "pizza inn", "pizza hut", "chicken inn",
-            "galitos", "debonairs", "burger king", "subway",
-            "steers", "fishaways", "hardee's", "bfc", "smokie",
-            "nyama choma"
-        )
-    ) return TransactionCategory.FAST_FOOD.name
-
-    // Sit-down restaurants & cafes → RESTAURANTS
-    if (r.containsAny(
-            "java", "artcaffe", "dormans", "java house", "k'osewe",
-            "carnivore", "restaurant", "cafe", "coffee", "bakery",
-            "hotel dining", "food court", "canteen", "mess", "eatery",
-            "mama's", "brew bistro", "roast house"
-        )
-    ) return TransactionCategory.RESTAURANTS.name
 
     // ── 18. ENTERTAINMENT ─────────────────────────────────────────────────
     if (r.containsAny(

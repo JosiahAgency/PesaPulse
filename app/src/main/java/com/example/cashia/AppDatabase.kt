@@ -11,15 +11,17 @@ import com.example.cashia.daos.SystemCategoryOverrideDao
 import com.example.cashia.daos.TransactionDao
 import com.example.cashia.daos.UnmatchedSmsDao
 import com.example.cashia.daos.UpcomingTransactionDao
+import com.example.cashia.daos.UserCorrectionDao
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingTransaction
+import com.example.cashia.models.UserCorrection
 
 @Database(
-    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class],
-    version = 9,
+    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class],
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun systemCategoryOverrideDao(): SystemCategoryOverrideDao
     abstract fun upcomingTransactionDao(): UpcomingTransactionDao
     abstract fun unmatchedSmsDao(): UnmatchedSmsDao
+    abstract fun userCorrectionDao(): UserCorrectionDao
 
     companion object {
         @Volatile
@@ -192,6 +195,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `UserCorrections` (
+                        `recipient`   TEXT    NOT NULL,
+                        `categoryId`  TEXT    NOT NULL,
+                        `hitCount`    INTEGER NOT NULL DEFAULT 1,
+                        `updatedAt`   INTEGER NOT NULL,
+                        PRIMARY KEY(`recipient`)
+                    )
+                """
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -206,7 +225,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_5_6,
                     MIGRATION_6_7,
                     MIGRATION_7_8,
-                    MIGRATION_8_9
+                    MIGRATION_8_9,
+                    MIGRATION_9_10
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

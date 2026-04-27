@@ -36,6 +36,11 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
     private val txDao = db.transactionDao()
     private val overrideDao = db.systemCategoryOverrideDao()
 
+    // ── NEW: User corrections DAO ─────────────────────────────────────────
+    private val correctionDao = db.userCorrectionDao()
+
+    // ── Existing flows ────────────────────────────────────────────────────
+
     val customCategories: StateFlow<List<CustomCategory>> =
         categoryDao.getAllCustomCategories()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -45,15 +50,24 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
             .map { list -> list.associateBy { it.id } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /**
+     * Live map of user corrections: normalised recipient → categoryId.
+     * Used by [guessCategory] as the highest-priority lookup.
+     */
+    val userCorrections: StateFlow<Map<String, String>> =
+        correctionDao.getAllCorrections()
+            .map { list -> list.associate { it.recipient to it.categoryId } }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val allCategories: StateFlow<List<ResolvedCategory>> =
         combine(
             overrideDao.getAllOverrides()
-                .distinctUntilChanged()         // ← skip if overrides unchanged
+                .distinctUntilChanged()
                 .map { it.associateBy { o -> o.id } },
             categoryDao.getAllCustomCategories()
-                .distinctUntilChanged()         // ← skip if custom cats unchanged
+                .distinctUntilChanged()
         ) { overrides, customs ->
-            // Runs on IO via flowOn below
             TransactionCategory.entries.map { cat ->
                 val ov = overrides[cat.name]
                 ResolvedCategory(
@@ -81,9 +95,12 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                 }
             )
 
+    // ── UI state ──────────────────────────────────────────────────────────
 
     var uiState by mutableStateOf(CategoryManageState())
         private set
+
+    // ── Sheet open / close ────────────────────────────────────────────────
 
     fun openCreateSheet() {
         uiState = CategoryManageState(showCreateSheet = true)
@@ -120,6 +137,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
         uiState = CategoryManageState()
     }
 
+    // ── Draft field mutations ─────────────────────────────────────────────
+
     fun onLabelChange(value: String) {
         uiState = uiState.copy(draftLabel = value, error = null)
     }
@@ -131,6 +150,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
     fun onKeywordsChange(value: String) {
         uiState = uiState.copy(draftKeywords = value)
     }
+
+    // ── Save / delete custom categories ───────────────────────────────────
 
     fun saveInlineCategory(category: CustomCategory) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -152,7 +173,6 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
 
     fun saveCategory() {
         val label = uiState.draftLabel.trim()
-
         if (label.isBlank()) {
             uiState = uiState.copy(error = "Category name cannot be empty")
             return
@@ -160,9 +180,7 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             val systemCat = uiState.editingSystemCategory
-
             if (systemCat != null) {
-                // Saving a system category override
                 overrideDao.upsertOverride(
                     SystemCategoryOverride(
                         id = systemCat.name,
@@ -171,11 +189,9 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                     )
                 )
             } else {
-                // Saving a custom category (create or edit)
                 val keywords = uiState.draftKeywords.trim()
                 val id = uiState.editingCategory?.id
                     ?: "custom_${UUID.randomUUID().toString().replace("-", "").take(8)}"
-
                 val category = CustomCategory(
                     id = id,
                     label = label,
@@ -184,12 +200,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
                     createdAt = uiState.editingCategory?.createdAt ?: System.currentTimeMillis()
                 )
                 categoryDao.upsertCategory(category)
-
-                if (keywords.isNotBlank()) {
-                    reclassifyWithCustomCategory(category)
-                }
+                if (keywords.isNotBlank()) reclassifyWithCustomCategory(category)
             }
-
             uiState = CategoryManageState()
         }
     }
@@ -201,12 +213,16 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    // ── Reclassify ────────────────────────────────────────────────────────
+
     fun reclassifyAll() {
         viewModelScope.launch(Dispatchers.IO) {
             val customs = categoryDao.getAllCustomCategoriesOnce()
+            val corrections = correctionDao.getAllCorrectionsOnce()
+                .associate { it.recipient to it.categoryId }
             val uncategorized = txDao.getUncategorizedTransactions()
             val updates = uncategorized.mapNotNull { tx ->
-                val guessed = guessCategory(tx.recipient, tx.type, customs)
+                val guessed = guessCategory(tx.recipient, tx.type, customs, corrections)
                 if (guessed != TransactionCategory.OTHER.name) tx.id to guessed else null
             }
             updates.forEach { (id, cat) -> txDao.updateCategoryById(id, cat) }
@@ -225,30 +241,81 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // ── Manual override for a single transaction ──────────────────────────
+    // ── Manual override with feedback loop ────────────────────────────────
 
+    /**
+     * Called when the user explicitly picks a category for a transaction.
+     *
+     * Two things happen:
+     *  1. The transaction's category is updated immediately.
+     *  2. A [UserCorrection] is persisted so that future transactions from the
+     *     same recipient are auto-assigned to the same category without needing
+     *     a keyword rule.  If a correction for this recipient already exists its
+     *     [UserCorrection.hitCount] is incremented and the category is updated.
+     */
     fun updateTransactionCategory(txId: String, categoryId: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            // 1. Update the specific transaction
             txDao.updateCategory(txId, categoryId)
+
+            // 2. Persist the correction keyed on the normalised recipient
+            val tx = txDao.getTransactionById(txId) ?: return@launch
+            val key = tx.recipient.lowercase().trim()
+
+            val existing = correctionDao.getCorrectionByRecipient(key)
+            if (existing != null) {
+                correctionDao.upsertCorrection(
+                    existing.copy(
+                        categoryId = categoryId,
+                        hitCount = existing.hitCount + 1,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            } else {
+                correctionDao.upsertCorrection(
+                    UserCorrection(
+                        recipient = key,
+                        categoryId = categoryId
+                    )
+                )
+            }
+
+            // 3. Optionally re-classify OTHER transactions with the same recipient
+            //    that are still in "OTHER" or a different auto-guessed category.
+            txDao.updateCategoryForRecipient(
+                recipientLower = key,
+                newCategory = categoryId,
+                excludeTxId = txId
+            )
         }
     }
 
+    /**
+     * Remove a stored correction so the engine falls back to keyword matching
+     * for future transactions from this recipient.
+     */
+    fun deleteCorrection(recipient: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            correctionDao.deleteCorrectionByRecipient(recipient.lowercase().trim())
+        }
+    }
+
+    // ── Category tree helpers ─────────────────────────────────────────────
+
     fun topLevelCategories(all: List<ResolvedCategory>): List<ResolvedCategory> =
         all.filter { cat ->
-            if (cat.isSystem) {
+            if (cat.isSystem)
                 TransactionCategory.entries.find { it.name == cat.id }?.parentId == null
-            } else {
+            else
                 cat.parentId == null
-            }
         }
 
     fun childCategories(all: List<ResolvedCategory>, parentId: String): List<ResolvedCategory> =
         all.filter { cat ->
-            if (cat.isSystem) {
+            if (cat.isSystem)
                 TransactionCategory.entries.find { it.name == cat.id }?.parentId == parentId
-            } else {
+            else
                 cat.parentId == parentId
-            }
         }
 
     companion object {
@@ -256,9 +323,8 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    if (modelClass.isAssignableFrom(CategoryViewModel::class.java)) {
+                    if (modelClass.isAssignableFrom(CategoryViewModel::class.java))
                         return CategoryViewModel(context) as T
-                    }
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }
