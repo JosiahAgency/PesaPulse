@@ -193,11 +193,7 @@ fun PesaPulseApp() {
                 }
             },
             bottomBar = {
-                if (currentRoute != AppDestinations.Settings.route &&
-                    currentRoute != AppDestinations.Categories.route
-                ) {
-                    GlassNavigationBar(haptic, navController, navItems)
-                }
+                GlassNavigationBar(haptic, navController, navItems)
             }
         ) { innerPadding ->
             NavHost(

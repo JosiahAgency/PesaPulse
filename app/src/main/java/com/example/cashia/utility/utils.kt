@@ -22,7 +22,7 @@ enum class TimeScope {
 }
 
 enum class TransactionType {
-    INCOME, EXPENSE
+    INCOME, EXPENSE, ALL
 }
 
 object PesaActions {

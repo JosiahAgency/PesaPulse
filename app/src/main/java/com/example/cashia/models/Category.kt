@@ -6,10 +6,8 @@ import androidx.room.PrimaryKey
 enum class TransactionCategory(
     val label: String,
     val emoji: String,
-    val isSystem: Boolean = true,
     val parentId: String? = null
 ) {
-
     // ── OUTGOING: TOP-LEVEL ───────────────────────────────────────────────
 
     FOOD("Food & Drinks", "🍽️"),
@@ -37,66 +35,51 @@ enum class TransactionCategory(
     RECEIVED_MONEY("Received Money", "📲"),
     LOAN_DISBURSEMENT("Loan Received", "🤝"),
     INVESTMENT_RETURNS("Investment Returns", "💹"),
-    GOVERNMENT_REFUND("Gov't Refund / NHIF", "🏦"),
+    GOVERNMENT_REFUND("Gov't Refund / NHIF", "🏛️"),
 
-    // ── OUTGOING: FOOD SUBCATEGORIES ──────────────────────────────────────
+    // ── FOOD SUBCATEGORIES ────────────────────────────────────────────────
 
-    GROCERIES("Groceries & Supermarket", "🛒", parentId = "FOOD"),
+    GROCERIES("Groceries", "🛒", parentId = "FOOD"),
     RESTAURANTS("Restaurants & Cafes", "🍴", parentId = "FOOD"),
     FAST_FOOD("Fast Food", "🍟", parentId = "FOOD"),
     FOOD_DELIVERY("Food Delivery", "🛵", parentId = "FOOD"),
 
-    // ── OUTGOING: TRANSPORT SUBCATEGORIES ────────────────────────────────
+    // ── TRANSPORT SUBCATEGORIES ───────────────────────────────────────────
 
-    RIDE_HAILING("Ride Hailing (Uber/Bolt)", "🚕", parentId = "TRANSPORT"),
+    RIDE_HAILING("Ride Hailing", "🚕", parentId = "TRANSPORT"),
     PUBLIC_TRANSPORT("Matatu & Bus", "🚌", parentId = "TRANSPORT"),
+    TRAIN("Train / SGR", "🚆", parentId = "TRANSPORT"),
     PARKING("Parking", "🅿️", parentId = "TRANSPORT"),
     TOLLS("Tolls & Expressway", "🛣️", parentId = "TRANSPORT"),
-    TRAIN("Train / SGR", "🚆", parentId = "TRANSPORT"),
-    MATATU("Matatu & Bus", "🚌", parentId = "TRANSPORT"),
-    SGR("SGR / Train", "🚆", parentId = "TRANSPORT"),
 
-    // ── OUTGOING: FUEL SUBCATEGORIES ─────────────────────────────────────
+    // ── CAR MAINTENANCE SUBCATEGORIES ─────────────────────────────────────
 
-    PETROL("Petrol", "⛽", parentId = "FUEL"),
-    DIESEL("Diesel", "🛢️", parentId = "FUEL"),
-
-    // ── OUTGOING: CAR MAINTENANCE SUBCATEGORIES ───────────────────────────
-
-    CAR_SERVICE("Car Service / Garage", "🔩", parentId = "CAR_MAINTENANCE"),
+    CAR_SERVICE("Car Service", "🔩", parentId = "CAR_MAINTENANCE"),
     CAR_WASH("Car Wash", "🚿", parentId = "CAR_MAINTENANCE"),
     TYRES("Tyres & Wheels", "🛞", parentId = "CAR_MAINTENANCE"),
-    INSURANCE_CAR("Vehicle Insurance", "🛡️", parentId = "CAR_MAINTENANCE"),
 
-    // ── OUTGOING: UTILITIES SUBCATEGORIES ────────────────────────────────
+    // ── UTILITIES SUBCATEGORIES ───────────────────────────────────────────
 
     ELECTRICITY("Electricity (KPLC)", "⚡", parentId = "UTILITIES"),
     WATER("Water Bill", "💧", parentId = "UTILITIES"),
     INTERNET("Internet & TV", "📡", parentId = "UTILITIES"),
     COOKING_GAS("Cooking Gas", "🔥", parentId = "UTILITIES"),
 
-    // ── OUTGOING: HEALTH SUBCATEGORIES ───────────────────────────────────
+    // ── HEALTH SUBCATEGORIES ──────────────────────────────────────────────
 
-    PHARMACY("Pharmacy & Chemist", "💊", parentId = "HEALTH"),
+    PHARMACY("Pharmacy", "💊", parentId = "HEALTH"),
     HOSPITAL_VISIT("Hospital / Clinic", "🩺", parentId = "HEALTH"),
     GYM("Gym & Fitness", "🏋️", parentId = "HEALTH"),
 
-    // ── OUTGOING: SHOPPING SUBCATEGORIES ─────────────────────────────────
+    // ── SHOPPING SUBCATEGORIES ────────────────────────────────────────────
 
     ONLINE_SHOPPING("Online Shopping", "📦", parentId = "SHOPPING"),
     CLOTHING("Clothing & Fashion", "👗", parentId = "SHOPPING"),
-    ELECTRONICS("Electronics & Gadgets", "📱", parentId = "SHOPPING"),
+    ELECTRONICS("Electronics", "📱", parentId = "SHOPPING"),
 
-    // ── LOAN / FULIZA (incoming disbursement) ─────────────────────────────
-
-    FULIZA_LOAN("Fuliza / M-Shwari Loan", "💰", parentId = "LOAN_DISBURSEMENT"),
-    MOBILE_LOAN("Mobile Loan (Tala/Branch)", "🤳", parentId = "LOAN_DISBURSEMENT"),
-
-    // ── FALLBACK ──────────────────────────────────────────────────────────
+    // ── FALLBACK / SYSTEM ─────────────────────────────────────────────────
 
     OTHER("Other", "📦"),
-
-    // ── SYSTEM / NEUTRAL ──────────────────────────────────────────────────────
     BALANCE_INQUIRY("Balance Inquiry", "🔍");
 }
 
@@ -110,25 +93,16 @@ data class CustomCategory(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-/**
- * Stores explicit user overrides: when the user manually re-assigns a
- * transaction to a different category we save the normalized recipient string
- * so the same merchant is auto-assigned correctly in the future.
- *
- * [recipient] is stored lower-cased and trimmed so look-ups are O(1).
- * [categoryId] is either a [TransactionCategory.name] or a [CustomCategory.id].
- * [hitCount] lets the UI surface "frequently corrected" merchants for review.
- */
 @Entity(tableName = "UserCorrections")
 data class UserCorrection(
-    @PrimaryKey val recipient: String,   // normalised: lowercase + trimmed
+    @PrimaryKey val recipient: String,
     val categoryId: String,
     val hitCount: Int = 1,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
 data class ResolvedCategory(
-    val id: String,          // TransactionCategory.name OR CustomCategory.id
+    val id: String,
     val label: String,
     val emoji: String,
     val isSystem: Boolean,
@@ -189,13 +163,17 @@ fun guessCategory(
     if (type == "income") {
         return when {
             r.containsAny(
-                "salary", "payroll", "wage", "basic pay", "net pay",
-                "stipend", "allowance"
+                "salary", "payroll", "wage", "basic pay", "net pay", "stipend", "allowance"
             ) -> TransactionCategory.SALARY.name
 
             r.containsAny(
-                "till", "paybill", "lipa na mpesa", "lipa mpesa",
-                "business", "merchant", "pos receipt"
+                "till",
+                "paybill",
+                "lipa na mpesa",
+                "lipa mpesa",
+                "business",
+                "merchant",
+                "pos receipt"
             ) -> TransactionCategory.BUSINESS_INCOME.name
 
             r.containsAny(
@@ -209,14 +187,20 @@ fun guessCategory(
             ) -> TransactionCategory.GOVERNMENT_REFUND.name
 
             r.containsAny(
-                "fuliza", "m-shwari loan", "mshwari loan",
-                "kcb m-pesa loan", "hustler fund"
-            ) -> TransactionCategory.FULIZA_LOAN.name
-
-            r.containsAny(
-                "tala", "branch", "zenka", "okash", "okolea",
-                "timiza loan", "haraka loan", "berry loan"
-            ) -> TransactionCategory.MOBILE_LOAN.name
+                "fuliza",
+                "m-shwari loan",
+                "mshwari loan",
+                "kcb m-pesa loan",
+                "hustler fund",
+                "tala",
+                "branch",
+                "zenka",
+                "okash",
+                "okolea",
+                "timiza loan",
+                "haraka loan",
+                "berry loan"
+            ) -> TransactionCategory.LOAN_DISBURSEMENT.name
 
             else -> TransactionCategory.RECEIVED_MONEY.name
         }
@@ -232,9 +216,8 @@ fun guessCategory(
         )
     ) return TransactionCategory.AIRTIME.name
 
-    // ── 4. FOOD  (checked before Shopping to avoid pizza → SHOPPING) ──────
+    // ── 4. Food ───────────────────────────────────────────────────────────
 
-    // 4a. Supermarkets / grocery → GROCERIES  (strict, named merchants first)
     if (r.containsAny(
             "naivas", "quickmart", "carrefour", "chandarana",
             "tuskys", "cleanshelf", "eastmatt",
@@ -242,14 +225,11 @@ fun guessCategory(
         )
     ) return TransactionCategory.GROCERIES.name
 
-    // 4b. Delivery platforms → FOOD_DELIVERY
     if (r.containsAny(
-            "glovo", "jumia food", "uber eats", "food delivery",
-            "chowdeck", "sendy food"
+            "glovo", "jumia food", "uber eats", "food delivery", "chowdeck", "sendy food"
         )
     ) return TransactionCategory.FOOD_DELIVERY.name
 
-    // 4c. Named fast-food chains → FAST_FOOD  (explicit names, no generic "food")
     if (r.containsAny(
             "kfc", "pizza inn", "pizza hut", "chicken inn",
             "galitos", "debonairs", "burger king", "subway",
@@ -257,7 +237,6 @@ fun guessCategory(
         )
     ) return TransactionCategory.FAST_FOOD.name
 
-    // 4d. Sit-down restaurants & cafes → RESTAURANTS
     if (r.containsAny(
             "java", "artcaffe", "dormans", "java house", "k'osewe",
             "carnivore", "restaurant", "cafe", "coffee", "bakery",
@@ -266,41 +245,31 @@ fun guessCategory(
         )
     ) return TransactionCategory.RESTAURANTS.name
 
-// ── 5. PARKING  (before Transport so it isn't swallowed by MATATU) ────
+    // ── 5. Parking ────────────────────────────────────────────────────────
     if (r.containsAny(
             "parking", "e-parking", "county parking",
-            "nairobi parking", "parking fee", "parking ticket",
-            "evopay"
+            "nairobi parking", "parking fee", "parking ticket", "evopay"
         )
     ) return TransactionCategory.PARKING.name
 
-    // ── 4. FUEL — checked BEFORE generic transport ────────────────────────
+    // ── 6. Fuel ───────────────────────────────────────────────────────────
     if (r.containsAny(
-            // Petrol stations
             "shell", "energies", "kenol", "oil libya", "rubis",
             "lake oil", "hashi energy", "galana", "vivo energy",
             "petro station", "gulf energy", "total",
-            "petrol", "diesel", "fuel",
+            "petrol", "diesel", "fuel"
         )
-    ) {
-        return if (r.containsAny("diesel", "gasoil"))
-            TransactionCategory.DIESEL.name
-        else
-            TransactionCategory.PETROL.name
-    }
+    ) return TransactionCategory.FUEL.name
 
-    // ── 5. CAR MAINTENANCE ────────────────────────────────────────────────
+    // ── 7. Car Maintenance ────────────────────────────────────────────────
     if (r.containsAny(
-            // Garages / service
             "garage", "mechanic", "auto service", "car service",
             "vehicle service", "service centre", "oil change",
             "engine oil", "spare parts", "spares", "auto parts",
             "car repair", "panel beating", "body work",
-            // Car wash
             "car wash", "autowash", "auto wash", "hand wash",
-            // Tyres
             "tyre", "tire", "wheel alignment", "wheel balance",
-            "puncture", "rim",
+            "puncture", "rim"
         )
     ) {
         return when {
@@ -317,14 +286,14 @@ fun guessCategory(
         }
     }
 
-    // ── 6. WITHDRAWAL ─────────────────────────────────────────────────────
+    // ── 8. Withdrawal ─────────────────────────────────────────────────────
     if (r.containsAny(
             "withdraw", "agent", "atm", "pochi la biashara",
             "cash out", "cashout", "mpesa agent", "pochi"
         )
     ) return TransactionCategory.WITHDRAW.name
 
-    // ── 7. SAVINGS & BANKING ──────────────────────────────────────────────
+    // ── 9. Savings & Banking ──────────────────────────────────────────────
     if (r.containsAny(
             "equity bank", "equity ", "kcb", "co-op bank", "cooperative bank",
             "absa", "stanbic", "stanchart", "standard chartered", "ncba",
@@ -338,21 +307,16 @@ fun guessCategory(
         )
     ) return TransactionCategory.SAVINGS.name
 
-    // ── 8. FULIZA REPAYMENT (outgoing) ────────────────────────────────────
+    // ── 10. Fuliza / Loan Repayment ───────────────────────────────────────
     if (r.containsAny(
             "fuliza repayment", "fuliza payment", "loan repayment",
-            "repay fuliza", "repay loan", "m-shwari repayment"
-        )
-    ) return TransactionCategory.FULIZA_REPAYMENT.name
-
-    // ── 9. MOBILE LOANS (outgoing repayment via expense) ─────────────────
-    if (type == "expense" && r.containsAny(
+            "repay fuliza", "repay loan", "m-shwari repayment",
             "tala repayment", "branch repayment", "zenka repayment",
             "okash repayment", "okolea repayment", "haraka repayment"
         )
     ) return TransactionCategory.FULIZA_REPAYMENT.name
 
-    // ── 10. GOVERNMENT & TAX ──────────────────────────────────────────────
+    // ── 11. Government & Tax ──────────────────────────────────────────────
     if (r.containsAny(
             "kra", "kenya revenue", "ecitizen", "e-citizen", "ntsa",
             "huduma", "nhif", "nssf", "nairobi city county", "county",
@@ -362,7 +326,15 @@ fun guessCategory(
         )
     ) return TransactionCategory.GOVERNMENT.name
 
-    // ── 13. UTILITIES ─────────────────────────────────────────────────────
+    // ── 12. Insurance ─────────────────────────────────────────────────────
+    if (r.containsAny(
+            "insurance", "jubilee", "britam", "aar", "madison",
+            "kenindia", "sanlam", "aig", "resolution insurance",
+            "first assurance", "old mutual", "CIC insurance"
+        )
+    ) return TransactionCategory.INSURANCE.name
+
+    // ── 13. Utilities ─────────────────────────────────────────────────────
     if (r.containsAny("kplc", "kenya power", "umeme", "stima"))
         return TransactionCategory.ELECTRICITY.name
 
@@ -375,7 +347,7 @@ fun guessCategory(
     if (r.containsAny(
             "zuku", "faiba home", "safaricom home", "airtel home",
             "telkom home", "poa internet", "liquid home", "jti broadband",
-            "net2phone", "dstv", "gotv", "azam", "showmax", "startimes"
+            "dstv", "gotv", "azam", "showmax", "startimes"
         )
     ) return TransactionCategory.INTERNET.name
 
@@ -385,11 +357,11 @@ fun guessCategory(
         )
     ) return TransactionCategory.COOKING_GAS.name
 
-    // ── 14. EDUCATION ─────────────────────────────────────────────────────
+    // ── 14. Education ─────────────────────────────────────────────────────
     if (r.containsAny(
             "school", "college", "university", "tuition", "education",
             "academy", "institute", "polytechnic", "tvet", "helb",
-            "knec", "kcse", "kcpe", "exam fee", "school fees",
+            "kcse", "kcpe", "exam fee", "school fees",
             "kindergarten", "nursery", "playgroup",
             "uon", "ku", "mku", "kenyatta university", "strathmore",
             "usiu", "daystar", "catholic university", "pwani university",
@@ -397,11 +369,10 @@ fun guessCategory(
         )
     ) return TransactionCategory.EDUCATION.name
 
-    // ── 15. HEALTH ────────────────────────────────────────────────────────
+    // ── 15. Health ────────────────────────────────────────────────────────
     if (r.containsAny(
             "pharmacy", "chemist", "goodlife pharmacy", "haltons",
-            "medisel", "sapphire pharmacy", "lifecare pharmacy",
-            "dawa", "drug store"
+            "medisel", "sapphire pharmacy", "lifecare pharmacy", "dawa", "drug store"
         )
     ) return TransactionCategory.PHARMACY.name
 
@@ -421,31 +392,17 @@ fun guessCategory(
         )
     ) return TransactionCategory.GYM.name
 
-    // ── TOLLS / EXPRESSWAY ─────────────────────────────
-    if (r.containsAny(
-            "expressway", "toll", "nairobi expressway"
-        )
-    ) return TransactionCategory.TOLLS.name
+    // ── 16. Tolls ─────────────────────────────────────────────────────────
+    if (r.containsAny("expressway", "toll", "nairobi expressway"))
+        return TransactionCategory.TOLLS.name
 
-    // ── 16. TRANSPORT (ride-hailing & public transit) ─────────────────────
+    // ── 17. Transport ─────────────────────────────────────────────────────
     if (r.containsAny(
-            // Ride-hailing
-            "uber",
-            "bolt",
-            "little cab",
-            "faras",
-            "matatu",
-            "bus fare",
-            "shuttle",
-            "citi hoppa",
-            "kbs",
-            "2nk",
-            "easy coach",
-            "modern coast",
-            "likoni ferry",
-            "ferry",
-            "jkia",
-            "airport transfer"
+            "uber", "bolt", "little cab", "faras",
+            "matatu", "bus fare", "shuttle", "citi hoppa",
+            "kbs", "2nk", "easy coach", "modern coast",
+            "likoni ferry", "ferry", "jkia", "airport transfer",
+            "sgr", "train"
         )
     ) {
         return when {
@@ -459,50 +416,82 @@ fun guessCategory(
         }
     }
 
-    // ── 18. ENTERTAINMENT ─────────────────────────────────────────────────
+    // ── 18. Entertainment ─────────────────────────────────────────────────
     if (r.containsAny(
             "netflix", "prime video", "spotify", "youtube premium",
             "apple music", "deezer", "boomplay", "tidal",
             "cinema", "imax", "century cinemas", "silverbird",
             "club", "lounge", "bar", "pub", "nightclub",
             "ticket", "concert", "event", "festival",
-            "gaming", "playstation", "xbox", "steam", "ea games",
-            "sport", "sport pesa", "betika", "odibets", "mcheza"
+            "gaming", "playstation", "xbox", "steam",
+            "sportpesa", "betika", "odibets", "mcheza"
         )
     ) return TransactionCategory.ENTERTAINMENT.name
 
-    // ── 19. SHOPPING ─────────────────────────────────────────────────────
-    // Online → ONLINE_SHOPPING
+    // ── 19. Shopping ──────────────────────────────────────────────────────
     if (r.containsAny(
-            "jumia", "kilimall", "jiji", "masoko", "amazon",
-            "aliexpress", "shein", "temu"
+            "jumia",
+            "kilimall",
+            "jiji",
+            "masoko",
+            "amazon",
+            "aliexpress",
+            "shein",
+            "temu"
         )
-    ) return TransactionCategory.ONLINE_SHOPPING.name
+    )
+        return TransactionCategory.ONLINE_SHOPPING.name
 
-    // Clothing → CLOTHING
     if (r.containsAny(
-            "clothing", "fashion", "wear", "boutique", "clothes",
-            "shoes", "footwear", "apparel", "mtumba", "second hand"
+            "clothing",
+            "fashion",
+            "wear",
+            "boutique",
+            "clothes",
+            "shoes",
+            "footwear",
+            "apparel",
+            "mtumba",
+            "second hand"
         )
-    ) return TransactionCategory.CLOTHING.name
+    )
+        return TransactionCategory.CLOTHING.name
 
-    // Electronics → ELECTRONICS
     if (r.containsAny(
-            "electronics", "phone", "laptop", "computer", "gadget",
-            "samsung store", "apple store", "techno", "infinix",
-            "iphone", "tablet"
+            "electronics",
+            "phone",
+            "laptop",
+            "computer",
+            "gadget",
+            "samsung store",
+            "apple store",
+            "techno",
+            "infinix",
+            "iphone",
+            "tablet"
         )
-    ) return TransactionCategory.ELECTRONICS.name
+    )
+        return TransactionCategory.ELECTRONICS.name
 
-    // Generic shopping (malls, shops)
     if (r.containsAny(
-            "shop", "store", "mall", "centre", "plaza",
-            "two rivers", "garden city", "westgate", "the junction",
-            "village market", "sarit centre", "galleria", "hub karen"
+            "shop",
+            "store",
+            "mall",
+            "centre",
+            "plaza",
+            "two rivers",
+            "garden city",
+            "westgate",
+            "the junction",
+            "village market",
+            "sarit centre",
+            "galleria",
+            "hub karen"
         )
-    ) return TransactionCategory.SHOPPING.name
+    )
+        return TransactionCategory.SHOPPING.name
 
-    // ── 20. SEND MONEY (person-to-person outgoing) ────────────────────────
+    // ── 20. Send Money ────────────────────────────────────────────────────
     if (type == "expense" && looksLikePersonName(r) && !r.containsAny(
             "shop", "store", "enterprise", "limited", "ltd",
             "agency", "services", "supplies", "hardware"

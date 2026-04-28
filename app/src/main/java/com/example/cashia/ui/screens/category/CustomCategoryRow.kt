@@ -1,15 +1,13 @@
 package com.example.cashia.ui.screens.category
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
@@ -22,11 +20,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.models.CustomCategory
+
 
 @Composable
 fun CustomCategoryRow(
@@ -34,69 +32,65 @@ fun CustomCategoryRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        shape = RoundedCornerShape(16.dp),
+        color = colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Emoji
+            // Emoji badge
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(42.dp)
                     .background(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                        colorScheme.primaryContainer.copy(alpha = 0.4f),
                         RoundedCornerShape(12.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(category.emoji, fontSize = 22.sp)
+                Text(category.emoji, fontSize = 20.sp)
             }
-            Spacer(Modifier.width(14.dp))
 
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    category.label,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // Label + keywords
+            Column(Modifier.weight(1f)) {
+                CategoryNameLabel(category.label)
                 if (category.keywords.isNotBlank()) {
+                    val kwList =
+                        category.keywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    val preview = kwList.take(4).joinToString("  ·  ")
+                    val suffix = if (kwList.size > 4) "  +${kwList.size - 4}" else ""
                     Text(
-                        category.keywords
-                            .split(",")
-                            .take(3)
-                            .joinToString(" · ") { it.trim() }
-                            .let { if (category.keywords.split(",").size > 3) "$it …" else it },
+                        text = preview + suffix,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            // Actions
+            // Action buttons
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    Icons.Rounded.Edit,
-                    null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    Icons.Rounded.Edit, null,
+                    Modifier.size(17.dp),
+                    tint = colorScheme.primary
                 )
             }
             IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    Icons.Rounded.Delete,
-                    null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.error
+                    Icons.Rounded.Delete, null,
+                    Modifier.size(17.dp),
+                    tint = colorScheme.error.copy(alpha = 0.75f)
                 )
             }
         }

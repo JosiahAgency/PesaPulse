@@ -15,10 +15,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
-import com.example.cashia.models.DailyDigestWorker
-import com.example.cashia.models.MonthlySummaryWorker
-import com.example.cashia.models.NotificationHelper
-import com.example.cashia.models.WeeklySummaryWorker
 import com.example.cashia.ui.screens.LockPlaceholder
 import com.example.cashia.ui.theme.PesaPulseTheme
 import com.example.cashia.utility.BiometricAuthenticator
@@ -35,10 +31,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         handlePermissions()
         PesaTimeConfiguration.initialize(this)
-        NotificationHelper.createAllChannels(this)
-        DailyDigestWorker.schedule(this)
-        WeeklySummaryWorker.schedule(this)
-        MonthlySummaryWorker.schedule(this)
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
             isUnlocked.value = true
@@ -61,9 +53,6 @@ class MainActivity : FragmentActivity() {
 
     private fun handlePermissions() {
         val permissions = mutableListOf(Manifest.permission.READ_SMS)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
         val permissionsToRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }

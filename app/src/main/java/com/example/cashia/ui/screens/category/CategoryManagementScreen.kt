@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.models.CategoryViewModel
@@ -323,3 +324,13 @@ private fun ReclassifyBanner(onClick: () -> Unit) {
     }
 }
 
+@Composable
+fun CategoryNameLabel(label: String){
+    Text(
+        label,
+        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}

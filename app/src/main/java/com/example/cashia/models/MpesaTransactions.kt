@@ -60,7 +60,6 @@ private val regexFulizaBorrow = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*Fuliza\s+M-PESA\s+amount\s+is\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\.\s*(?:Access\s+Fee|Interest)\s+charged\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\.\s*Total\s+Fuliza\s+M-PESA\s+outstanding\s+amount\s+is\s+[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\s+due\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4})""",
     RegexOption.IGNORE_CASE
 )
-
 private val regexFulizaRepay = Regex(
     """([A-Z0-9]+)\s+[Cc]onfirmed\.\s*[Kk][Ss][Hh]\s*([\d,]+(?:\.\d{2})?)\s+from\s+your\s+M-PESA\s+has\s+been\s+used\s+to\s+(?:fully\s+)?pay\s+your\s+(?:outstanding\s+)?Fuliza\s+M-PESA""",
     RegexOption.IGNORE_CASE
@@ -69,12 +68,10 @@ private val regexConcurrentUnderway = Regex(
     "M-PESA is unable to process your request because a similar transaction is currently underway",
     RegexOption.IGNORE_CASE
 )
-
 private val regexFulizaLimit = Regex(
     "Dear .*, your Fuliza M-PESA limit is KSH [\\d,.]+",
     RegexOption.IGNORE_CASE
 )
-
 private val regexWrongPin = Regex(
     "Failed, you have entered the wrong PIN",
     RegexOption.IGNORE_CASE
@@ -132,7 +129,7 @@ data class MpesaTransactions(
                     DateTimeFormatter.ofPattern("h:mm a", Locale.US)
                 )
                 storedTime.format(PesaTimeConfiguration.getTimeFormatter())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 time
             }
         }
@@ -141,7 +138,7 @@ data class MpesaTransactions(
     val displayDate: String by lazy {
         try {
             LocalDate.parse(date).format(PesaTimeConfiguration.getDateFormatter())
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             date
         }
     }
@@ -165,7 +162,7 @@ fun parseMpesaMessage(
     val isSystemNoise = regexConcurrentUnderway.containsMatchIn(message) ||
             regexFulizaLimit.containsMatchIn(message) ||
             regexWrongPin.containsMatchIn(message) ||
-            regexCancelled.containsMatchIn(message) ||      // New: Cancellation
+            regexCancelled.containsMatchIn(message) ||
             regexInsufficientFunds.containsMatchIn(message) ||
             regexInvalidInput.containsMatchIn(message)
     if (isSystemNoise) return ParseResult.Irrelevant
@@ -257,7 +254,6 @@ fun parseMpesaMessage(
                 )
             }
 
-            // ── Reversal v1: "in favour of <name>" ────────────────────────
             regexReversal.find(message) != null -> {
                 val (id, recipient, date, time, amount) = regexReversal.find(message)!!.destructured
                 ParseResult.Success(
@@ -275,7 +271,6 @@ fun parseMpesaMessage(
                 )
             }
 
-            // ── Reversal v2: "Reversal of transaction <txId>" ─────────────
             regexReversalV2.find(message) != null -> {
                 val (id, reversedTxId, date, time, amount) = regexReversalV2.find(message)!!.destructured
                 ParseResult.Success(
@@ -293,7 +288,6 @@ fun parseMpesaMessage(
                 )
             }
 
-            // ── Balance inquiry ────────────────────────────────────────────
             regexBalanceInquiry.find(message) != null -> {
                 val (id, balAmount, date, time) = regexBalanceInquiry.find(message)!!.destructured
                 ParseResult.Success(
@@ -325,7 +319,7 @@ fun parseMpesaMessage(
                 val dueDateFormatted = try {
                     LocalDate.parse(dueDate, DateTimeFormatter.ofPattern(datePattern))
                         .format(DateTimeFormatter.ofPattern("d MMM yy"))
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     dueDate
                 }
 
@@ -336,11 +330,12 @@ fun parseMpesaMessage(
                         transactionCost = fee.replace(",", "").toDouble(),
                         recipient = "Fuliza M-PESA (due $dueDateFormatted)",
                         date = txDate,
-                        type = "expense",       // ← was "income", corrected: it's debt taken on, money OUT eventually
-                        balance = 0.0,          // ← don't store debt here; it would corrupt latestBalance
+                        type = "expense",
+                        balance = 0.0,
                         time = txTime,
                         timestamp = smsReceivedAt,
-                        category = TransactionCategory.FULIZA_LOAN.name
+                        // LOAN_DISBURSEMENT replaces the removed FULIZA_LOAN subcategory
+                        category = TransactionCategory.LOAN_DISBURSEMENT.name
                     )
                 )
             }
@@ -349,7 +344,6 @@ fun parseMpesaMessage(
                 val match = regexFulizaRepay.find(message)!!
                 val (id, amount) = match.destructured
 
-                // Same fix: use actual SMS received time, not LocalDate.now()
                 val txDate = Instant.ofEpochMilli(smsReceivedAt)
                     .atZone(ZoneId.systemDefault())
                     .toLocalDate()
@@ -401,7 +395,7 @@ private fun buildTransaction(
     val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
     val standardizedTime = try {
         LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         cleanTime
     }
     return MpesaTransactions(
@@ -426,7 +420,7 @@ fun convertToTimestamp(dateStr: String, timeStr: String): Long {
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         System.currentTimeMillis()
     }
 }
