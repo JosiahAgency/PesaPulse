@@ -29,6 +29,7 @@ interface TransactionDao {
     suspend fun getSumByType(type: String, start: Long, end: Long): Double?
 
     // ── Category updates ──────────────────────────────────────────────────
+
     @Query("UPDATE MpesaTransactions SET category = :category WHERE id = :id")
     suspend fun updateCategory(id: String, category: String)
 
@@ -46,4 +47,26 @@ interface TransactionDao {
 
     @Query("SELECT * FROM MpesaTransactions")
     suspend fun getAllTransactionsOnce(): List<MpesaTransactions>
+
+    /** Fetch a single transaction by primary key — used by the corrections feedback loop. */
+    @Query("SELECT * FROM MpesaTransactions WHERE id = :id LIMIT 1")
+    suspend fun getTransactionById(id: String): MpesaTransactions?
+
+    /**
+     * Re-classify every transaction from the same recipient when the user
+     * manually overrides a category, skipping the transaction they just changed.
+     */
+    @Query(
+        """
+        UPDATE MpesaTransactions
+           SET category = :newCategory
+         WHERE LOWER(recipient) = :recipientLower
+           AND id != :excludeTxId
+        """
+    )
+    suspend fun updateCategoryForRecipient(
+        recipientLower: String,
+        newCategory: String,
+        excludeTxId: String
+    )
 }

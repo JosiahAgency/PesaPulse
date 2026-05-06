@@ -4,16 +4,27 @@ import android.annotation.SuppressLint
 import android.app.Application
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
 import com.example.cashia.utility.PesaTimeConfiguration
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 
 @SuppressLint("StaticFieldLeak")
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
+
+    companion object {
+        fun provideFactory(app: Application): ViewModelProvider.Factory {
+            return object : ViewModelProvider.AndroidViewModelFactory(app) {}
+        }
+    }
+
     private val context = getApplication<Application>().applicationContext
 
     val darkTheme = snapshotFlow { PesaTimeConfiguration.isDarkTheme }
@@ -31,43 +42,48 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val isDailyDigestEnabled = snapshotFlow { PesaTimeConfiguration.isDailyDigestEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isDailyDigestEnabled)
 
+    private val _linkedGoogleEmail = MutableStateFlow<String?>(
+        PesaTimeConfiguration.linkedGoogleEmail
+    )
+
+    val linkedGoogleEmail: StateFlow<String?> = _linkedGoogleEmail.asStateFlow()
+    fun setLinkedGoogleEmail(email: String?) {
+        _linkedGoogleEmail.value = email
+        PesaTimeConfiguration.linkedGoogleEmail = email
+    }
+
     fun setDarkTheme(enabled: Boolean) {
-        PesaTimeConfiguration.saveTheme(context, enabled)
+        PesaTimeConfiguration.saveTheme(enabled)
     }
 
     fun setUse24Hour(enabled: Boolean) {
-        PesaTimeConfiguration.saveTimeFormat(context, enabled)
+        PesaTimeConfiguration.saveTimeFormat(enabled)
     }
 
     fun setFirstDayOfWeek(day: DayOfWeek) {
-        PesaTimeConfiguration.saveFirstDayOfWeek(context, day)
+        PesaTimeConfiguration.saveFirstDayOfWeek(day)
     }
 
     fun setBiometric(enabled: Boolean) {
         viewModelScope.launch {
-            PesaTimeConfiguration.saveBiometric(context, enabled)
+            PesaTimeConfiguration.saveBiometric(enabled)
         }
     }
 
     fun updateReminderTime(hour: Int, minute: Int) {
-        PesaTimeConfiguration.saveReminderTime(context, hour, minute)
+        PesaTimeConfiguration.saveReminderTime(hour, minute)
         if (PesaTimeConfiguration.isDailyDigestEnabled) {
             DailyDigestWorker.schedule(context)
         }
     }
 
     fun setDailyDigestEnabled(enabled: Boolean) {
-        PesaTimeConfiguration.saveDailyDigest(context, enabled)
+        PesaTimeConfiguration.saveDailyDigest(enabled)
 
-        try {
-            if (enabled) {
-                DailyDigestWorker.schedule(context)
-            } else {
-                WorkManager.getInstance(context).cancelUniqueWork("daily_digest")
-            }
-        } catch (e: IllegalStateException) {
-            // WorkManager not yet initialized — preference is saved, worker will be
-            // scheduled on next app launch via MainActivity's DailyDigestWorker.schedule() call.
+        if (enabled) {
+            DailyDigestWorker.schedule(context)
+        } else {
+            WorkManager.getInstance(context).cancelUniqueWork("daily_digest")
         }
     }
 }

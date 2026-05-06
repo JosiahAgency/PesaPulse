@@ -19,34 +19,46 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 
 @Composable
-fun TransactionDetailDialog(tx: MpesaTransactions, accentColor: Color, onDismiss: () -> Unit) {
+fun TransactionDetailDialog(
+    tx: MpesaTransactions,
+    accentColor: Color,
+    onDismiss: () -> Unit,
+    hapticFeedback: HapticFeedback
+) {
     val isIncome = tx.type == "income"
     val isExpense = tx.type == "expense"
     val colorScheme = MaterialTheme.colorScheme
+
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
 
     Dialog(
         onDismissRequest = onDismiss, properties = DialogProperties(
@@ -63,25 +75,29 @@ fun TransactionDetailDialog(tx: MpesaTransactions, accentColor: Color, onDismiss
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp), shape =
-                    RoundedCornerShape(24.dp), color = colorScheme.surface, tonalElevation = 6.dp
+                    .padding(horizontal = 20.dp), shape =
+                    RoundedCornerShape(28.dp), color = colorScheme.surface, tonalElevation = 6.dp
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement
-                            .SpaceBetween, verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
                             SectionLabel("transaction details")
                             Subtitles("${tx.displayDate} · ${tx.displayTime}")
                         }
                         IconButton(
-                            onClick = onDismiss, modifier = Modifier
+                            onClick = onDismiss,
+                            modifier = Modifier
                                 .size(32.dp)
                                 .background(colorScheme.surfaceVariant, CircleShape)
                         ) {
                             Icon(
-                                Icons.Rounded.Close, null, tint = colorScheme.onSurfaceVariant,
+                                Icons.Rounded.Close,
+                                null,
+                                tint = colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -90,8 +106,7 @@ fun TransactionDetailDialog(tx: MpesaTransactions, accentColor: Color, onDismiss
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = accentColor.copy(alpha = 0.08f)
-                    )
-                    {
+                    ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -121,64 +136,67 @@ fun TransactionDetailDialog(tx: MpesaTransactions, accentColor: Color, onDismiss
                     Spacer(Modifier.height(14.dp))
                     HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.07f))
                     Spacer(Modifier.height(12.dp))
-                    DetailLine("Reference", tx.id, monospace = true)
+                    InlineDetailRow("Reference", tx.id, monospace = true)
+                    Spacer(Modifier.height(6.dp))
                     if (isExpense && tx.transactionCost > 0) {
-                        DetailLine(
+                        InlineDetailRow(
                             "Transaction Fee",
                             PesaTimeConfiguration.formatCurrency(tx.transactionCost)
                         )
-                        DetailLine(
+                        Spacer(Modifier.height(6.dp))
+                        InlineDetailRow(
                             "Total Deducted", PesaTimeConfiguration.formatCurrency(
                                 tx
                                     .amount + tx.transactionCost
                             ), bold = true
                         )
                     }
+                    Spacer(Modifier.height(6.dp))
                     if (tx.balance > 0) {
-                        DetailLine(
+                        InlineDetailRow(
                             "Balance After",
                             PesaTimeConfiguration.formatCurrency(tx.balance),
                             bold = true
                         )
                     }
-                    DetailLine("Type", tx.type.replaceFirstChar { it.uppercase() })
-                    Spacer(Modifier.height(16.dp))
-                    TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                        Text("Close", color = accentColor, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    tx.recipientPhone?.let { phone ->
+                        InlineDetailRow(
+                            "Phone",
+                            if (phone.contains("*")) "Redacted" else phone
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        QuickActionChip(
+                            label = "Reference",
+                            icon = Icons.Rounded.ContentCopy,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            PesaActions.copyToClipboard(
+                                context,
+                                clipboard,
+                                hapticFeedback,
+                                "Reference",
+                                tx.id
+                            )
+                        }
+
+                        tx.recipientPhone?.takeIf { !it.contains("*") }?.let { phone ->
+                            QuickActionChip(
+                                label = "Phone",
+                                icon = Icons.Rounded.Phone,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                clipboard.setText(AnnotatedString(phone))
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DetailLine(
-    label: String, value: String, bold: Boolean = false, monospace: Boolean =
-        false
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement
-            .SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            value,
-            style = if (bold) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
-            fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-            fontWeight = if (bold) FontWeight.Black else FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }

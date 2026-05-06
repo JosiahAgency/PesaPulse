@@ -1,6 +1,7 @@
 package com.example.cashia.utility
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,7 +22,7 @@ enum class TimeScope {
 }
 
 enum class TransactionType {
-    INCOME, EXPENSE
+    INCOME, EXPENSE, ALL
 }
 
 object PesaActions {
@@ -71,8 +72,10 @@ object PesaTimeConfiguration {
         return DateTimeFormatter.ofPattern(datePattern, Locale.US)
     }
 
+    private lateinit var prefs: SharedPreferences
+
     fun initialize(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         use24HrsFormat = prefs.getBoolean("use_24h", false)
         isBiometricEnabled = prefs.getBoolean("biometric_on", false)
         isDarkTheme = prefs.getBoolean("dark_theme", true)
@@ -83,47 +86,51 @@ object PesaTimeConfiguration {
         reminderMinute = prefs.getInt("reminder_minute", 0)
     }
 
+    var linkedGoogleEmail: String?
+        get() = prefs.getString("linked_google_email", null)
+        set(value) {
+            prefs.edit {
+                if (value != null) putString(
+                    "linked_google_email",
+                    value
+                ) else remove("linked_google_email")
+            }
+        }
+
     // Individual save methods to be called by ViewModel
-    fun saveTimeFormat(context: Context, enabled: Boolean) {
+    fun saveTimeFormat(enabled: Boolean) {
         use24HrsFormat = enabled
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit { putBoolean("use_24h", enabled) }
+        prefs.edit { putBoolean("use_24h", enabled) }
     }
 
-    fun saveTheme(context: Context, isDark: Boolean) {
+    fun saveTheme(isDark: Boolean) {
         isDarkTheme = isDark
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit { putBoolean("dark_theme", isDark) }
+        prefs.edit { putBoolean("dark_theme", isDark) }
     }
 
-    fun saveBiometric(context: Context, enabled: Boolean) {
+    fun saveBiometric(enabled: Boolean) {
         isBiometricEnabled = enabled
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit { putBoolean("biometric_on", enabled) }
+        prefs.edit { putBoolean("biometric_on", enabled) }
     }
 
-    fun saveFirstDayOfWeek(context: Context, day: DayOfWeek) {
+    fun saveFirstDayOfWeek(day: DayOfWeek) {
         firstDayOfWeek = day
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit { putString("start_day", day.name) }
+        prefs.edit { putString("start_day", day.name) }
     }
 
-    fun saveDailyDigest(context: Context, enabled: Boolean) {
+    fun saveDailyDigest(enabled: Boolean) {
         isDailyDigestEnabled = enabled
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit { putBoolean("daily_digest_on", enabled) }
+        prefs.edit { putBoolean("daily_digest_on", enabled) }
     }
 
-    fun saveReminderTime(context: Context, hour: Int, minute: Int) {
+    fun saveReminderTime(hour: Int, minute: Int) {
         reminderHour = hour
         reminderMinute = minute
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit {
-                putInt("reminder_hour", hour)
-                putInt("reminder_minute", minute)
-            }
+        prefs.edit {
+            putInt("reminder_hour", hour)
+            putInt("reminder_minute", minute)
+        }
     }
-
 
     fun screenSubtitle(route: String?): String = when (route) {
         AppDestinations.Dashboard.route -> "Your financial pulse, today"
@@ -162,6 +169,4 @@ object PesaTimeConfiguration {
             "v1.0.0"
         }
     }
-
 }
-

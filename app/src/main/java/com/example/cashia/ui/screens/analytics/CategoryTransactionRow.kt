@@ -90,7 +90,8 @@ fun CategoryTransactionRow(tx: MpesaTransactions, accentColor: Color, haptic: Ha
         TransactionDetailDialog(
             tx,
             accentColor,
-            { showDetails = false }
+            { showDetails = false },
+            haptic,
         )
     }
 }

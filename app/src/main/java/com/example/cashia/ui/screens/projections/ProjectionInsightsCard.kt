@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
@@ -88,8 +87,11 @@ fun ProjectionInsightsCard(
     val periodExpense = remember(periodTransactions) {
         periodTransactions.filter { it.type == "expense" }.sumOf { it.amount }
     }
-    val savingsRate = if (periodIncome > 0)
-        ((periodIncome - periodExpense) / periodIncome * 100) else 0.0
+    val savingsRate = when {
+        periodIncome > 0 -> ((periodIncome - periodExpense) / periodIncome) * 100
+        periodExpense > 0 -> -100.0
+        else -> 0.0
+    }
 
     // Daily averages use actual days elapsed in this period (not horizon days)
     val daysElapsed = remember(selectedPeriodIndex) {
@@ -99,7 +101,7 @@ fun ProjectionInsightsCard(
     val dailyAvgIncome = periodIncome / daysElapsed
 
     // Monthly burn rate — rolling average across all available months
-    val monthlyBurnRate = remember(allTransactions) {
+    remember(allTransactions) {
         val byMonth = allTransactions
             .groupBy {
                 runCatching {
@@ -115,7 +117,7 @@ fun ProjectionInsightsCard(
     }
 
     // Top category within the selected period
-    val topCategoryPair = remember(periodTransactions, allCategories) {
+    remember(periodTransactions, allCategories) {
         val catTotals = periodTransactions
             .filter { it.type == "expense" }
             .groupBy { it.category }
@@ -128,6 +130,30 @@ fun ProjectionInsightsCard(
     val daysUntilZero = remember(projection) {
         projection.dailyTrend.indexOfFirst { it.second <= 0 }
             .takeIf { it >= 0 }?.plus(1)
+    }
+
+    val trendDirection = remember(projection.projectedDailyNet) {
+        when {
+            projection.projectedDailyNet > 0 -> "Growing"
+            projection.projectedDailyNet < 0 -> "Declining"
+            else -> "Stable"
+        }
+    }
+
+    val confidenceLabel = remember(projection.projectedDailyNet, transactionCount) {
+        when {
+            transactionCount > 60 -> "High Confidence"
+            transactionCount > 30 -> "Moderate Confidence"
+            else -> "Low Confidence"
+        }
+    }
+    val runwaySeverity = remember(daysUntilZero) {
+        when {
+            daysUntilZero == null -> null
+            daysUntilZero <= 3 -> "critical"
+            daysUntilZero <= 7 -> "warning"
+            else -> "watch"
+        }
     }
 
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
@@ -172,39 +198,53 @@ fun ProjectionInsightsCard(
                 color = colorScheme.primary.copy(alpha = 0.05f)
             ) {
                 Text(
-                    "Projected daily net: ${if (projection.projectedDailyNet >= 0) "+" else ""}${
+                    "Balance is $trendDirection at ${
                         PesaTimeConfiguration.formatCurrency(projection.projectedDailyNet)
-                    }. Based on $transactionCount transactions · ${period.label}.",
+                    }/day • $confidenceLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                     modifier = Modifier.padding(10.dp),
                     lineHeight = 16.sp
                 )
             }
-            if (projection.dataQualityNote.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+            if (projection.predictedBalance < 0 || daysUntilZero != null) {
+
+                val message = when {
+                    runwaySeverity == "critical" ->
+                        "Balance may run out in ~${daysUntilZero}d — urgent action needed"
+
+                    runwaySeverity == "warning" ->
+                        "Balance may run out in ~${daysUntilZero}d — monitor spending"
+
+                    daysUntilZero != null ->
+                        "Balance may reach zero in ~${daysUntilZero}d"
+
+                    else ->
+                        "Balance projected to go negative"
+                }
+
+                Spacer(Modifier.height(12.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = colorScheme.error.copy(alpha = 0.06f),
-                    border = BorderStroke(0.5.dp, Color.Red.copy(alpha = 0.2f))
+                    shape = RoundedCornerShape(12.dp),
+                    color = colorScheme.error.copy(alpha = 0.08f),
+                    border = BorderStroke(0.5.dp, colorScheme.error.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Warning, null,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .padding(top = 1.dp),
-                            tint = colorScheme.error
+                            tint = colorScheme.error,
+                            modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            projection.dataQualityNote,
+                            message,
                             style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.error.copy(alpha = 0.8f),
-                            lineHeight = 16.sp
+                            color = colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -258,6 +298,14 @@ fun ProjectionInsightsCard(
                     color = if (savingsRate >= 0) colorScheme.tertiary else colorScheme.error
                 )
             }
+            if (daysUntilZero != null && daysUntilZero > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Runway: ~$daysUntilZero days at current pace",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 12.dp),
@@ -285,115 +333,6 @@ fun ProjectionInsightsCard(
                     value = PesaTimeConfiguration.formatCurrency(dailyAvgSpend),
                     color = colorScheme.error
                 )
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = colorScheme.onSurface.copy(alpha = 0.06f)
-            )
-
-            // ── 4. Monthly Burn Rate (historical average, always all-time) ───
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = colorScheme.error.copy(alpha = 0.12f),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.LocalFireDepartment, null,
-                            tint = colorScheme.error, modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Monthly Burn Rate",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colorScheme.onSurface
-                    )
-                    Text(
-                        "Average monthly expenses · all history",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    PesaTimeConfiguration.formatCurrency(monthlyBurnRate),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Black,
-                    color = colorScheme.error
-                )
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = colorScheme.onSurface.copy(alpha = 0.06f)
-            )
-
-            // ── 5. Top Spend Category (within selected period) ───────────────
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFFA8231).copy(alpha = 0.12f),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(topCategoryPair.first, fontSize = 18.sp)
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Top Spend Category",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colorScheme.onSurface
-                    )
-                    Text(
-                        "${topCategoryPair.second} · ${period.label}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    PesaTimeConfiguration.formatCurrency(topCategoryPair.third),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFA8231)
-                )
-            }
-
-            // ── Zero balance warning ──────────────────────────────────────────
-            if (projection.predictedBalance < 0 || daysUntilZero != null) {
-                Spacer(Modifier.height(12.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = colorScheme.error.copy(alpha = 0.08f),
-                    border = BorderStroke(0.5.dp, colorScheme.error.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Warning, null,
-                            tint = colorScheme.error, modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            if (daysUntilZero != null)
-                                "Balance may reach zero in ~${daysUntilZero}d — consider reducing spend"
-                            else "Balance projected to go negative",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
             }
         }
     }

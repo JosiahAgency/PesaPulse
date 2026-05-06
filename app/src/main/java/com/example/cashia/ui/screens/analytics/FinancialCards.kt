@@ -38,20 +38,24 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.utility.TransactionType
 import com.example.cashia.utility.formatCompactAmount
 import java.time.LocalDate
 
 
 @Composable
 fun FinancialOverviewCards(
-    transactions: List<MpesaTransactions>, selectedDate: LocalDate
+    transactions: List<MpesaTransactions>,
+    selectedDate: LocalDate,
+    selectedFilter: TransactionType,
+    onFilterChange: (TransactionType) -> Unit
 ) {
     val selectedMonth = selectedDate.month
     val selectedYear = selectedDate.year
     val monthPrefix = remember(selectedMonth, selectedYear) {
         "$selectedYear-${selectedMonth.value.toString().padStart(2, '0')}"
     }
-    val (monthlyIncome, monthlyExpense, hasTransactions) = remember(transactions, monthPrefix) {
+    val (monthlyIncome, monthlyExpense, _) = remember(transactions, monthPrefix) {
         var income = 0.0
         var expense = 0.0
         var count = 0
@@ -76,32 +80,35 @@ fun FinancialOverviewCards(
         ) {
             // Income Card
             SmallMetricCard(
-                modifier = Modifier.weight(1f),
-                title = "Income",
-                amount = monthlyIncome,
-                icon = Icons.AutoMirrored.Filled.TrendingUp,
-                color = MaterialTheme.colorScheme.tertiary,
-                isSelected = monthlyIncome > 0
+                Modifier.weight(1f),
+                "Income",
+                monthlyIncome,
+                Icons.AutoMirrored.Filled.TrendingUp,
+                MaterialTheme.colorScheme.tertiary,
+                selectedFilter == TransactionType.INCOME,
+                { onFilterChange(TransactionType.INCOME) }
             )
 
             // Expense Card
             SmallMetricCard(
-                modifier = Modifier.weight(1f),
-                title = "Expenses",
-                amount = monthlyExpense,
-                icon = Icons.AutoMirrored.Filled.TrendingDown,
-                color = MaterialTheme.colorScheme.error,
-                isSelected = monthlyExpense > 0
+                Modifier.weight(1f),
+                "Expenses",
+                monthlyExpense,
+                Icons.AutoMirrored.Filled.TrendingDown,
+                MaterialTheme.colorScheme.error,
+                selectedFilter == TransactionType.EXPENSE,
+                { onFilterChange(TransactionType.EXPENSE) }
             )
 
             // Net Flow Card
             SmallMetricCard(
                 modifier = Modifier.weight(1f),
-                title = "Net",
-                amount = monthlyNetFlow,
-                icon = if (monthlyNetFlow >= 0) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                color = if (monthlyNetFlow >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
-                hasTransactions
+                "Net",
+                monthlyNetFlow,
+                if (monthlyNetFlow >= 0) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                if (monthlyNetFlow >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                selectedFilter == TransactionType.ALL,
+                { onFilterChange(TransactionType.ALL) }
             )
         }
     }
@@ -114,7 +121,8 @@ fun SmallMetricCard(
     amount: Double,
     icon: ImageVector,
     color: Color,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val backgroundAlpha by animateFloatAsState(if (isSelected) 0.12f else 0.04f, label = "bg")
@@ -128,6 +136,7 @@ fun SmallMetricCard(
                 .background(color.copy(alpha = backgroundAlpha))
                 .clickable {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
                 }
                 .padding(12.dp)
         ) {

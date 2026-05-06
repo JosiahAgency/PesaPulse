@@ -70,7 +70,7 @@ fun LargestTransactions(
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
 
     val animated = remember { Animatable(0f) }
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(expanded) {
         if (expanded) {

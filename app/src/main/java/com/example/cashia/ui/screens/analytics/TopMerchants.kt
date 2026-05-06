@@ -76,7 +76,7 @@ fun TopMerchantsCard(
 
     val maxAmount = merchants.first().total
     val animated = remember { Animatable(0f) }
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(expanded) {
         if (expanded) {

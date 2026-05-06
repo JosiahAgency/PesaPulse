@@ -1,13 +1,13 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+//    id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.pesapulse"
-    compileSdk = 36
+    compileSdk = 37
 
 
     defaultConfig {
@@ -15,13 +15,14 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "2.1.2"
+        versionName = "2.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
+
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -60,6 +61,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+//    implementation(libs.firebase.auth.common)
+//    implementation(libs.google.firebase.auth.ktx)
 
     // Navigation & Work
     implementation(libs.navigation.compose)
@@ -73,11 +76,21 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
 
     // Other UI/Utility
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.core:core-splashscreen:1.2.0")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.biometric)
+//    implementation(libs.androidx.credentials)
+//    implementation(libs.androidx.credentials.play.services.auth)
+//    implementation(libs.googleid)
+//    implementation(libs.play.services.auth)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
+    implementation(libs.play.services.auth)
 
     // Testing
     testImplementation(libs.junit)

@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens
 
+import android.app.Application
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -55,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -81,13 +83,17 @@ fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
     onFirstDayOfWeekChange: (DayOfWeek) -> Unit,
-    navController: NavController
+    navController: NavController,
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
-    val settingsViewModel: SettingsViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModel.provideFactory(
+            (LocalContext.current.applicationContext as Application)
+        )
+    )
 
     // Collect all state flows from ViewModel — this is the single source of truth
     val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
@@ -561,6 +567,75 @@ fun SettingsIconBox(icon: ImageVector) {
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.primary
         )
+    }
+}
+
+@Composable
+fun LinkedAccountItem(email: String, onUnlink: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Google avatar placeholder with first letter
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.tertiary
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = email.first().uppercaseChar().toString(),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Google Account",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                email,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        // Unlink button
+        Surface(
+            onClick = onUnlink,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+            border = BorderStroke(
+                0.5.dp,
+                MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+            )
+        ) {
+            Text(
+                "Unlink",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 

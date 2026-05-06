@@ -1,15 +1,13 @@
 package com.example.cashia.ui.screens.category
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,62 +21,54 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cashia.utility.ALL_EMOJIS
-import com.example.cashia.utility.EmojiPicker
-import com.example.cashia.utility.PesaActions
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.ResolvedCategory
+import com.example.cashia.utility.EmojiPicker
 import java.util.UUID
 
 
-// ── Inline edit state ────────────────────────────────────────────────────────
-
-private data class InlineEditState(
-    val categoryId: String,
-    val label: String,
-    val emoji: String,
-    val keywords: String
+private val INCOME_IDS = setOf(
+    "SALARY", "BUSINESS_INCOME", "RECEIVED_MONEY",
+    "LOAN_DISBURSEMENT", "INVESTMENT_RETURNS", "GOVERNMENT_REFUND"
 )
+private val HIDDEN_IDS = setOf("OTHER", "BALANCE_INQUIRY")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,142 +81,138 @@ fun CategoryPickerSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colorScheme = MaterialTheme.colorScheme
-    val haptic = LocalHapticFeedback.current
-    rememberCoroutineScope()
 
-    // Inline editing state
-    var inlineEdit by remember { mutableStateOf<InlineEditState?>(null) }
-    var deleteTarget by remember { mutableStateOf<ResolvedCategory?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var drilldownParent by remember { mutableStateOf<ResolvedCategory?>(null) }
     var showAddForm by remember { mutableStateOf(false) }
 
-    // New category draft
+    // ── Add-form draft state ───────────────────────────────────────────────
     var newLabel by remember { mutableStateOf("") }
     var newEmoji by remember { mutableStateOf("📦") }
     var newKeywords by remember { mutableStateOf("") }
-    var newError by remember { mutableStateOf<String?>(null) }
+    var addError by remember { mutableStateOf<String?>(null) }
+
+    // ── Derived lists ─────────────────────────────────────────────────────
+    val customCats = remember(allCategories) { allCategories.filter { !it.isSystem } }
+    val systemTop = remember(allCategories) {
+        categoryViewModel.topLevelCategories(allCategories).filter { it.isSystem }
+    }
+    val spendingCats = remember(systemTop) {
+        systemTop.filter { it.id !in INCOME_IDS && it.id !in HIDDEN_IDS }
+    }
+    val incomeCats = remember(systemTop) { systemTop.filter { it.id in INCOME_IDS } }
+
+    val searchResults = remember(searchQuery, allCategories) {
+        if (searchQuery.isBlank()) emptyList()
+        else allCategories.filter {
+            it.id !in HIDDEN_IDS &&
+                    it.label.contains(searchQuery, ignoreCase = true)
+        }
+    }
+    BackHandler(enabled = drilldownParent != null) { drilldownParent = null }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(color = colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+        }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            // ── Handle ────────────────────────────────────────────────────
-            Box(
-                Modifier
-                    .size(40.dp, 4.dp)
-                    .background(colorScheme.onSurface.copy(alpha = 0.15f), CircleShape)
-                    .align(Alignment.CenterHorizontally)
-            )
-            Spacer(Modifier.height(16.dp))
-
+        Column(modifier = Modifier.fillMaxWidth()) {
             // ── Header ────────────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Choose Category",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
-                )
-                // Add new category button
-                Surface(
-                    modifier = Modifier.clickable {
-                        PesaActions.playClick(haptic)
-                        showAddForm = !showAddForm
-                        inlineEdit = null
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (showAddForm) colorScheme.primary
-                    else colorScheme.primary.copy(alpha = 0.1f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            if (showAddForm) Icons.Rounded.Close else Icons.Rounded.Add,
-                            null,
-                            modifier = Modifier.size(14.dp),
-                            tint = if (showAddForm) colorScheme.onPrimary
-                            else colorScheme.primary
-                        )
-                        Text(
-                            if (showAddForm) "Cancel" else "New",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (showAddForm) colorScheme.onPrimary
-                            else colorScheme.primary
-                        )
+                AnimatedContent(drilldownParent, label = "header") { parent ->
+                    if (parent != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { drilldownParent = null }) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                            Text(
+                                text = "${parent.emoji}  ${parent.label}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Category",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                                )
+                                Text(
+                                    "Pick one, or create your own",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                            }
+                            FilledTonalIconButton(
+                                onClick = {
+                                    showAddForm = !showAddForm
+                                    if (!showAddForm) {
+                                        newLabel = ""; newEmoji = "📦"; newKeywords = ""; addError =
+                                            null
+                                    }
+                                },
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = if (showAddForm) colorScheme.errorContainer
+                                    else colorScheme.primaryContainer,
+                                    contentColor = if (showAddForm) colorScheme.error
+                                    else colorScheme.primary
+                                )
+                            ) {
+                                Icon(
+                                    if (showAddForm) Icons.Rounded.Close else Icons.Rounded.Add,
+                                    null
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
             // ── Inline add form ───────────────────────────────────────────
             AnimatedVisibility(
-                showAddForm,
-                enter = expandVertically(tween(250)) + fadeIn(),
-                exit = shrinkVertically(tween(200)) + fadeOut()
+                showAddForm && drilldownParent == null,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                         .background(
-                            colorScheme.primary.copy(alpha = 0.04f),
-                            RoundedCornerShape(16.dp)
+                            colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            RoundedCornerShape(20.dp)
                         )
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "NEW CATEGORY",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    )
-
-                    // Emoji preview + label row
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Emoji badge (tap to cycle)
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    colorScheme.primaryContainer.copy(alpha = 0.4f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .clickable {
-                                    // cycle through suggestions
-                                    val idx = ALL_EMOJIS.indexOf(newEmoji)
-                                    newEmoji = ALL_EMOJIS.getOrElse(idx + 1) { ALL_EMOJIS.first() }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(newEmoji, fontSize = 24.sp)
-                        }
-
+                        Text(newEmoji, fontSize = 28.sp)
                         OutlinedTextField(
                             value = newLabel,
-                            onValueChange = { newLabel = it; newError = null },
-                            label = { Text("Name") },
-                            isError = newError != null,
-                            supportingText = newError?.let {
+                            onValueChange = { newLabel = it; addError = null },
+                            label = { Text("Category name") },
+                            isError = addError != null,
+                            supportingText = addError?.let {
                                 {
                                     Text(
                                         it,
@@ -235,401 +221,293 @@ fun CategoryPickerSheet(
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            singleLine = true,
                             shape = RoundedCornerShape(12.dp),
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Words,
-                                imeAction = ImeAction.Next
-                            ),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f),
-                                focusedBorderColor = colorScheme.primary
+                                unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f)
                             )
                         )
                     }
+
+                    EmojiPicker(selected = newEmoji, onSelect = { newEmoji = it })
 
                     OutlinedTextField(
                         value = newKeywords,
                         onValueChange = { newKeywords = it },
-                        label = { Text("Keywords (comma-separated)") },
-                        placeholder = { Text("e.g. rent, landlord, lease") },
+                        label = { Text("Auto-match keywords (optional)") },
+                        placeholder = { Text("e.g. wife, mum, home") },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 3,
                         shape = RoundedCornerShape(12.dp),
+                        maxLines = 2,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f),
-                            focusedBorderColor = colorScheme.primary
+                            unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f)
                         )
                     )
 
-                    // Mini emoji picker
-                    EmojiPicker(selected = newEmoji, onSelect = { newEmoji = it })
-
-                    Button(
+                    OutlinedButton(
                         onClick = {
                             if (newLabel.isBlank()) {
-                                newError = "Name cannot be empty"
-                                return@Button
-                            }
-                            PesaActions.playSuccess(haptic)
-                            val id =
-                                "custom_${UUID.randomUUID().toString().replace("-", "").take(8)}"
-                            categoryViewModel.saveInlineCategory(
-                                CustomCategory(
-                                    id = id,
-                                    label = newLabel.trim(),
-                                    emoji = newEmoji,
-                                    keywords = newKeywords.trim()
+                                addError = "Name is required"
+                            } else {
+                                val id = "custom_${UUID.randomUUID().toString().take(8)}"
+                                categoryViewModel.saveInlineCategory(
+                                    CustomCategory(
+                                        id,
+                                        newLabel.trim(),
+                                        newEmoji,
+                                        newKeywords.trim()
+                                    )
                                 )
-                            )
-                            // Reset and select the new category
-                            onPick(id)
-                            showAddForm = false
-                            newLabel = ""; newEmoji = "📦"; newKeywords = ""
+                                onPick(id)
+                                showAddForm = false
+                                newLabel = ""; newEmoji = "📦"; newKeywords = ""
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Rounded.Check, null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Rounded.Add, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Create & Select", fontWeight = FontWeight.Bold)
+                        Text("Create Category", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
 
-            if (showAddForm) Spacer(Modifier.height(8.dp))
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                color = colorScheme.onSurface.copy(alpha = 0.06f)
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // ── Category list ─────────────────────────────────────────────
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            // ── Search bar ────────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = drilldownParent == null && !showAddForm,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                // System categories (non-editable labels, but show clearly)
-                val systemCats = allCategories.filter { it.isSystem }
-                val customCats = allCategories.filter { !it.isSystem }
-
-                if (customCats.isNotEmpty()) {
-                    item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
                         Text(
-                            "YOUR CATEGORIES",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.primary.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            "Search categories…",
+                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                         )
-                    }
-
-                    items(customCats, key = { "custom_${it.id}" }) { cat ->
-                        PickerCategoryRow(
-                            cat = cat,
-                            isSelected = cat.id == currentCategoryId,
-                            isEditing = inlineEdit?.categoryId == cat.id,
-                            inlineEdit = inlineEdit,
-                            onPick = { onPick(cat.id) },
-                            onEdit = {
-                                inlineEdit = if (inlineEdit?.categoryId == cat.id) null
-                                else InlineEditState(cat.id, cat.label, cat.emoji, "")
-                                showAddForm = false
-                            },
-                            onEditChange = { inlineEdit = it },
-                            onSave = { state ->
-                                categoryViewModel.saveInlineCategory(
-                                    CustomCategory(
-                                        id = state.categoryId,
-                                        label = state.label.trim(),
-                                        emoji = state.emoji,
-                                        keywords = state.keywords.trim()
-                                    )
-                                )
-                                inlineEdit = null
-                            },
-                            onDelete = { deleteTarget = cat },
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.Search, null,
+                            tint = colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                         )
-                    }
-
-                    item { Spacer(Modifier.height(4.dp)) }
-                }
-
-                item {
-                    Text(
-                        "BUILT-IN",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-
-                items(systemCats, key = { "sys_${it.id}" }) { cat ->
-                    val isSelected = cat.id == currentCategoryId
-                    val bgColor by animateColorAsState(
-                        if (isSelected) colorScheme.primary.copy(alpha = 0.1f)
-                        else colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        label = "catBg"
-                    )
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onPick(cat.id) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = bgColor,
-                        border = if (isSelected)
-                            BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.35f)) else null
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(cat.emoji, fontSize = 20.sp)
-                            Text(
-                                cat.label,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold
-                                    else FontWeight.Normal
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Rounded.Check, null,
-                                    tint = colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                    },
+                    trailingIcon = if (searchQuery.isNotBlank()) {
+                        {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Rounded.Close, null, Modifier.size(16.dp))
                             }
                         }
-                    }
-                }
-
-                item { Spacer(Modifier.height(16.dp)) }
-            }
-        }
-    }
-
-    // ── Delete confirmation ────────────────────────────────────────────────
-    deleteTarget?.let { cat ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete \"${cat.label}\"?") },
-            text = {
-                Text(
-                    "Transactions in this category will move to \"Other\". Cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        categoryViewModel.deleteResolvedCategory(cat)
-                        deleteTarget = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
-            }
-        )
-    }
-}
-
-// ── Single row in picker with inline expand-to-edit ───────────────────────────
-
-@Composable
-private fun PickerCategoryRow(
-    cat: ResolvedCategory,
-    isSelected: Boolean,
-    isEditing: Boolean,
-    inlineEdit: InlineEditState?,
-    onPick: () -> Unit,
-    onEdit: () -> Unit,
-    onEditChange: (InlineEditState?) -> Unit,
-    onSave: (InlineEditState) -> Unit,
-    onDelete: () -> Unit,
-) {
-    val colorScheme = MaterialTheme.colorScheme
-
-    Column {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(
-                    if (isEditing) RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
-                    else RoundedCornerShape(14.dp)
-                )
-                .clickable { onPick() },
-            shape = if (isEditing) RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
-            else RoundedCornerShape(14.dp),
-            color = when {
-                isEditing -> colorScheme.primary.copy(alpha = 0.08f)
-                isSelected -> colorScheme.primary.copy(alpha = 0.1f)
-                else -> colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
-            border = when {
-                isEditing -> BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
-                isSelected -> BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.35f))
-                else -> null
-            }
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    if (isEditing) (inlineEdit?.emoji ?: cat.emoji) else cat.emoji,
-                    fontSize = 20.sp
-                )
-                Text(
-                    if (isEditing) (inlineEdit?.label?.ifBlank { cat.label } ?: cat.label)
-                    else cat.label,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                    ),
-                    modifier = Modifier.weight(1f)
-                )
-                if (isSelected && !isEditing) {
-                    Icon(
-                        Icons.Rounded.Check, null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                // Edit button
-                Box(
+                    } else null,
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isEditing) colorScheme.primary.copy(alpha = 0.15f)
-                            else Color.Transparent
-                        )
-                        .clickable { onEdit() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        if (isEditing) Icons.Rounded.Close else Icons.Rounded.Edit,
-                        null,
-                        modifier = Modifier.size(14.dp),
-                        tint = if (isEditing) colorScheme.primary
-                        else colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                }
-                // Delete button
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .clickable { onDelete() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Rounded.Delete,
-                        null,
-                        modifier = Modifier.size(14.dp),
-                        tint = colorScheme.error.copy(alpha = 0.5f)
-                    )
-                }
-            }
-        }
-
-        // ── Inline edit form (expands below the row) ──────────────────────
-        AnimatedVisibility(
-            isEditing && inlineEdit != null,
-            enter = expandVertically(tween(220)) + fadeIn(),
-            exit = shrinkVertically(tween(180)) + fadeOut()
-        ) {
-            val state = inlineEdit ?: return@AnimatedVisibility
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        colorScheme.primary.copy(alpha = 0.04f),
-                        RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
-                    )
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = state.label,
-                        onValueChange = { onEditChange(state.copy(label = it)) },
-                        label = { Text("Name") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Words,
-                            imeAction = ImeAction.Done
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f),
-                            focusedBorderColor = colorScheme.primary
-                        )
-                    )
-                    // Emoji preview
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                colorScheme.primaryContainer.copy(alpha = 0.35f),
-                                RoundedCornerShape(10.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(state.emoji, fontSize = 22.sp)
-                    }
-                }
-
-                OutlinedTextField(
-                    value = state.keywords,
-                    onValueChange = { onEditChange(state.copy(keywords = it)) },
-                    label = { Text("Keywords") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 1,
-                    maxLines = 2,
-                    shape = RoundedCornerShape(10.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f),
+                        unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.1f),
                         focusedBorderColor = colorScheme.primary
                     )
                 )
+            }
 
-                EmojiPicker(
-                    selected = state.emoji,
-                    onSelect = { onEditChange(state.copy(emoji = it)) }
-                )
 
-                Button(
-                    onClick = { onSave(state) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Rounded.Check, null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Save Changes",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelMedium
-                    )
+            // ── Category list ─────────────────────────────────────────────
+            LazyColumn(
+                modifier = Modifier.weight(1f, fill = false),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                when {
+                    drilldownParent != null -> {
+                        val parent = drilldownParent!!
+                        val children = categoryViewModel.childCategories(allCategories, parent.id)
+
+                        item {
+                            PickerRow(
+                                emoji = parent.emoji,
+                                label = "All ${parent.label}",
+                                isSelected = currentCategoryId == parent.id,
+                                dimLabel = true,
+                                onClick = { onPick(parent.id) }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = colorScheme.onSurface.copy(alpha = 0.06f)
+                            )
+                        }
+                        items(children, key = { it.id }) { child ->
+                            PickerRow(
+                                emoji = child.emoji,
+                                label = child.label,
+                                isSelected = currentCategoryId == child.id,
+                                onClick = { onPick(child.id) }
+                            )
+                        }
+                        item { Spacer(Modifier.height(32.dp)) }
+                    }
+
+                    searchQuery.isNotBlank() -> {
+                        if (searchResults.isEmpty()) {
+                            item {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 40.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("🔍", fontSize = 32.sp)
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            "No categories match",
+                                            color = colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            items(searchResults, key = { it.id }) { cat ->
+                                PickerRow(
+                                    emoji = cat.emoji,
+                                    label = cat.label,
+                                    isSelected = currentCategoryId == cat.id,
+                                    onClick = { onPick(cat.id) }
+                                )
+                            }
+                        }
+                        item { Spacer(Modifier.height(32.dp)) }
+                    }
+
+                    // ── Normal browsing ───────────────────────────────────
+                    else -> {
+                        // Custom categories (if any)
+                        if (customCats.isNotEmpty()) {
+                            item { PickerSectionLabel("My Categories") }
+                            items(customCats, key = { it.id }) { cat ->
+                                PickerRow(
+                                    emoji = cat.emoji,
+                                    label = cat.label,
+                                    isSelected = currentCategoryId == cat.id,
+                                    onClick = { onPick(cat.id) }
+                                )
+                            }
+                            item { Spacer(Modifier.height(8.dp)) }
+                        }
+
+                        // Spending
+                        item { PickerSectionLabel("Spending") }
+                        items(spendingCats, key = { it.id }) { cat ->
+                            val children = categoryViewModel.childCategories(allCategories, cat.id)
+                            val childSelected = children.any { it.id == currentCategoryId }
+                            PickerRow(
+                                emoji = cat.emoji,
+                                label = cat.label,
+                                isSelected = currentCategoryId == cat.id || childSelected,
+                                hasChildren = children.isNotEmpty(),
+                                onClick = {
+                                    if (children.isNotEmpty()) drilldownParent = cat
+                                    else onPick(cat.id)
+                                }
+                            )
+                        }
+
+                        item { Spacer(Modifier.height(8.dp)) }
+
+                        // Income
+                        item { PickerSectionLabel("Income") }
+                        items(incomeCats, key = { it.id }) { cat ->
+                            PickerRow(
+                                emoji = cat.emoji,
+                                label = cat.label,
+                                isSelected = currentCategoryId == cat.id,
+                                onClick = { onPick(cat.id) }
+                            )
+                        }
+
+                        item { Spacer(Modifier.height(8.dp)) }
+                        item {
+                            PickerRow(
+                                emoji = "📦", label = "Other",
+                                isSelected = currentCategoryId == "OTHER",
+                                onClick = { onPick("OTHER") }
+                            )
+                        }
+                        item { Spacer(Modifier.height(32.dp)) }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun PickerRow(
+    emoji: String,
+    label: String,
+    isSelected: Boolean,
+    hasChildren: Boolean = false,
+    dimLabel: Boolean = false,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) colorScheme.primaryContainer.copy(alpha = 0.45f)
+        else colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(emoji, fontSize = 20.sp)
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = when {
+                        isSelected -> colorScheme.primary
+                        dimLabel -> colorScheme.onSurface.copy(alpha = 0.55f)
+                        else -> colorScheme.onSurface
+                    }
+                ),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            when {
+                hasChildren -> Icon(
+                    Icons.Rounded.ChevronRight, null,
+                    Modifier.size(20.dp),
+                    tint = colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+
+                isSelected -> Icon(
+                    Icons.Rounded.Check, null,
+                    Modifier.size(18.dp),
+                    tint = colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerSectionLabel(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            letterSpacing = 0.9.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+        ),
+        modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 4.dp)
+    )
 }

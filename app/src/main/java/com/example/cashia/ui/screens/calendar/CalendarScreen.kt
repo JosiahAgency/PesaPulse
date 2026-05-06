@@ -1,4 +1,4 @@
-package com.example.cashia.ui.calendar
+package com.example.cashia.ui.screens.calendar
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
@@ -55,10 +55,10 @@ import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
-import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.utility.TransactionType
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +75,7 @@ fun CalendarScreen(
     val hapticFeedback = LocalHapticFeedback.current
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
+    var selectedFilter by remember { mutableStateOf(TransactionType.ALL) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -92,10 +93,18 @@ fun CalendarScreen(
         }
     }
 
-    val transactionsForDay by remember(state.allTransactions, selectedDate) {
+    val filteredTransctions by remember(state.allTransactions, selectedDate, selectedFilter) {
         derivedStateOf {
-            val dateStr = selectedDate.toString()
-            state.allTransactions.filter { it.date == dateStr }
+            val monthlyPrefix =
+                "${selectedDate.year}-${selectedDate.monthValue.toString().padStart(2, '0')}"
+            state.allTransactions.filter { tx ->
+                if (!tx.date.startsWith(monthlyPrefix)) return@filter false
+                when (selectedFilter) {
+                    TransactionType.ALL -> true
+                    TransactionType.INCOME -> tx.type == "income"
+                    TransactionType.EXPENSE -> tx.type == "expense"
+                }
+            }
         }
     }
 
@@ -134,7 +143,11 @@ fun CalendarScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    FinancialOverviewCards(state.allTransactions, selectedDate)
+                    FinancialOverviewCards(
+                        state.allTransactions,
+                        selectedDate,
+                        selectedFilter,
+                        { selectedFilter = it })
                 }
                 item {
                     FullMonthCalendar(
@@ -144,22 +157,12 @@ fun CalendarScreen(
                     ) { selectedDate = it }
                 }
                 item {
-                    TransactionFrequencyCard(state.allTransactions, selectedDate)
+                    ListHeader(selectedFilter)
                 }
-                item {
-                    UpcomingTransactionsSection(
-                        upcomingViewModel = upcomingViewModel,
-                        categoryViewModel = categoryViewModel,
-                        allCategories = allCategories
-                    )
-                }
-                item {
-                    DayHeader(selectedDate = selectedDate)
-                }
-                if (transactionsForDay.isEmpty() && upcomingForDay.isEmpty()) {
-                    item { EmptyStateMessage("No Transactions On This Day") }
+                if (filteredTransctions.isEmpty() && upcomingForDay.isEmpty()) {
+                    item { EmptyStateMessage("No Transactions") }
                 } else {
-                    items(transactionsForDay, key = { it.id }) { tx ->
+                    items(filteredTransctions, key = { it.id }) { tx ->
                         TransactionItem(
                             tx,
                             allCategories,
@@ -174,7 +177,13 @@ fun CalendarScreen(
 }
 
 @Composable
-private fun DayHeader(selectedDate: LocalDate) {
+private fun ListHeader(selectedFilter: TransactionType) {
+    val title = when (selectedFilter) {
+        TransactionType.ALL -> "All Transactions"
+        TransactionType.INCOME -> "Income Transactions Only"
+        TransactionType.EXPENSE -> "Expense Transactions Only"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -193,7 +202,7 @@ private fun DayHeader(selectedDate: LocalDate) {
                     .background(brush = primaryGradient(), shape = CircleShape)
             )
             Spacer(Modifier.width(8.dp))
-            SectionLabel(selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")))
+            SectionLabel(title)
         }
         Box(
             modifier = Modifier

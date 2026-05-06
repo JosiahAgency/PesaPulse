@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens.allTransactions
 
+import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -90,7 +92,7 @@ fun TransactionItem(
 
     if (showCategoryPicker) {
         CategoryPickerSheet(
-            allCategories = allCategories,
+            allCategories,
             currentCategoryId = currentCategoryId,
             onPick = { newId ->
                 currentCategoryId = newId
@@ -112,9 +114,9 @@ fun TransactionItem(
             tx = tx,
             resolvedCategory = resolvedCategory,
             expanded = expanded,
-            hapticFeedback = hapticFeedback,
-            onExpandToggle = { expanded = !expanded },
-            onCategoryTap = { showCategoryPicker = true }
+            hapticFeedback,
+            { expanded = !expanded },
+            { showCategoryPicker = true }
         )
     }
 }
@@ -139,10 +141,12 @@ fun TransactionItemExpanded(
     }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    context.applicationContext as Application
 
     // Pre-format amount once — avoids repeated string building in text composition
     val formattedAmount = remember(tx.amount) { formatAmount(tx.amount) }
     val amountPrefix = if (isIncome) "+" else if (isExpense) "-" else ""
+
 
     Surface(
         modifier = Modifier
@@ -187,12 +191,27 @@ fun TransactionItemExpanded(
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        tx.recipient,
+                        tx.recipientName.ifBlank { tx.recipient },
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         color = accentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    tx.recipientPhone?.let { phone ->
+                        val isRedacted = phone.contains("*")
+                        Text(
+                            phone,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = if (isRedacted)
+                                accentColor.copy(alpha = 0.4f)   // dim redacted numbers
+                            else
+                                accentColor.copy(alpha = 0.65f),
+                            maxLines = 1
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Subtitles("${tx.displayDate} · ${tx.displayTime}")
                     Surface(
@@ -279,6 +298,9 @@ fun TransactionItemExpanded(
                             bold = true
                         )
                     }
+                    tx.recipientPhone?.takeIf { it.contains("*") }?.let {
+                        InlineDetailRow("MOBILE NUMBER", "Redacted — forward SMS to 334")
+                    }
                     if (tx.balance > 0) {
                         InlineDetailRow(
                             "BALANCE AFTER",
@@ -293,7 +315,7 @@ fun TransactionItemExpanded(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         QuickActionChip(
-                            label = "Copy Ref",
+                            label = "Reference",
                             icon = Icons.Rounded.ContentCopy,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -306,12 +328,22 @@ fun TransactionItemExpanded(
                             )
                         }
                         QuickActionChip(
-                            label = "Copy Amount",
+                            label = "Amount",
                             icon = Icons.Rounded.AttachMoney,
                             modifier = Modifier.weight(1f)
                         ) {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             clipboard.setText(AnnotatedString(formattedAmount))
+                        }
+                        tx.recipientPhone?.takeIf { !it.contains("*") }?.let { phone ->
+                            QuickActionChip(
+                                label = "Mobile Number",
+                                Icons.Rounded.Phone,
+                                Modifier.weight(1f)
+                            ) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                clipboard.setText(AnnotatedString(phone))
+                            }
                         }
                         QuickActionChip(
                             label = "Change",
@@ -330,7 +362,7 @@ fun TransactionItemExpanded(
 }
 
 @Composable
-private fun QuickActionChip(
+fun QuickActionChip(
     label: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
@@ -357,7 +389,7 @@ private fun QuickActionChip(
 }
 
 @Composable
-private fun InlineDetailRow(
+fun InlineDetailRow(
     label: String,
     value: String,
     bold: Boolean = false,

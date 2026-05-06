@@ -7,7 +7,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,7 +61,7 @@ fun ProjectionTrendChart(
 ) {
     if (projection.dailyTrend.isEmpty()) return
 
-    val horizonDays = period.daysRemaining()
+    period.daysRemaining()
 
     val primary = MaterialTheme.colorScheme.primary
     val tertiary = MaterialTheme.colorScheme.tertiary
@@ -209,33 +208,23 @@ fun ProjectionTrendChart(
                 Spacer(Modifier.height(64.dp))
             }
 
+// Only showing the Canvas section (this is where all improvements are)
+// Replace your Canvas {} block with this
+
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
+                    .height(170.dp)
                     .pointerInput(allValues.size) {
-                        detectTapGestures { offset ->
+                        detectDragGestures { change, _ ->
                             val n = allValues.size
-                            if (n < 2) return@detectTapGestures
-                            val idx = (offset.x / chartWidth * (n - 1))
+                            if (n < 2) return@detectDragGestures
+                            val idx = ((change.position.x / chartWidth) * (n - 1))
                                 .toInt().coerceIn(0, n - 1)
-                            crosshairIndex = if (crosshairIndex == idx) -1 else idx
-                            crosshairX = if (crosshairIndex >= 0)
-                                (crosshairIndex.toFloat() / (n - 1)) * chartWidth else -1f
+
+                            crosshairIndex = idx
+                            crosshairX = (idx.toFloat() / (n - 1)) * chartWidth
                         }
-                    }
-                    .pointerInput(allValues.size) {
-                        detectDragGestures(
-                            onDragEnd = {},
-                            onDrag = { change, _ ->
-                                val n = allValues.size
-                                if (n < 2) return@detectDragGestures
-                                val idx = (change.position.x / chartWidth * (n - 1))
-                                    .toInt().coerceIn(0, n - 1)
-                                crosshairIndex = idx
-                                crosshairX = (idx.toFloat() / (n - 1)) * chartWidth
-                            }
-                        )
                     }
             ) {
                 chartWidth = size.width
@@ -245,114 +234,174 @@ fun ProjectionTrendChart(
                 fun valueToY(v: Double) =
                     (h - ((v - minVal) / range * h).toFloat()).coerceIn(0f, h)
 
+                // ─────────────────────────────────────────────
+                // 1. Build points
+                // ─────────────────────────────────────────────
                 val points = allValues.mapIndexed { i, v ->
                     Offset(i / (allValues.size - 1).toFloat() * w, valueToY(v))
                 }
-                val upperPoints = allValues.mapIndexed { i, v ->
-                    Offset(i / (allValues.size - 1).toFloat() * w, valueToY(v * (1 + bandFraction)))
-                }
-                val lowerPoints = allValues.mapIndexed { i, v ->
-                    Offset(i / (allValues.size - 1).toFloat() * w, valueToY(v * (1 - bandFraction)))
-                }
 
                 val drawCount = (points.size * progress.value).toInt().coerceAtLeast(2)
-                val vis = points.take(drawCount)
-                val visUpper = upperPoints.take(drawCount)
-                val visLower = lowerPoints.take(drawCount)
+                val visible = points.take(drawCount)
 
-                if (vis.size >= 2) {
-                    drawPath(Path().apply {
-                        moveTo(visUpper.first().x, visUpper.first().y)
-                        visUpper.drop(1).forEach { lineTo(it.x, it.y) }
-                        visLower.reversed().forEach { lineTo(it.x, it.y) }
-                        close()
-                    }, color = primary.copy(alpha = 0.06f))
+                // ─────────────────────────────────────────────
+                // 2. Smooth curve (BEZIER)
+                // ─────────────────────────────────────────────
+                fun buildSmoothPath(pts: List<Offset>): Path {
+                    val path = Path()
+                    if (pts.size < 2) return path
 
-                    drawPath(
-                        Path().apply {
-                            moveTo(vis.first().x, h)
-                            vis.forEach { lineTo(it.x, it.y) }
-                            lineTo(vis.last().x, h)
-                            close()
-                        }, brush = Brush.verticalGradient(
-                            listOf(primary.copy(alpha = 0.22f), Color.Transparent), 0f, h
-                        )
-                    )
+                    path.moveTo(pts.first().x, pts.first().y)
 
-                    drawPath(Path().apply {
-                        moveTo(vis.first().x, vis.first().y)
-                        vis.drop(1).forEach { lineTo(it.x, it.y) }
-                    }, color = primary, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round))
+                    for (i in 1 until pts.size) {
+                        val prev = pts[i - 1]
+                        val curr = pts[i]
+
+                        val midX = (prev.x + curr.x) / 2
+                        val midY = (prev.y + curr.y) / 2
+
+                        path.quadraticBezierTo(prev.x, prev.y, midX, midY)
+                    }
+
+                    path.lineTo(pts.last().x, pts.last().y)
+                    return path
                 }
 
+                val smoothPath = buildSmoothPath(visible)
+
+                // ─────────────────────────────────────────────
+                // 3. Confidence band (cleaner)
+                // ─────────────────────────────────────────────
+                val upper = visible.mapIndexed { i, p ->
+                    Offset(p.x, valueToY(allValues[i] * (1 + bandFraction)))
+                }
+                val lower = visible.mapIndexed { i, p ->
+                    Offset(p.x, valueToY(allValues[i] * (1 - bandFraction)))
+                }
+
+                drawPath(
+                    path = Path().apply {
+                        moveTo(upper.first().x, upper.first().y)
+                        upper.drop(1).forEach { lineTo(it.x, it.y) }
+                        lower.reversed().forEach { lineTo(it.x, it.y) }
+                        close()
+                    },
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            primary.copy(alpha = 0.10f),
+                            primary.copy(alpha = 0.02f)
+                        )
+                    )
+                )
+
+                // ─────────────────────────────────────────────
+                // 4. Area fill (stronger depth)
+                // ─────────────────────────────────────────────
+                drawPath(
+                    path = Path().apply {
+                        addPath(smoothPath)
+                        lineTo(visible.last().x, h)
+                        lineTo(visible.first().x, h)
+                        close()
+                    },
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            primary.copy(alpha = 0.25f),
+                            Color.Transparent
+                        )
+                    )
+                )
+
+                // ─────────────────────────────────────────────
+                // 5. Main line (thicker + premium)
+                // ─────────────────────────────────────────────
+                drawPath(
+                    path = smoothPath,
+                    color = primary,
+                    style = Stroke(
+                        width = 3.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                )
+
+                // ─────────────────────────────────────────────
+                // 6. Zero line
+                // ─────────────────────────────────────────────
                 if (minVal < 0) {
                     val zeroY = valueToY(0.0)
                     drawLine(
-                        error.copy(alpha = 0.5f), Offset(0f, zeroY), Offset(w, zeroY),
+                        error.copy(alpha = 0.5f),
+                        Offset(0f, zeroY),
+                        Offset(w, zeroY),
                         1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
                     )
                 }
 
+                // ─────────────────────────────────────────────
+                // 7. Upcoming markers (cleaner + aligned)
+                // ─────────────────────────────────────────────
                 projection.upcomingMarkers.forEach { (date, balance, _) ->
-                    val dayIndex = ChronoUnit.DAYS.between(LocalDate.now(), date).toInt()
-                    if (dayIndex in 1..horizonDays) {
-                        val xFrac = dayIndex.toFloat() / horizonDays.toFloat()
-                        val x = xFrac * w
+                    val idx = ChronoUnit.DAYS.between(LocalDate.now(), date).toInt()
+                    if (idx in 1 until points.size) {
+                        val x = points.getOrNull(idx)?.x ?: return@forEach
                         val y = valueToY(balance)
-                        val r = 6.dp.toPx()
-                        val diamond = Path().apply {
-                            moveTo(x, y - r); lineTo(x + r, y)
-                            lineTo(x, y + r); lineTo(x - r, y); close()
-                        }
-                        drawPath(diamond, color = tertiary.copy(alpha = 0.9f))
-                        drawPath(diamond, color = Color.White, style = Stroke(1.5.dp.toPx()))
-                    }
-                }
 
-                if (vis.isNotEmpty()) {
-                    drawCircle(tertiary, 6.dp.toPx(), points.first())
-                    drawCircle(Color.White, 3.dp.toPx(), points.first())
-                }
-                if (drawCount >= points.size) {
-                    drawCircle(primary, 6.dp.toPx(), points.last())
-                    drawCircle(Color.White, 3.dp.toPx(), points.last())
-                }
-
-                if (crosshairX >= 0 && crosshairIndex in points.indices) {
-                    val cx = crosshairX
-                    val cy = points[crosshairIndex].y
-                    val dashLen = 6.dp.toPx()
-                    val gapLen = 4.dp.toPx()
-                    var y = 0f
-                    while (y < h) {
-                        drawLine(
-                            onSurface.copy(alpha = 0.2f),
-                            Offset(cx, y), Offset(cx, (y + dashLen).coerceAtMost(h)),
-                            1.5.dp.toPx()
+                        drawCircle(
+                            color = tertiary,
+                            radius = 5.dp.toPx(),
+                            center = Offset(x, y)
                         )
-                        y += dashLen + gapLen
+
+                        drawCircle(
+                            color = Color.White,
+                            radius = 2.5.dp.toPx(),
+                            center = Offset(x, y)
+                        )
                     }
+                }
+
+                // ─────────────────────────────────────────────
+                // 8. Crosshair (much cleaner)
+                // ─────────────────────────────────────────────
+                if (crosshairIndex in points.indices) {
+                    val cx = points[crosshairIndex].x
+                    val cy = points[crosshairIndex].y
+
                     drawLine(
-                        onSurface.copy(alpha = 0.08f),
-                        Offset(0f, cy), Offset(cx, cy), 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
+                        onSurface.copy(alpha = 0.15f),
+                        Offset(cx, 0f),
+                        Offset(cx, h),
+                        1.2.dp.toPx()
                     )
-                    drawCircle(surfaceColor, 8.dp.toPx(), Offset(cx, cy))
-                    drawCircle(primary, 5.5.dp.toPx(), Offset(cx, cy))
-                    drawCircle(Color.White, 2.5.dp.toPx(), Offset(cx, cy))
-                    if (calloutBalance != null) {
-                        val label = PesaTimeConfiguration.formatCurrency(calloutBalance)
-                        val paint = android.graphics.Paint().apply {
-                            color = primary.toArgb()
-                            textSize = 9.sp.toPx()
-                            isFakeBoldText = true
-                        }
-                        val lw = paint.measureText(label)
-                        val lx = (cx - lw / 2).coerceIn(0f, w - lw)
-                        val ly = (cy - 12.dp.toPx()).coerceAtLeast(10.dp.toPx())
-                        drawContext.canvas.nativeCanvas.drawText(label, lx, ly, paint)
+
+                    drawCircle(surfaceColor, 7.dp.toPx(), Offset(cx, cy))
+                    drawCircle(primary, 5.dp.toPx(), Offset(cx, cy))
+                    drawCircle(Color.White, 2.dp.toPx(), Offset(cx, cy))
+
+                    // Floating label (smarter positioning)
+                    val label = PesaTimeConfiguration.formatCurrency(
+                        if (crosshairIndex == 0) currentBalance
+                        else projection.dailyTrend[crosshairIndex - 1].second
+                    )
+
+                    val paint = android.graphics.Paint().apply {
+                        color = primary.toArgb()
+                        textSize = 10.sp.toPx()
+                        isFakeBoldText = true
                     }
+
+                    val textWidth = paint.measureText(label)
+
+                    val lx = when {
+                        cx < w * 0.3f -> cx + 12.dp.toPx()
+                        cx > w * 0.7f -> cx - textWidth - 12.dp.toPx()
+                        else -> cx - textWidth / 2
+                    }
+
+                    val ly = (cy - 14.dp.toPx()).coerceAtLeast(12.dp.toPx())
+
+                    drawContext.canvas.nativeCanvas.drawText(label, lx, ly, paint)
                 }
             }
 

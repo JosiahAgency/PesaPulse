@@ -1,26 +1,12 @@
 package com.example.cashia.ui.screens.projections
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoGraph
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,12 +14,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
@@ -50,10 +33,6 @@ import java.time.temporal.ChronoUnit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectionScreen(
-    // ✅ FIX: Use the ViewModels passed in from the parent NavHost.
-    //    Previously this screen called viewModel<TransactionsViewModel>() a SECOND time,
-    //    creating a brand-new, uninitialized ViewModel instance that fetched all
-    //    transactions from scratch — doubling DB reads and SMS parsing on every visit.
     transactionsViewModel: TransactionsViewModel,
     upcomingViewModel: UpcomingViewModel,
     categoryViewModel: CategoryViewModel
@@ -165,13 +144,6 @@ fun ProjectionScreen(
                 )
             }
             item {
-                ProjectionConfigSummary(
-                    period = period,
-                    isBalanceOverridden = balanceOverride.toDoubleOrNull() != null,
-                    pendingUpcoming.size
-                )
-            }
-            item {
                 PredictedBalanceCard(
                     currentBalance = effectiveBalance,
                     period = period,
@@ -211,63 +183,6 @@ fun ProjectionScreen(
                     allCategories
                 )
             }
-            item { DailyTrendMiniList(projection = projection) }
         }
-    }
-}
-
-@Composable
-private fun SummaryPill(
-    modifier: Modifier = Modifier,
-    label: String,
-    icon: ImageVector,
-    isCustom: Boolean,
-    overrideLabel: String? = null
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val color = if (isCustom) colorScheme.primary
-    else colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(50.dp),
-        color = color.copy(alpha = if (isCustom) 0.08f else 0.04f),
-        border = BorderStroke(0.5.dp, color.copy(alpha = if (isCustom) 0.25f else 0.1f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, null, modifier = Modifier.size(12.dp), tint = color)
-            Spacer(Modifier.width(4.dp))
-            Text(
-                overrideLabel ?: label,
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
-                fontWeight = if (isCustom) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProjectionConfigSummary(
-    period: ProjectionPeriod,
-    isBalanceOverridden: Boolean,
-    upcomingCount: Int
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        SummaryPill(Modifier.weight(1f), period.label, Icons.Default.AutoGraph, isCustom = true)
-        SummaryPill(
-            Modifier.weight(1f),
-            "$upcomingCount Scheduled",
-            Icons.Default.CalendarToday,
-            upcomingCount > 0,
-            if (isBalanceOverridden) "Custom bal." else null
-        )
     }
 }

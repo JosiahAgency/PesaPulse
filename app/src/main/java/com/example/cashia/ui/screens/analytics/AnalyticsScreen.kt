@@ -33,7 +33,6 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.screens.allTransactions.LargestTransactions
-import com.example.cashia.ui.screens.allTransactions.TransactionActivity
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.TransactionType
 import com.example.cashia.utility.calculatePreviousPeriod
@@ -65,8 +64,8 @@ fun AnalyticsScreen(
         if (selectedScope != TimeScope.CUSTOM) {
             val (start, end) = when (selectedScope) {
                 TimeScope.DAY -> today to today
-                TimeScope.WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)) to
-                        today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
+                TimeScope.WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) to
+                        today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
 
                 TimeScope.MONTH -> today.withDayOfMonth(1) to
                         today.with(TemporalAdjusters.lastDayOfMonth())
@@ -79,47 +78,41 @@ fun AnalyticsScreen(
     }
 
     val startTs by remember(startDate) {
-        derivedStateOf {
-            startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
+        derivedStateOf { startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     }
     val endTs by remember(endDate) {
         derivedStateOf {
             endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
     }
-    val typeStr by remember(selectedType) {
-        derivedStateOf { selectedType.name.lowercase() }
-    }
+    val typeStr by remember(selectedType) { derivedStateOf { selectedType.name.lowercase() } }
+
     val filteredTransactions by remember(transactions, typeStr, startTs, endTs) {
-        derivedStateOf {
-            transactions.filter { tx ->
-                tx.timestamp in startTs..endTs && tx.type == typeStr
-            }
-        }
+        derivedStateOf { transactions.filter { it.timestamp in startTs..endTs && it.type == typeStr } }
     }
     val previousPeriodAmount by remember(transactions, startDate, endDate, selectedType) {
-        derivedStateOf {
-            calculatePreviousPeriod(transactions, startDate, endDate, selectedType)
-        }
+        derivedStateOf { calculatePreviousPeriod(transactions, startDate, endDate, selectedType) }
     }
     val periodLabel by remember(startDate, endDate, selectedScope) {
         derivedStateOf {
             when (selectedScope) {
                 TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
-                TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – " +
-                        endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                TimeScope.WEEK -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                    endDate.format(
+                        DateTimeFormatter.ofPattern("dd MMM yyyy")
+                    )
+                }"
 
                 TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-                TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – " +
-                        endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                TimeScope.CUSTOM -> "${startDate.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
+                    endDate.format(
+                        DateTimeFormatter.ofPattern("dd MMM yyyy")
+                    )
+                }"
 
                 else -> ""
             }
         }
-    }
-    val allInPeriod by remember(transactions, startTs, endTs) {
-        derivedStateOf { transactions.filter { it.timestamp in startTs..endTs } }
     }
 
     Scaffold(containerColor = Color.Transparent) { padding ->
@@ -135,72 +128,52 @@ fun AnalyticsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 1. Period picker
                 item {
                     PeriodSelectorCard(
-                        hapticFeedback,
-                        selectedScope,
-                        startDate = startDate,
-                        endDate = endDate,
+                        hapticFeedback, selectedScope,
+                        startDate = startDate, endDate = endDate,
                         onScopeChange = { selectedScope = it },
                         onStartDateSelected = { startDate = it; selectedScope = TimeScope.CUSTOM },
                         onEndDateSelected = { endDate = it; selectedScope = TimeScope.CUSTOM }
                     )
                 }
-                item { CashFlowTrendChart(transactions, startDate, endDate) }
+
                 item {
                     TypeSelectorCard(
-                        hapticFeedback,
-                        selectedType = selectedType,
+                        hapticFeedback, selectedType = selectedType,
                         onTypeChange = { selectedType = it },
-                        transactions = transactions,
-                        startTs = startTs,
-                        endTs = endTs
-                    )
-                }
-                item {
-                    SummaryAmountHeader(
-                        hapticFeedback,
-                        totalAmount = filteredTransactions.sumOf { it.amount },
-                        transactionCount = filteredTransactions.size,
-                        type = selectedType,
-                        periodLabel = periodLabel,
-                        previousPeriodAmount = previousPeriodAmount
-                    )
-                }
-                if (filteredTransactions.isNotEmpty()) {
-                    item {
-                        GlassyTrendChart(
-                            transactions = filteredTransactions,
-                            type = selectedType
-                        )
-                    }
-                }
-                item {
-                    CategoryPieChart(
-                        filteredTransactions,
-                        allCategories,
-                        selectedType,
-                        hapticFeedback
+                        transactions = transactions, startTs = startTs, endTs = endTs
                     )
                 }
 
+                item { CashFlowTrendChart(transactions, startDate, endDate) }
+
                 if (filteredTransactions.isNotEmpty()) {
-                    if (selectedType == TransactionType.EXPENSE) {
-                        item {
-                            SpendingVelocityCard(
-                                filteredTransactions = filteredTransactions,
-                                startDate = startDate,
-                                endDate = endDate,
-                                type = selectedType
-                            )
-                        }
+                    item {
+                        SummaryAmountHeader(
+                            hapticFeedback,
+                            totalAmount = filteredTransactions.sumOf { it.amount },
+                            transactionCount = filteredTransactions.size,
+                            type = selectedType,
+                            periodLabel = periodLabel,
+                            previousPeriodAmount = previousPeriodAmount
+                        )
                     }
+                    item {
+                        CategoryPieChart(
+                            filteredTransactions, allCategories, selectedType, hapticFeedback
+                        )
+                    }
+
                     item {
                         TopMerchantsCard(
                             filteredTransactions = filteredTransactions,
                             type = selectedType
                         )
                     }
+
+                    // 7. Largest individual transactions
                     item {
                         LargestTransactions(
                             filteredTransactions = filteredTransactions,
@@ -208,32 +181,8 @@ fun AnalyticsScreen(
                             type = selectedType
                         )
                     }
-                    item {
-                        SpendingByDayOfWeekCard(
-                            filteredTransactions = filteredTransactions,
-                            type = selectedType
-                        )
-                    }
-                }
-
-                if (allInPeriod.isNotEmpty()) {
-                    item {
-                        TransactionActivity(
-                            allTransactionsInPeriod = allInPeriod,
-                            startDate = startDate,
-                            endDate = endDate
-                        )
-                    }
-                    item { BalanceSparklineCard(allTransactionsInPeriod = allInPeriod) }
-                }
-
-                if (filteredTransactions.isEmpty()) {
-                    item {
-                        InsightsEmptyState(
-                            selectedType = selectedType,
-                            periodLabel = periodLabel
-                        )
-                    }
+                } else {
+                    item { InsightsEmptyState(selectedType, periodLabel) }
                 }
             }
         }
