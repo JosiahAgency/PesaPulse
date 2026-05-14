@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.cashia.daos.CustomCategoryDao
+import com.example.cashia.daos.SyncStateDao
 import com.example.cashia.daos.SystemCategoryOverrideDao
 import com.example.cashia.daos.TransactionDao
 import com.example.cashia.daos.UnmatchedSmsDao
@@ -14,14 +15,15 @@ import com.example.cashia.daos.UpcomingTransactionDao
 import com.example.cashia.daos.UserCorrectionDao
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.SyncState
 import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UserCorrection
 
 @Database(
-    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class],
-    version = 10,
+    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class],
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun upcomingTransactionDao(): UpcomingTransactionDao
     abstract fun unmatchedSmsDao(): UnmatchedSmsDao
     abstract fun userCorrectionDao(): UserCorrectionDao
+    abstract fun syncStateDao(): SyncStateDao
 
     companion object {
         @Volatile
@@ -197,17 +200,26 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `UserCorrections` (
-                        `recipient`   TEXT    NOT NULL,
-                        `categoryId`  TEXT    NOT NULL,
-                        `hitCount`    INTEGER NOT NULL DEFAULT 1,
-                        `updatedAt`   INTEGER NOT NULL,
-                        PRIMARY KEY(`recipient`)
-                    )
-                """
-                )
+                database.execSQL("""CREATE TABLE IF NOT EXISTS `UserCorrections` (`recipient`   TEXT    NOT NULL,`categoryId`  TEXT    NOT NULL,`hitCount`    INTEGER NOT NULL DEFAULT 1,`updatedAt`   INTEGER NOT NULL,PRIMARY KEY(`recipient`))""")
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+
+                // SyncState table
+                database.execSQL("""CREATE TABLE IF NOT EXISTS SyncState ( `key` TEXT NOT NULL PRIMARY KEY, `lastSmsId` INTEGER NOT NULL)""")
+
+                // Add smsId to UnmatchedSms
+                database.execSQL("""ALTER TABLE UnmatchedSms ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
+
+                // Add smsId to MpesaTransactions
+                database.execSQL("""ALTER TABLE MpesaTransactions ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
+
+                // Unique index for SMS deduplication
+                database.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_MpesaTransactions_smsId ON MpesaTransactions(smsId)""")
+
+                database.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_UnmatchedSms_smsId ON UnmatchedSms(smsId)""")
             }
         }
 
@@ -226,7 +238,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
-                    MIGRATION_9_10
+                    MIGRATION_9_10,
+                    MIGRATION_10_11
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
