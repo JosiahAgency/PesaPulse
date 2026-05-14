@@ -23,21 +23,16 @@ enum class SmsStatus { PENDING, SKIPPED, IGNORED, SAVED }
         Index(value = ["status"]),
         Index(value = ["contentHash"]),
         Index(value = ["parserVersion"]),
-        Index(value = ["confidence"])
+        Index(value = ["confidence"]),
+        Index(value = ["smsId"], unique = true)
     ]
 )
 data class UnmatchedSms(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val smsId: Long = 0L,
     val rawBody: String,
     val receivedAt: Long = System.currentTimeMillis(),
-
-    /**
-     * Replaces the old `reviewed: Boolean`.
-     * Stored as the enum name string so it's human-readable in the DB.
-     */
     val status: SmsStatus = SmsStatus.PENDING,
-
-    // ── Learning pipeline metadata ────────────────────────────────────────
     val contentHash: String = "",
     val parserVersion: Int = 0,
     val confidence: Float = 0f,
