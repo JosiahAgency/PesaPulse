@@ -66,10 +66,10 @@ import java.time.LocalDate
 fun CalendarScreen(
     viewModel: TransactionsViewModel,
     categoryViewModel: CategoryViewModel,
-    upcomingViewModel: UpcomingViewModel
+    upcomingViewModel: UpcomingViewModel,
 ) {
     val today = remember { LocalDate.now() }
-
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
     var selectedDate by remember { mutableStateOf(today) }
     val state = viewModel.state
     val hapticFeedback = LocalHapticFeedback.current
@@ -168,6 +168,7 @@ fun CalendarScreen(
                             allCategories,
                             categoryViewModel,
                             hapticFeedback,
+                            reversalIndex
                         )
                     }
                 }

@@ -97,7 +97,8 @@ private val phoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
         Index(value = ["date"]),
         Index(value = ["type"]),
         Index(value = ["category"]),
-        Index(value = ["smsId"], unique = true)
+        Index(value = ["smsId"], unique = true),
+        Index(value = ["reversedTxId"])
     ]
 )
 data class MpesaTransactions(
@@ -113,6 +114,7 @@ data class MpesaTransactions(
     val time: String,
     val timestamp: Long,
     val category: String = TransactionCategory.OTHER.name,
+    val reversedTxId: String? = null,
 ) {
     @get:androidx.room.Ignore
     val recipientName: String by lazy {
@@ -295,7 +297,8 @@ fun parseMpesaMessage(
                         "income",
                         balance,
                         transactionCost,
-                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name
+                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name,
+                        reversedTxId = reversedTxId.trim()
                     )
                 )
             }
@@ -400,7 +403,8 @@ private fun buildTransaction(
     type: String,
     balance: Double,
     cost: Double,
-    forcedCategory: String? = null
+    forcedCategory: String? = null,
+    reversedTxId: String? = null
 ): MpesaTransactions {
     val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
     val formattedDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
@@ -423,7 +427,8 @@ private fun buildTransaction(
         balance = balance,
         time = standardizedTime,
         timestamp = convertToTimestamp(formattedDate, standardizedTime),
-        category = forcedCategory ?: guessCategory(cleanRecipient, type)
+        category = forcedCategory ?: guessCategory(cleanRecipient, type),
+        reversedTxId = reversedTxId
     )
 }
 

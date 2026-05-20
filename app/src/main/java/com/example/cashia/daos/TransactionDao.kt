@@ -52,6 +52,11 @@ interface TransactionDao {
     @Query("SELECT * FROM MpesaTransactions WHERE id = :id LIMIT 1")
     suspend fun getTransactionById(id: String): MpesaTransactions?
 
+    // In TransactionDao
+
+    @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId = :txId LIMIT 1")
+    suspend fun getReversalFor(txId: String): MpesaTransactions?
+
     /**
      * Re-classify every transaction from the same recipient when the user
      * manually overrides a category, skipping the transaction they just changed.

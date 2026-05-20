@@ -223,6 +223,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE MpesaTransactions ADD COLUMN reversedTxId TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_reversedTxId ON MpesaTransactions(reversedTxId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -239,7 +246,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_7_8,
                     MIGRATION_8_9,
                     MIGRATION_9_10,
-                    MIGRATION_10_11
+                    MIGRATION_10_11,
+                    MIGRATION_11_12,
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
