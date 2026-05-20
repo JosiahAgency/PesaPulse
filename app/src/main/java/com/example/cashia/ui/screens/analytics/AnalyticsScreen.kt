@@ -149,38 +149,73 @@ fun AnalyticsScreen(
 
                 item { CashFlowTrendChart(transactions, startDate, endDate) }
 
+//                item { BalanceTrendCard(transactions, startDate, endDate) }
+
                 if (filteredTransactions.isNotEmpty()) {
-                    item {
-                        SummaryAmountHeader(
-                            hapticFeedback,
-                            totalAmount = filteredTransactions.sumOf { it.amount },
-                            transactionCount = filteredTransactions.size,
-                            type = selectedType,
-                            periodLabel = periodLabel,
-                            previousPeriodAmount = previousPeriodAmount
-                        )
-                    }
+//                    item {
+//                        SummaryAmountHeader(
+//                            hapticFeedback,
+//                            totalAmount = filteredTransactions.sumOf { it.amount },
+//                            transactionCount = filteredTransactions.size,
+//                            type = selectedType,
+//                            periodLabel = periodLabel,
+//                            previousPeriodAmount = previousPeriodAmount
+//                        )
+//                    }
                     item {
                         CategoryPieChart(
                             filteredTransactions, allCategories, selectedType, hapticFeedback
                         )
                     }
+//
+//                    item {
+//                        TopMerchantsCard(
+//                            filteredTransactions = filteredTransactions,
+//                            type = selectedType
+//                        )
+//                    }
+
+                    if (selectedType == TransactionType.EXPENSE) {
+                        item {
+                            BurnRateCard(
+                                transactions = transactions,
+                                startDate = startDate,
+                                endDate = endDate
+                            )
+                        }
+                    }
 
                     item {
-                        TopMerchantsCard(
-                            filteredTransactions = filteredTransactions,
-                            type = selectedType
+                        WeekdaySpendCard(
+                            transactions = transactions,   // full history for richer pattern
+                            type = typeStr
+                        )
+                    }
+
+                    // Recurring merchants
+                    item {
+                        RecurringMerchantsCard(
+                            transactions = transactions,
+                            type = typeStr
+                        )
+                    }
+
+                    // Time-of-day heatmap
+                    item {
+                        TimeOfDayCard(
+                            transactions = filteredTransactions,
+                            type = typeStr
                         )
                     }
 
                     // 7. Largest individual transactions
-                    item {
-                        LargestTransactions(
-                            filteredTransactions = filteredTransactions,
-                            allCategories = allCategories,
-                            type = selectedType
-                        )
-                    }
+//                    item {
+//                        LargestTransactions(
+//                            filteredTransactions = filteredTransactions,
+//                            allCategories = allCategories,
+//                            type = selectedType
+//                        )
+//                    }
                 } else {
                     item { InsightsEmptyState(selectedType, periodLabel) }
                 }

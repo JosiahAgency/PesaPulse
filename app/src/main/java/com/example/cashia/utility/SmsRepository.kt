@@ -8,6 +8,7 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ParseResult
 import com.example.cashia.models.SyncState
 import com.example.cashia.models.UnmatchedSms
+import com.example.cashia.models.guessCategory
 import com.example.cashia.models.parseMpesaMessage
 import com.example.cashia.utility.SmsRepository.fetchMpesaMessages
 
@@ -61,10 +62,16 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
     val dao = database.transactionDao()
     val unmatchedDao = database.unmatchedSmsDao()
     val syncDao = database.syncStateDao()
+    val categoryDao = database.customCategoryDao()
+    val correctionDao = database.userCorrectionDao()
     val lastSmsId = syncDao.getLastSmsId("mpesa_sync") ?: 0L
 
     val messages = fetchMpesaMessages(context, lastSmsId)
     if (messages.isEmpty()) return
+
+    val customCategories = categoryDao.getAllCustomCategoriesOnce()
+    val userCorrections = correctionDao.getAllCorrectionsOnce()
+        .associate { it.recipient to it.categoryId }
 
     val parsed = mutableListOf<MpesaTransactions>()
     val unmatched = mutableListOf<UnmatchedSms>()
@@ -74,8 +81,20 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
     for (sms in messages) {
         newestSmsId = sms.id
 
-        when (val result = parseMpesaMessage(sms.body, sms.date)) {
-            is ParseResult.Success -> parsed.add(result.transactions.copy(smsId = sms.id))
+        when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
+            is ParseResult.Success -> {
+                val tx = result.transactions.copy(smsId = sms.id)
+                val betterCategory = guessCategory(
+                    recipient = tx.recipient,
+                    type = tx.type,
+                    customCategories = customCategories,
+                    userCorrections = userCorrections
+                )
+                parsed.add(
+                    if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
+                )
+            }
+
             is ParseResult.Unmatched -> unmatched.add(
                 UnmatchedSms(
                     smsId = sms.id,
