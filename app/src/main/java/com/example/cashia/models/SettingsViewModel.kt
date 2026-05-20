@@ -47,6 +47,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     val linkedGoogleEmail: StateFlow<String?> = _linkedGoogleEmail.asStateFlow()
+    
+    fun linkGoogleAccount(email: String) {
+        setLinkedGoogleEmail(email)
+    }
+
+    fun unlinkGoogleAccount() {
+        setLinkedGoogleEmail(null)
+    }
+
     fun setLinkedGoogleEmail(email: String?) {
         _linkedGoogleEmail.value = email
         PesaTimeConfiguration.linkedGoogleEmail = email

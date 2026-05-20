@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,6 +55,11 @@ data class SummaryData(
     val endDate: LocalDate
 )
 
+data class ReversalIndex(
+    val byOriginal: Map<String, MpesaTransactions> = emptyMap(),
+    val byReversal: Map<String, MpesaTransactions> = emptyMap(),
+)
+
 @OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val database = AppDatabase.getDatabase(context)
@@ -76,6 +82,36 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val reversalIndex: StateFlow<ReversalIndex> = dao
+        .getAllTransactions()
+        .map { all ->
+            val reversals = all.filter { it.reversedTxId != null }
+            val allById = all.associateBy { it.id }
+
+            val byOriginal = reversals
+                .mapNotNull { rev ->
+                    val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                    orig.id to rev
+                }.toMap()
+
+            val byReversal = reversals
+                .mapNotNull { rev ->
+                    val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                    rev.id to orig
+                }.toMap()
+
+            ReversalIndex(byOriginal, byReversal)
+        }
+        .flowOn(Dispatchers.IO)
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReversalIndex())
+
+    suspend fun getTransactionById(id: String): MpesaTransactions? =
+        withContext(Dispatchers.IO) { dao.getTransactionById(id) }
+
+    suspend fun getReversalFor(txId: String): MpesaTransactions? =
+        withContext(Dispatchers.IO) { dao.getReversalFor(txId) }
 
     init {
         observeDatabase()
@@ -155,9 +191,23 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     fun processIncomingSms(rawBody: String, receivedAt: Long = System.currentTimeMillis()) {
         viewModelScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getDatabase(context)
+            val customCats = db.customCategoryDao().getAllCustomCategoriesOnce()
+            val corrections = db.userCorrectionDao().getAllCorrectionsOnce()
+                .associate { it.recipient to it.categoryId }
+
             when (val result = parseMpesaMessageRich(rawBody, receivedAt)) {
                 is RichParseResult.FullMatch -> {
-                    dao.insertTransactions(listOf(result.transaction))
+                    val tx = result.transaction
+                    val betterCategory = guessCategory(
+                        recipient = tx.recipient,
+                        type = tx.type,
+                        customCategories = customCats,
+                        userCorrections = corrections
+                    )
+                    dao.insertTransactions(
+                        listOf(if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx)
+                    )
                 }
 
                 is RichParseResult.LowConfidence, is RichParseResult.Unmatched -> {
@@ -195,6 +245,9 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         transactions.forEach { tx ->
             val date = runCatching { LocalDate.parse(tx.date) }.getOrNull() ?: return@forEach
             if (date.year == now.year && date.monthValue == now.monthValue) {
+                // Skip original transactions that were reversed — they net to zero
+                val wasReversed = transactions.any { it.reversedTxId == tx.id }
+                if (wasReversed) return@forEach
                 when (tx.type) {
                     "income" -> monthIncome += tx.amount + tx.transactionCost
                     "expense" -> monthExpenses += tx.amount + tx.transactionCost
@@ -221,9 +274,14 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     fun reCategorizeExisting() {
         viewModelScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getDatabase(context)
+            val customCats = db.customCategoryDao().getAllCustomCategoriesOnce()
+            val corrections = db.userCorrectionDao().getAllCorrectionsOnce()
+                .associate { it.recipient to it.categoryId }
+
             val uncategorized = dao.getUncategorizedTransactions()
             uncategorized.forEach { tx ->
-                val guessed = guessCategory(tx.recipient, tx.type)
+                val guessed = guessCategory(tx.recipient, tx.type, customCats, corrections)
                 if (guessed != TransactionCategory.OTHER.name) {
                     dao.updateCategory(tx.id, guessed)
                 }

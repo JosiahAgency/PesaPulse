@@ -78,7 +78,7 @@ private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
 @Composable
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
-    categoryViewModel: CategoryViewModel,
+    categoryViewModel: CategoryViewModel
 ) {
     val state = viewModel.state
     val haptic = LocalHapticFeedback.current
@@ -93,6 +93,7 @@ fun TransactionScreen(
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val today = remember { LocalDate.now() }
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
 
     val parsedAll by remember(state.allTransactions) {
         derivedStateOf {
@@ -425,6 +426,7 @@ fun TransactionScreen(
                                         allCategories,
                                         categoryViewModel,
                                         hapticFeedback = haptic,
+                                        reversalIndex
                                     )
                                 }
                             }

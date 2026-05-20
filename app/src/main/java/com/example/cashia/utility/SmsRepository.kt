@@ -1,37 +1,59 @@
 package com.example.cashia.utility
 
 import android.content.Context
-import android.util.Log
 import androidx.core.net.toUri
+import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ParseResult
+import com.example.cashia.models.SyncState
 import com.example.cashia.models.UnmatchedSms
+import com.example.cashia.models.guessCategory
 import com.example.cashia.models.parseMpesaMessage
 import com.example.cashia.utility.SmsRepository.fetchMpesaMessages
 
 object SmsRepository {
-    fun fetchMpesaMessages(context: Context, lastDBTimestamp: Long): List<Pair<String, Long>> {
-        val smsList = mutableListOf<Pair<String, Long>>()
+
+    data class SmsMessage(
+        val id: Long,
+        val body: String,
+        val date: Long
+    )
+
+    private val SMS_PROJECTION = arrayOf(
+        "_id",
+        "body",
+        "date"
+    )
+
+    fun fetchMpesaMessages(context: Context, lastSmsId: Long): List<SmsMessage> {
+        val messages = mutableListOf<SmsMessage>()
         val uri = "content://sms/inbox".toUri()
+
         context.contentResolver.query(
             uri,
-            arrayOf("body", "date"),
-            "address=? AND date > ?",
-            arrayOf("MPESA", lastDBTimestamp.toString()),
-            "date ASC"
+            SMS_PROJECTION,
+            "address=? AND _id > ?",
+            arrayOf("MPESA", lastSmsId.toString()),
+            "_id ASC"
         )?.use { cursor ->
+            val idIndex = cursor.getColumnIndex("_id")
             val bodyIndex = cursor.getColumnIndex("body")
             val dateIndex = cursor.getColumnIndex("date")
-            if (bodyIndex < 0) return@use
+
+            if (idIndex < 0 || bodyIndex < 0 || dateIndex < 0) return emptyList()
+
             while (cursor.moveToNext()) {
-                val body = cursor.getString(bodyIndex)
-                val date =
-                    if (dateIndex >= 0) cursor.getLong(dateIndex) else System.currentTimeMillis()
-                smsList.add(body to date)
+                messages.add(
+                    SmsMessage(
+                        cursor.getLong(idIndex),
+                        cursor.getString(bodyIndex),
+                        cursor.getLong(dateIndex)
+                    )
+                )
             }
         }
-        return smsList
+        return messages
     }
 
 }
@@ -39,26 +61,66 @@ object SmsRepository {
 suspend fun syncTransactions(context: Context, database: AppDatabase) {
     val dao = database.transactionDao()
     val unmatchedDao = database.unmatchedSmsDao()
+    val syncDao = database.syncStateDao()
+    val categoryDao = database.customCategoryDao()
+    val correctionDao = database.userCorrectionDao()
+    val lastSmsId = syncDao.getLastSmsId("mpesa_sync") ?: 0L
 
-    val lastTxTs = dao.getLastTransactionTimestamp() ?: 0L
-    val lastUnmatchedTs = unmatchedDao.getLastReceivedAt() ?: 0L
-    val lastTs = maxOf(lastTxTs, lastUnmatchedTs)
-
-    val messages = fetchMpesaMessages(context, lastTs)
+    val messages = fetchMpesaMessages(context, lastSmsId)
     if (messages.isEmpty()) return
+
+    val customCategories = categoryDao.getAllCustomCategoriesOnce()
+    val userCorrections = correctionDao.getAllCorrectionsOnce()
+        .associate { it.recipient to it.categoryId }
 
     val parsed = mutableListOf<MpesaTransactions>()
     val unmatched = mutableListOf<UnmatchedSms>()
 
-    for ((body, receivedAt) in messages) {
-        when (val result = parseMpesaMessage(body, receivedAt)) {
-            is ParseResult.Success -> parsed.add(result.transactions)
-            is ParseResult.Unmatched -> unmatched.add(UnmatchedSms(rawBody = result.rawBody))
+    var newestSmsId = lastSmsId
+
+    for (sms in messages) {
+        newestSmsId = sms.id
+
+        when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
+            is ParseResult.Success -> {
+                val tx = result.transactions.copy(smsId = sms.id)
+                val betterCategory = guessCategory(
+                    recipient = tx.recipient,
+                    type = tx.type,
+                    customCategories = customCategories,
+                    userCorrections = userCorrections
+                )
+                parsed.add(
+                    if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
+                )
+            }
+
+            is ParseResult.Unmatched -> unmatched.add(
+                UnmatchedSms(
+                    smsId = sms.id,
+                    rawBody = result.rawBody
+                )
+            )
+
             is ParseResult.Irrelevant -> Unit
         }
     }
-    Log.d("SyncDebug", "Parsed: ${parsed.size}, Unmatched: ${unmatched.size}")
 
-    if (parsed.isNotEmpty()) dao.insertTransactions(parsed)
-    if (unmatched.isNotEmpty()) unmatchedDao.insertAll(unmatched)
+    database.withTransaction {
+        if (parsed.isNotEmpty()) {
+            dao.insertTransactions(parsed)
+        }
+
+        if (unmatched.isNotEmpty()) {
+            unmatchedDao.insertAll(unmatched)
+        }
+
+        syncDao.upsert(
+            SyncState(
+                key = "mpesa_sync",
+                lastSmsId = newestSmsId
+            )
+        )
+    }
+
 }

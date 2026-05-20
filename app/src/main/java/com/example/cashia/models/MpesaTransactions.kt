@@ -91,15 +91,20 @@ private val regexInvalidInput = Regex(
 private val phoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
 
 @Entity(
-    tableName = "MpesaTransactions", indices = [
+    tableName = "MpesaTransactions",
+    indices = [
         Index(value = ["timestamp"]),
         Index(value = ["date"]),
         Index(value = ["type"]),
-        Index(value = ["category"])
+        Index(value = ["category"]),
+        Index(value = ["smsId"], unique = true),
+        Index(value = ["reversedTxId"])
     ]
 )
 data class MpesaTransactions(
-    @PrimaryKey val id: String,
+    @PrimaryKey
+    val id: String,
+    val smsId: Long = 0L,
     val amount: Double,
     val transactionCost: Double,
     val recipient: String,
@@ -109,6 +114,7 @@ data class MpesaTransactions(
     val time: String,
     val timestamp: Long,
     val category: String = TransactionCategory.OTHER.name,
+    val reversedTxId: String? = null,
 ) {
     @get:androidx.room.Ignore
     val recipientName: String by lazy {
@@ -152,6 +158,7 @@ sealed class ParseResult {
 
 fun parseMpesaMessage(
     message: String,
+    smsId: Long,
     smsReceivedAt: Long = System.currentTimeMillis()
 ): ParseResult {
     val looksLikeMpesa = message.contains("Confirmed", ignoreCase = true) ||
@@ -178,6 +185,7 @@ fun parseMpesaMessage(
                 val (id, amount, recipient, date, time) = regexSentTo.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         recipient,
@@ -194,6 +202,7 @@ fun parseMpesaMessage(
                 val (id, amount, recipient, date, time) = regexPaidTo.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         recipient,
@@ -210,6 +219,7 @@ fun parseMpesaMessage(
                 val (id, amount, date, time) = regexAirtime.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         "Safaricom Airtime",
@@ -226,6 +236,7 @@ fun parseMpesaMessage(
                 val (id, date, time, amount, recipient) = regexWithdraw.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         recipient,
@@ -242,6 +253,7 @@ fun parseMpesaMessage(
                 val (id, amount, recipient, date, time) = regexReceived.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         recipient,
@@ -258,6 +270,7 @@ fun parseMpesaMessage(
                 val (id, recipient, date, time, amount) = regexReversal.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         "Reversal: $recipient",
@@ -275,6 +288,7 @@ fun parseMpesaMessage(
                 val (id, reversedTxId, date, time, amount) = regexReversalV2.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id,
                         amount,
                         "Reversal of $reversedTxId",
@@ -283,7 +297,8 @@ fun parseMpesaMessage(
                         "income",
                         balance,
                         transactionCost,
-                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name
+                        forcedCategory = TransactionCategory.RECEIVED_MONEY.name,
+                        reversedTxId = reversedTxId.trim()
                     )
                 )
             }
@@ -292,6 +307,7 @@ fun parseMpesaMessage(
                 val (id, balAmount, date, time) = regexBalanceInquiry.find(message)!!.destructured
                 ParseResult.Success(
                     buildTransaction(
+                        smsId,
                         id = id,
                         amountStr = "0.00",
                         recipient = "Balance Inquiry",
@@ -378,6 +394,7 @@ fun parseMpesaMessage(
 }
 
 private fun buildTransaction(
+    smsId: Long,
     id: String,
     amountStr: String,
     recipient: String,
@@ -386,7 +403,8 @@ private fun buildTransaction(
     type: String,
     balance: Double,
     cost: Double,
-    forcedCategory: String? = null
+    forcedCategory: String? = null,
+    reversedTxId: String? = null
 ): MpesaTransactions {
     val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
     val formattedDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
@@ -400,6 +418,7 @@ private fun buildTransaction(
     }
     return MpesaTransactions(
         id = id.trim(),
+        smsId = smsId,
         amount = amountStr.replace(",", "").toDouble(),
         transactionCost = cost,
         recipient = cleanRecipient,
@@ -408,7 +427,8 @@ private fun buildTransaction(
         balance = balance,
         time = standardizedTime,
         timestamp = convertToTimestamp(formattedDate, standardizedTime),
-        category = forcedCategory ?: guessCategory(cleanRecipient, type)
+        category = forcedCategory ?: guessCategory(cleanRecipient, type),
+        reversedTxId = reversedTxId
     )
 }
 

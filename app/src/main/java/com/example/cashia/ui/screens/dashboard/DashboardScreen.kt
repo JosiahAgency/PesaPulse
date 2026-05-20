@@ -53,7 +53,7 @@ import java.time.temporal.TemporalAdjusters
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel,
+    viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel
 ) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
@@ -61,7 +61,7 @@ fun DashboardScreen(
     val hapticFeedback = LocalHapticFeedback.current
     var isListExpanded by remember { mutableStateOf(true) }
     val allCategories by categoryViewModel.allCategories.collectAsState()
-
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
     val firstDay = PesaTimeConfiguration.firstDayOfWeek
     val startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
     val endOfWeek = startOfWeek.plusDays(6)
@@ -98,10 +98,11 @@ fun DashboardScreen(
             TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
             TimeScope.WEEK -> "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))} " +
                     "– ${
-                endOfWeek.format(
-                    DateTimeFormatter.ofPattern("dd MMM yyyy")
-                )
-            }"
+                        endOfWeek.format(
+                            DateTimeFormatter.ofPattern("dd MMM yyyy")
+                        )
+                    }"
+
             TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
             TimeScope.YEAR -> selectedDate.format(DateTimeFormatter.ofPattern("yyyy"))
             else -> ""
@@ -184,6 +185,7 @@ fun DashboardScreen(
                             allCategories,
                             categoryViewModel,
                             hapticFeedback,
+                            reversalIndex,
                         )
                     }
                 } else if (transactionsForScope.isEmpty() && isListExpanded) {
