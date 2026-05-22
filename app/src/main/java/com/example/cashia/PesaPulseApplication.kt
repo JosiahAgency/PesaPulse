@@ -202,10 +202,18 @@ fun PesaPulseApp() {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(AppDestinations.Dashboard.route) {
-                    DashboardScreen(viewModel = sharedViewModel, categoryViewModel)
+                    DashboardScreen(
+                        viewModel = sharedViewModel,
+                        categoryViewModel,
+                        upcomingViewModel
+                    )
                 }
                 composable(AppDestinations.Transactions.route) {
-                    TransactionScreen(viewModel = sharedViewModel, categoryViewModel)
+                    TransactionScreen(
+                        viewModel = sharedViewModel,
+                        categoryViewModel,
+                        upcomingViewModel
+                    )
                 }
                 composable(AppDestinations.Calendar.route) {
                     CalendarScreen(

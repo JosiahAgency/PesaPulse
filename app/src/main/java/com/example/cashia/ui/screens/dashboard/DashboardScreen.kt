@@ -38,6 +38,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
@@ -53,7 +54,9 @@ import java.time.temporal.TemporalAdjusters
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    viewModel: TransactionsViewModel, categoryViewModel: CategoryViewModel
+    viewModel: TransactionsViewModel,
+    categoryViewModel: CategoryViewModel,
+    upcomingViewModel: UpcomingViewModel
 ) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
@@ -184,6 +187,7 @@ fun DashboardScreen(
                             tx,
                             allCategories,
                             categoryViewModel,
+                            upcomingViewModel,
                             hapticFeedback,
                             reversalIndex,
                         )

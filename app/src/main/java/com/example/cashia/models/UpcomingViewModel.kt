@@ -189,6 +189,32 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    fun openCreateFromHistory(
+        txId: String,
+        recipient: String,
+        amount: Double,
+        category: String,
+        type: String
+    ) {
+        val scheduledType = if (type.equals("income", ignoreCase = true)) {
+            UpcomingType.INCOME
+        } else {
+            UpcomingType.EXPENSE
+        }
+
+        uiState = UpcomingUiState(
+            showSheet = true,
+            draftTitle = recipient,
+            draftAmount = amount.toString(),
+            draftCategory = category,
+            // Default the next recurrence date gracefully to the same day next month
+            draftDueDate = LocalDate.now().plusMonths(1),
+            draftType = scheduledType,
+            draftRecurrence = RecurrenceType.MONTHLY,
+            draftNotes = "Created automatically from transaction reference: $txId"
+        )
+    }
+
     private suspend fun matchTransaction(mpesaTx: MpesaTransactions) {
         val pending = dao.getPendingOnce()
         if (pending.isEmpty()) return
@@ -291,6 +317,7 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         val typeMatch = when {
             mpesaTx.type == "income" && upcoming.type in
                     listOf(UpcomingType.INCOME, UpcomingType.SAVING) -> true
+
             mpesaTx.type == "expense" && upcoming.type == UpcomingType.EXPENSE -> true
             else -> false
         }

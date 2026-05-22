@@ -46,6 +46,7 @@ data class TransactionState(
     val currentMonth: String = "",
     val isLoading: Boolean = true,
     val selectedCategory: String? = null,
+    val searchQuery: String = "",
 )
 
 data class SummaryData(

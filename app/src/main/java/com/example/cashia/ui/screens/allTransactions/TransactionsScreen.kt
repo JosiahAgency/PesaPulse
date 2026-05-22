@@ -54,10 +54,12 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UnmatchedSms
+import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.weekBucket
@@ -78,7 +80,8 @@ private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
 @Composable
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
-    categoryViewModel: CategoryViewModel
+    categoryViewModel: CategoryViewModel,
+    upcomingViewModel: UpcomingViewModel
 ) {
     val state = viewModel.state
     val haptic = LocalHapticFeedback.current
@@ -115,8 +118,7 @@ fun TransactionScreen(
                         tx.id.contains(searchQuery, ignoreCase = true) ||
                         (amountQuery != null && tx.amount == amountQuery) ||
                         categoryMap[tx.category]?.label?.contains(
-                            searchQuery,
-                            ignoreCase = true
+                            searchQuery, ignoreCase = true
                         ) == true
                 val catMatch =
                     selectedCategoryFilter == null || tx.category == selectedCategoryFilter
@@ -170,38 +172,25 @@ fun TransactionScreen(
     val allUnmatched by viewModel.allUnmatched.collectAsState()
 
     var showUnmatchedModal by remember { mutableStateOf(false) }
-    // Holds whichever specific SMS the modal is currently showing.
-    // Kept separate from nextPending so the user can tap any item in the list to open it.
     var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
-    // ── Auto-open: show modal once on first load if there are pending items ──
-    // Uses a flag so navigating away and back doesn't re-open it.
+    val hasFilters = selectedCategoryFilter != null ||
+            dateRangeStart != null || searchQuery.isNotBlank()
+
     var hasAutoOpened by remember { mutableStateOf(false) }
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
             hasAutoOpened = true
-            modalTargetSms = nextPending   // snapshot current value; nextPending may change later
+            modalTargetSms = nextPending
             showUnmatchedModal = true
         }
     }
 
-    // ── After save/skip: advance to the next pending item ────────────────────
-    // When the ViewModel emits a new nextPending we update the modal target
-    // WITHOUT closing it, so the user flows through the queue seamlessly.
-    // If nextPending becomes null the queue is empty — close the modal.
     LaunchedEffect(nextPending) {
-        if (showUnmatchedModal) {
-            if (nextPending == null) {
-                showUnmatchedModal = false
-                modalTargetSms = null
-            } else {
-                // Only advance automatically when the modal is already open (i.e. user
-                // just saved/skipped). If they opened a specific item from the list we
-                // don't want to replace it mid-interaction — that's handled by onSave/onSkip.
-                // So we only update here when modalTargetSms is null (queue just emptied)
-                // or matches the previous nextPending (we were in auto-advance mode).
-            }
+        if (showUnmatchedModal && nextPending == null) {
+            showUnmatchedModal = false
+            modalTargetSms = null
         }
     }
 
@@ -223,8 +212,6 @@ fun TransactionScreen(
             }
 
             // ── Unmatched SMS modal ───────────────────────────────────────
-            // Guard on both showUnmatchedModal AND modalTargetSms != null so we
-            // never render the modal with a null target (which would crash or show stale data).
             if (showUnmatchedModal) {
                 modalTargetSms?.let { target ->
                     UnmatchedSmsModal(
@@ -252,12 +239,8 @@ fun TransactionScreen(
                                 modalTargetSms = null
                             }
                         },
-                        {
-                            showUnmatchedModal = false
-                        },
-                        {
-                            showUnmatchedModal = false
-                        }
+                        { showUnmatchedModal = false },
+                        { showUnmatchedModal = false }
                     )
                 }
             }
@@ -267,7 +250,6 @@ fun TransactionScreen(
                 onRefresh = { viewModel.refreshFromSms() },
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding()
             ) {
                 LazyColumn(
                     state = listState,
@@ -277,6 +259,7 @@ fun TransactionScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
+
                     // ── Search bar ────────────────────────────────────────
                     item(key = "search") {
                         EnhancedSearchBar(
@@ -297,8 +280,6 @@ fun TransactionScreen(
                     }
 
                     // ── Active filter pills ───────────────────────────────
-                    val hasFilters = selectedCategoryFilter != null ||
-                            dateRangeStart != null || searchQuery.isNotBlank()
                     if (hasFilters) {
                         item(key = "filter_pills") {
                             ActiveFilterPills(
@@ -314,12 +295,15 @@ fun TransactionScreen(
                         }
                     }
 
-                    // ── Empty state ───────────────────────────────────────
-                    if (filtered.isEmpty() && !state.isLoading) {
-                        item(key = "empty") {
-                            EmptyStateMessage(
-                                if (hasFilters) "No matching transactions" else "No History Found"
+                    // ── Upcoming payments section ─────────────────────────
+                    if (!hasFilters) {
+                        item(key = "upcoming_section") {
+                            UpcomingTransactionsSection(
+                                upcomingViewModel = upcomingViewModel,
+                                categoryViewModel = categoryViewModel,
+                                allCategories = allCategories
                             )
+                            Spacer(Modifier.height(4.dp))
                         }
                     }
 
@@ -328,8 +312,6 @@ fun TransactionScreen(
                         PendingReviewBadge(
                             count = pendingCount,
                             onClick = {
-                                // Always snap to the current nextPending when tapping the badge,
-                                // not whatever stale modalTargetSms might be sitting there.
                                 modalTargetSms = nextPending
                                 showUnmatchedModal = true
                             },
@@ -354,8 +336,7 @@ fun TransactionScreen(
                             ) {
                                 Row(
                                     modifier = Modifier.padding(
-                                        horizontal = 14.dp,
-                                        vertical = 10.dp
+                                        horizontal = 14.dp, vertical = 10.dp
                                     ),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -385,9 +366,7 @@ fun TransactionScreen(
                                         modalTargetSms = clicked
                                         showUnmatchedModal = true
                                     },
-                                    { clicked ->
-                                        viewModel.markIgnored(clicked)
-                                    }
+                                    { clicked -> viewModel.markIgnored(clicked) }
                                 )
                             }
                             item(key = "unmatched_divider") {
@@ -396,6 +375,25 @@ fun TransactionScreen(
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                 )
                             }
+                        }
+                    }
+
+                    // ── History section header ────────────────────────────
+//                    if (!hasFilters) {
+//                        item(key = "history_header") {
+//                            HistorySectionHeader(
+//                                txCount = filtered.size,
+//                                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+//                            )
+//                        }
+//                    }
+
+                    // ── Empty state ───────────────────────────────────────
+                    if (filtered.isEmpty() && !state.isLoading) {
+                        item(key = "empty") {
+                            EmptyStateMessage(
+                                if (hasFilters) "No matching transactions" else "No History Found"
+                            )
                         }
                     }
 
@@ -420,13 +418,17 @@ fun TransactionScreen(
 
                         if (!bucketCollapsed) {
                             weekGroup.days.forEach { dayGroup ->
-                                items(items = dayGroup.transactions, key = { it.id }) { tx ->
+                                items(
+                                    items = dayGroup.transactions,
+                                    key = { it.id }
+                                ) { tx ->
                                     TransactionItem(
-                                        tx,
-                                        allCategories,
-                                        categoryViewModel,
+                                        tx = tx,
+                                        allCategories = allCategories,
+                                        categoryViewModel = categoryViewModel,
+                                        upcomingViewModel = upcomingViewModel,
                                         hapticFeedback = haptic,
-                                        reversalIndex
+                                        reversalIndex = reversalIndex
                                     )
                                 }
                             }
@@ -435,6 +437,11 @@ fun TransactionScreen(
                 }
             }
         }
+
+        // ── Patched Fix Anchor: Global Layer Recurring Setup Sheet ───
+        // Declaring this here globally ensures exactly ONE instance responds instantly
+        // across all row items without rendering overhead latency.
+//        RecurringSetupSheet(viewModel = upcomingViewModel)
 
         // ── Back-to-top FAB ───────────────────────────────────────────────
         AnimatedVisibility(
