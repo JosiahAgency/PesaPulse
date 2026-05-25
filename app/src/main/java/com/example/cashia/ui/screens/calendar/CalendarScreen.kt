@@ -56,6 +56,7 @@ import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.TransactionType
 import java.time.LocalDate
@@ -79,6 +80,7 @@ fun CalendarScreen(
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
     var selectedFilter by remember { mutableStateOf(TransactionType.ALL) }
+    val upcomingUiState = upcomingViewModel.uiState
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -146,70 +148,83 @@ fun CalendarScreen(
             }
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = state.isLoading,
-            onRefresh = { viewModel.refreshFromSms() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    FinancialOverviewCards(
-                        state.allTransactions,
-                        selectedDate,
-                        selectedFilter,
-                        { selectedFilter = it })
-                }
-                item {
-                    FullMonthCalendar(
-                        allTransactions = state.allTransactions,
-                        selectedDate = selectedDate,
-                        upcomingTransactions = upcomingAll
-                    ) { clickedDate ->
-                        filterByDay =
-                            !(clickedDate.month != selectedDate.month || clickedDate.year != selectedDate.year)
-                        selectedDate = clickedDate
-                    }
-                }
-                item {
-                    ListHeader(
-                        selectedFilter = selectedFilter,
-                        filterByDay = filterByDay,
-                        selectedDate = selectedDate,
-                        onClearDayFilter = { filterByDay = false }
-                    )
-                }
+        Box(modifier = Modifier.fillMaxSize()) {
 
-                if (filteredTransctions.isEmpty() && (!filterByDay || upcomingForDay.isEmpty())) {
-                    item { EmptyStateMessage("No Transactions Found") }
-                } else {
-                    // Render upcoming scheduled liabilities when inspecting specific date nodes
-                    if (filterByDay && upcomingForDay.isNotEmpty()) {
-                        items(
-                            upcomingForDay,
-                            key = { "upcoming-${it.dueDate}-${filteredTransctions.size}" }) { upcomingTx ->
-                            CalendarUpcomingItem(
-                                title = "Scheduled Commitment",
-                                dateStr = upcomingTx.dueDate
+            PullToRefreshBox(
+                isRefreshing = state.isLoading,
+                onRefresh = { viewModel.refreshFromSms() },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding()
+            ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        FinancialOverviewCards(
+                            state.allTransactions,
+                            selectedDate,
+                            selectedFilter,
+                            { selectedFilter = it })
+                    }
+                    item {
+                        FullMonthCalendar(
+                            allTransactions = state.allTransactions,
+                            selectedDate = selectedDate,
+                            upcomingTransactions = upcomingAll
+                        ) { clickedDate ->
+                            filterByDay =
+                                !(clickedDate.month != selectedDate.month || clickedDate.year != selectedDate.year)
+                            selectedDate = clickedDate
+                        }
+                    }
+                    item {
+                        ListHeader(
+                            selectedFilter = selectedFilter,
+                            filterByDay = filterByDay,
+                            selectedDate = selectedDate,
+                            onClearDayFilter = { filterByDay = false }
+                        )
+                    }
+
+                    if (filteredTransctions.isEmpty() && (!filterByDay || upcomingForDay.isEmpty())) {
+                        item { EmptyStateMessage("No Transactions Found") }
+                    } else {
+                        // Render upcoming scheduled liabilities when inspecting specific date nodes
+                        if (filterByDay && upcomingForDay.isNotEmpty()) {
+                            items(
+                                upcomingForDay,
+                                key = { "upcoming-${it.dueDate}-${filteredTransctions.size}" }) { upcomingTx ->
+                                CalendarUpcomingItem(
+                                    title = "Scheduled Commitment",
+                                    dateStr = upcomingTx.dueDate
+                                )
+                            }
+                        }
+                        items(filteredTransctions, key = { it.id }) { tx ->
+                            TransactionItem(
+                                tx,
+                                allCategories,
+                                categoryViewModel,
+                                upcomingViewModel,
+                                hapticFeedback,
+                                reversalIndex
                             )
                         }
                     }
-                    items(filteredTransctions, key = { it.id }) { tx ->
-                        TransactionItem(
-                            tx,
-                            allCategories,
-                            categoryViewModel,
-                            upcomingViewModel,
-                            hapticFeedback,
-                            reversalIndex
-                        )
-                    }
                 }
             }
+            if (upcomingUiState.showSheet) {
+                UpcomingTransactionSheet(
+                    uiState = upcomingUiState,
+                    viewModel = upcomingViewModel,
+                    allCategories = allCategories,
+                    categoryViewModel = categoryViewModel,
+                    onDismiss = { upcomingViewModel.closeSheet() }
+                )
+            }
+
         }
     }
 }

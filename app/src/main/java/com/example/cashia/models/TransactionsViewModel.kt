@@ -9,17 +9,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
-import com.example.cashia.utility.ParserLearningService
+import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.RichParseResult
 import com.example.cashia.utility.TimeScope
-import com.example.cashia.utility.parseMpesaMessageRich
+import com.example.cashia.utility.partialFieldsFromJson
 import com.example.cashia.utility.syncTransactions
-import com.example.cashia.utility.toUnmatchedSms
+import com.example.cashia.utility.weekBucket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
@@ -27,9 +29,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
@@ -37,6 +37,8 @@ import java.util.Locale
 
 data class TransactionState(
     val allTransactions: List<MpesaTransactions> = emptyList(),
+    val filteredTransactions: List<MpesaTransactions> = emptyList(),
+    val groupedTransactions: List<WeekGroup> = emptyList(),
     val latestBalance: Double = 0.0,
     val latestBalanceDate: String = "",
     val latestBalanceDateParsed: LocalDate = LocalDate.now(),
@@ -49,23 +51,33 @@ data class TransactionState(
     val searchQuery: String = "",
 )
 
-data class SummaryData(
-    val income: Double,
-    val expenses: Double,
-    val startDate: LocalDate,
-    val endDate: LocalDate
-)
-
 data class ReversalIndex(
     val byOriginal: Map<String, MpesaTransactions> = emptyMap(),
     val byReversal: Map<String, MpesaTransactions> = emptyMap(),
 )
+
+data class SummaryData(
+    val income: Double,
+    val expenses: Double
+)
+
+private val dayFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")
+private val weekFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
+private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+private val yearFormatter = DateTimeFormatter.ofPattern("yyyy")
 
 @OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val database = AppDatabase.getDatabase(context)
     private val dao = database.transactionDao()
     private val unmatchedDao = database.unmatchedSmsDao()
+    private val _searchQuery = MutableStateFlow("")
+    private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
+    private val _dateRangeStart = MutableStateFlow<LocalDate?>(null)
+    private val _dateRangeEnd = MutableStateFlow<LocalDate?>(null)
+    private val _categoryLabelsMap = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _dashboardPeriodLabel = MutableStateFlow("")
+    val dashboardPeriodLabel = _dashboardPeriodLabel.asStateFlow()
 
     var state by mutableStateOf(TransactionState())
         private set
@@ -74,12 +86,15 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         private set
 
     var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
+
     val pendingReviewCount: StateFlow<Int> = unmatchedDao
         .pendingCountFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     val nextPending: StateFlow<UnmatchedSms?> = unmatchedDao
         .nextPendingFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -90,17 +105,15 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             val reversals = all.filter { it.reversedTxId != null }
             val allById = all.associateBy { it.id }
 
-            val byOriginal = reversals
-                .mapNotNull { rev ->
-                    val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
-                    orig.id to rev
-                }.toMap()
+            val byOriginal = reversals.mapNotNull { rev ->
+                val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                orig.id to rev
+            }.toMap()
 
-            val byReversal = reversals
-                .mapNotNull { rev ->
-                    val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
-                    rev.id to orig
-                }.toMap()
+            val byReversal = reversals.mapNotNull { rev ->
+                val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                rev.id to orig
+            }.toMap()
 
             ReversalIndex(byOriginal, byReversal)
         }
@@ -108,19 +121,206 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReversalIndex())
 
-    suspend fun getTransactionById(id: String): MpesaTransactions? =
-        withContext(Dispatchers.IO) { dao.getTransactionById(id) }
+    var recurringSheetTransaction by mutableStateOf<MpesaTransactions?>(null)
+        private set
 
-    suspend fun getReversalFor(txId: String): MpesaTransactions? =
-        withContext(Dispatchers.IO) { dao.getReversalFor(txId) }
+    fun showRecurringSheet(tx: MpesaTransactions) {
+        recurringSheetTransaction = tx
+    }
+
+    fun hideRecurringSheet() {
+        recurringSheetTransaction = null
+    }
 
     init {
-        observeDatabase()
+        observeTransactionPipeline()
         viewModelScope.launch {
             refreshFromSms()
-            triggerLearningPipeline()
         }
-        reCategorizeExisting()
+    }
+
+    /**
+     * Updates the reactive filters down to the background pipeline
+     */
+    fun updateFilters(
+        query: String,
+        categoryFilter: String?,
+        start: LocalDate?,
+        end: LocalDate?,
+        categoryMap: Map<String, String>
+    ) {
+        _searchQuery.value = query
+        _selectedCategoryFilter.value = categoryFilter
+        _dateRangeStart.value = start
+        _dateRangeEnd.value = end
+        _categoryLabelsMap.value = categoryMap
+    }
+
+    fun setDashboardScope(date: LocalDate, scope: TimeScope, categoryMap: Map<String, String>) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val firstDay = PesaTimeConfiguration.firstDayOfWeek
+            val (start, end) = when (scope) {
+                TimeScope.DAY -> date to date
+                TimeScope.WEEK -> {
+                    val s = date.with(TemporalAdjusters.previousOrSame(firstDay))
+                    s to s.plusDays(6)
+                }
+                TimeScope.MONTH -> date.with(TemporalAdjusters.firstDayOfMonth()) to date.with(TemporalAdjusters.lastDayOfMonth())
+                TimeScope.YEAR -> date.with(TemporalAdjusters.firstDayOfYear()) to date.with(TemporalAdjusters.lastDayOfYear())
+                TimeScope.CUSTOM -> date to date
+            }
+
+            // Format Label
+            val label = when (scope) {
+                TimeScope.DAY -> date.format(dayFormatter)
+                TimeScope.WEEK -> "${start.format(weekFormatter)} – ${end.format(weekFormatter)}"
+                TimeScope.MONTH -> date.format(monthFormatter)
+                TimeScope.YEAR -> date.format(yearFormatter)
+                else -> ""
+            }
+
+            _dashboardPeriodLabel.value = label
+
+            // Push dates to your existing pipeline filter
+            updateFilters(
+                query = state.searchQuery,
+                categoryFilter = state.selectedCategory,
+                start = start,
+                end = end,
+                categoryMap = categoryMap
+            )
+        }
+    }
+
+    private fun observeTransactionPipeline() {
+        viewModelScope.launch {
+            combine(
+                dao.getAllTransactions().debounce(100),
+                _searchQuery,
+                _selectedCategoryFilter,
+                _dateRangeStart,
+                _dateRangeEnd,
+                _categoryLabelsMap
+            ) { args ->
+                val transactions = args[0] as List<MpesaTransactions>
+                val query = args[1] as String
+                val catFilter = args[2] as String?
+                val start = args[3] as LocalDate?
+                val end = args[4] as LocalDate?
+                val catMap = args[5] as Map<String, String>
+
+                computeFilteredState(transactions, query, catFilter, start, end, catMap)
+            }
+                .distinctUntilChanged()
+                .flowOn(Dispatchers.IO)
+                .collect { newState ->
+                    withContext(Dispatchers.Main) {
+                        state = newState
+                    }
+                }
+        }
+    }
+
+    private fun computeFilteredState(
+        allTxs: List<MpesaTransactions>,
+        query: String,
+        catFilter: String?,
+        start: LocalDate?,
+        end: LocalDate?,
+        catMap: Map<String, String>
+    ): TransactionState {
+        val today = LocalDate.now()
+        val amountQuery = query.trim().toDoubleOrNull()
+        val isQueryBlank = query.isBlank()
+
+        // 1. Map into parsing structures & evaluate filters concurrently on IO thread
+        val filteredList = allTxs.filter { tx ->
+            val textMatch = isQueryBlank ||
+                    tx.recipient.contains(query, ignoreCase = true) ||
+                    tx.id.contains(query, ignoreCase = true) ||
+                    (amountQuery != null && tx.amount == amountQuery) ||
+                    catMap[tx.category]?.contains(query, ignoreCase = true) == true
+
+            val catMatch = catFilter == null || tx.category == catFilter
+
+            val txDate = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
+            val dateMatch = (start == null || !txDate.isBefore(start)) &&
+                    (end == null || !txDate.isAfter(end))
+
+            textMatch && catMatch && dateMatch
+        }
+
+        // 2. Pre-calculate metrics safely away from Main Frame cycles
+        var totalIncome = 0.0
+        var totalExpenses = 0.0
+        var totalCost = 0.0
+        val now = LocalDate.now()
+
+        for (tx in filteredList) {
+            totalCost += tx.transactionCost
+            when (tx.type) {
+                "income" -> totalIncome += tx.amount
+                "expense" -> totalExpenses += tx.amount + tx.transactionCost
+            }
+        }
+
+
+        // ── Ultra Lightweight Pass Grouping ──────────────────────────────────
+        val groupedTransactions = filteredList
+            .map { tx ->
+                val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
+                ParsedTx(tx, date, weekBucket(date))
+            }
+            .groupBy { it.bucket }
+            .entries
+            .sortedByDescending { entry -> entry.value.maxOf { it.date } }
+            .map { (bucket, rows) ->
+                val days = rows
+                    .groupBy { it.date }
+                    .entries
+                    .sortedByDescending { it.key }
+                    .map { (date, dayRows) ->
+                        val txs = dayRows.map { it.tx }
+                        var inc = 0.0
+                        var exp = 0.0
+                        for (tx in txs) {
+                            when (tx.type) {
+                                "income" -> inc += tx.amount
+                                "expense" -> exp += tx.amount
+                            }
+                        }
+                        DayGroup(
+                            date = date,
+                            transactions = txs,
+                            dayIncome = inc,
+                            dayExpense = exp,
+                            dayBalance = txs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
+                        )
+                    }
+                WeekGroup(bucket, days)
+            }
+
+        val latestTx = allTxs.firstOrNull()
+        val latestBalance = latestTx?.balance ?: 0.0
+        val latestBalanceDate = latestTx?.date ?: ""
+        val latestBalanceDateParsed =
+            runCatching { LocalDate.parse(latestBalanceDate) }.getOrElse { now }
+
+        return TransactionState(
+            allTransactions = allTxs,
+            filteredTransactions = filteredList,
+            groupedTransactions = groupedTransactions,
+            latestBalance = latestBalance,
+            latestBalanceDate = latestBalanceDate,
+            latestBalanceDateParsed = latestBalanceDateParsed,
+            totalIncome = totalIncome,
+            totalExpenses = totalExpenses,
+            totalTransactionCost = totalCost,
+            currentMonth = "${now.month.getDisplayName(TextStyle.FULL, Locale.US)} ${now.year}",
+            isLoading = false,
+            selectedCategory = catFilter,
+            searchQuery = query
+        )
     }
 
     fun toggleBalanceVisibility() {
@@ -131,228 +331,26 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch { refreshFromSms() }
     }
 
-    private fun observeDatabase() {
-        viewModelScope.launch {
-            dao.getAllTransactions()
-                .debounce(150)
-                .distinctUntilChanged()
-                .flowOn(Dispatchers.IO)
-                .collect { transactions ->
-                    val newState = computeState(transactions)
-                    withContext(Dispatchers.Main) {
-                        state = newState
-                    }
-                }
-        }
-    }
-
     fun refreshFromSms() {
         viewModelScope.launch {
-            refreshFromSmsInternal()
-        }
-    }
-
-    suspend fun refreshFromSmsInternal() {
-        withContext(Dispatchers.Main) { state = state.copy(isLoading = true) }
-        try {
-            val beforeIds = withContext(Dispatchers.IO) { dao.getAllTransactionIdsOnce() }
-            withContext(Dispatchers.IO) { syncTransactions(context, database) }
-            val afterIds = withContext(Dispatchers.IO) { dao.getAllTransactionIdsOnce() }
-            val newIds = afterIds - beforeIds.toSet()
-            if (newIds.isNotEmpty()) {
-                val newTxs =
-                    withContext(Dispatchers.IO) { dao.getTransactionsByIds(newIds.toList()) }
-                withContext(Dispatchers.Main) {
-                    onNewTransactionsSynced?.invoke(newTxs)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("PesaPulse", "SMS Sync failed", e)
-        } finally {
-            withContext(Dispatchers.Main) { state = state.copy(isLoading = false) }
-        }
-    }
-
-    fun triggerLearningPipeline() {
-        viewModelScope.launch(Dispatchers.IO) {
+            state = state.copy(isLoading = true)
             try {
-                val summary = ParserLearningService.reprocessOutdated(database)
-                if (summary.promoted > 0) {
-                    Log.i(
-                        "Learning Pipeline",
-                        "Promoted ${summary.promoted} messages to transactions"
-                    )
+                withContext(Dispatchers.IO) {
+                    syncTransactions(context, database)
                 }
-                ParserLearningService.clusterByStructure(unmatchedDao)
             } catch (e: Exception) {
-                Log.e("Learning Pipeline", "Pipeline error", e)
+                Log.e("Transactions", "Sync error", e)
+            } finally {
+                state = state.copy(isLoading = false)
             }
         }
     }
 
-    fun processIncomingSms(rawBody: String, receivedAt: Long = System.currentTimeMillis()) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val db = AppDatabase.getDatabase(context)
-            val customCats = db.customCategoryDao().getAllCustomCategoriesOnce()
-            val corrections = db.userCorrectionDao().getAllCorrectionsOnce()
-                .associate { it.recipient to it.categoryId }
+    suspend fun getTransactionById(id: String): MpesaTransactions? =
+        withContext(Dispatchers.IO) { dao.getTransactionById(id) }
 
-            when (val result = parseMpesaMessageRich(rawBody, receivedAt)) {
-                is RichParseResult.FullMatch -> {
-                    val tx = result.transaction
-                    val betterCategory = guessCategory(
-                        recipient = tx.recipient,
-                        type = tx.type,
-                        customCategories = customCats,
-                        userCorrections = corrections
-                    )
-                    dao.insertTransactions(
-                        listOf(if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx)
-                    )
-                }
-
-                is RichParseResult.LowConfidence, is RichParseResult.Unmatched -> {
-                    result.toUnmatchedSms(rawBody, receivedAt)?.let { row ->
-                        val existing = unmatchedDao.getByHash(row.contentHash)
-                        if (existing.isEmpty()) {
-                            unmatchedDao.insert(row)
-                        }
-                    }
-                }
-
-                is RichParseResult.Irrelevant -> {/*Discard*/
-                }
-            }
-        }
-    }
-
-    private fun computeState(transactions: List<MpesaTransactions>): TransactionState {
-        val now = LocalDate.now()
-
-        val latestBalanceTx = transactions
-            .filter { it.balance > 0.0 }
-            .maxByOrNull { it.timestamp }
-
-        val latestBalance = latestBalanceTx?.balance ?: 0.0
-        val latestBalanceDateParsed = latestBalanceTx?.let {
-            runCatching { LocalDate.parse(it.date) }.getOrDefault(now)
-        } ?: now
-        val latestBalanceDate = latestBalanceDateParsed
-            .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-
-        // Only iterate once for current month totals
-        var monthIncome = 0.0
-        var monthExpenses = 0.0
-        transactions.forEach { tx ->
-            val date = runCatching { LocalDate.parse(tx.date) }.getOrNull() ?: return@forEach
-            if (date.year == now.year && date.monthValue == now.monthValue) {
-                // Skip original transactions that were reversed — they net to zero
-                val wasReversed = transactions.any { it.reversedTxId == tx.id }
-                if (wasReversed) return@forEach
-                when (tx.type) {
-                    "income" -> monthIncome += tx.amount + tx.transactionCost
-                    "expense" -> monthExpenses += tx.amount + tx.transactionCost
-                }
-            }
-        }
-
-        return state.copy(
-            allTransactions = transactions,
-            latestBalance = latestBalance,
-            latestBalanceDate = latestBalanceDate,
-            latestBalanceDateParsed = latestBalanceDateParsed,
-            totalIncome = monthIncome,
-            totalExpenses = monthExpenses,
-            currentMonth = "${
-                now.month.getDisplayName(
-                    TextStyle.FULL,
-                    Locale.getDefault()
-                )
-            } ${now.year}",
-            isLoading = false
-        )
-    }
-
-    fun reCategorizeExisting() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val db = AppDatabase.getDatabase(context)
-            val customCats = db.customCategoryDao().getAllCustomCategoriesOnce()
-            val corrections = db.userCorrectionDao().getAllCorrectionsOnce()
-                .associate { it.recipient to it.categoryId }
-
-            val uncategorized = dao.getUncategorizedTransactions()
-            uncategorized.forEach { tx ->
-                val guessed = guessCategory(tx.recipient, tx.type, customCats, corrections)
-                if (guessed != TransactionCategory.OTHER.name) {
-                    dao.updateCategory(tx.id, guessed)
-                }
-            }
-        }
-    }
-
-    fun calculateSummary(selectedDate: LocalDate, scope: TimeScope): SummaryData {
-        val (startDate, enDate) = when (scope) {
-            TimeScope.DAY -> selectedDate to selectedDate
-            TimeScope.WEEK -> {
-                val firstDayOfWeek = PesaTimeConfiguration.firstDayOfWeek
-                val startOfWeek =
-                    selectedDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
-                val end = startOfWeek.plusDays(6)
-                startOfWeek to end
-            }
-
-            TimeScope.MONTH -> selectedDate.withDayOfMonth(1) to selectedDate.with(TemporalAdjusters.lastDayOfMonth())
-            TimeScope.YEAR -> selectedDate.withDayOfYear(1) to selectedDate.withDayOfYear(
-                selectedDate.lengthOfYear()
-            )
-
-            TimeScope.CUSTOM -> selectedDate to selectedDate
-        }
-
-        val filtered = state.allTransactions.filter {
-            val d = LocalDate.parse(it.date)
-            !d.isBefore(startDate) && !d.isAfter(enDate)
-        }
-        return SummaryData(
-            income = filtered.filter { it.type == "income" }
-                .sumOf { it.amount + it.transactionCost },
-            expenses = filtered.filter { it.type == "expense" }
-                .sumOf { it.amount + it.transactionCost },
-            startDate = startDate,
-            endDate = enDate
-        )
-    }
-
-    fun saveManualTransaction(source: UnmatchedSms, type: String, category: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val transaction =
-                when (val r = parseMpesaMessageRich(source.rawBody, source.receivedAt)) {
-                    is RichParseResult.FullMatch -> r.transaction.copy(
-                        type = type,
-                        category = category
-                    )
-
-                    else -> MpesaTransactions(
-                        id = "MANUAL_${source.id}_${source.receivedAt}",
-                        amount = 0.0,
-                        transactionCost = 0.0,
-                        recipient = "Manual Entry",
-                        date = Instant.ofEpochMilli(source.receivedAt)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                            .toString(),
-                        time = java.time.LocalTime.now()
-                            .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US)),
-                        timestamp = source.receivedAt,
-                        type = type,
-                        balance = 0.0,
-                        category = category
-                    )
-                }
-            dao.insertTransactions(listOf(transaction))
-            unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
-        }
-    }
+    suspend fun getReversalFor(txId: String): MpesaTransactions? =
+        withContext(Dispatchers.IO) { dao.getReversalFor(txId) }
 
     fun markSkipped(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -367,6 +365,37 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             } else {
                 unmatchedDao.setStatus(sms.id, SmsStatus.IGNORED)
             }
+        }
+    }
+
+    fun saveTransactionFromSms(source: UnmatchedSms, type: String, category: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val partial = partialFieldsFromJson(source.extractedFields)
+
+            val transaction = try {
+                buildTransaction(
+                    smsId = source.smsId,
+                    id = source.smsId.toString(), // Use the SMS ID as a fallback for the TX ID
+                    amountStr = partial?.amount?.toString() ?: "0.00",
+                    recipient = "Manual Entry (from SMS)",
+                    dateStr = partial?.date ?: LocalDate.now()
+                        .format(DateTimeFormatter.ofPattern("d/M/yyyy")),
+                    timeStr = "12:00 PM", // Default time if missing
+                    type = type,
+                    balance = 0.0,
+                    cost = 0.0,
+                    forcedCategory = category
+                )
+            } catch (e: Exception) {
+                Log.e("TransactionsViewModel", "Failed to build transaction from SMS", e)
+                return@launch
+            }
+
+            // 2. Insert into the main transactions table
+            dao.insertTransactions(listOf(transaction))
+
+            // 3. Mark the SMS as SAVED in the unmatched table
+            unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
         }
     }
 

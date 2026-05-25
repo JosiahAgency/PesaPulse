@@ -613,19 +613,12 @@ private fun NormalTransactionItem(
                                 containerColor = colorScheme.primary.copy(alpha = 0.08f)
                             ) { showCategoryPicker = true }
                         }
-
-                        // ── Recurring rule CTA ────────────────────────────
-                        // Single OutlinedButton — no redundant Surface wrapper.
-                        // Tapping openCreateFromHistory sets uiState.showSheet = true,
-                        // which UpcomingTransactionsSection observes and renders the
-                        // full pre-filled UpcomingEditorSheet automatically.
                         if (!wasReversed) {
                             Spacer(Modifier.height(4.dp))
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        // Instantly changes state globally, captured safely by the screen layer button
                                         upcomingViewModel.openCreateFromHistory(
                                             txId = tx.id,
                                             recipient = tx.recipientName.ifBlank { tx.recipient },

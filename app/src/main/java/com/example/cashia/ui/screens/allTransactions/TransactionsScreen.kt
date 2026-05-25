@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,24 +60,13 @@ import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
-import com.example.cashia.utility.ParsedTx
-import com.example.cashia.utility.weekBucket
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-private data class DayGroup(
-    val date: LocalDate,
-    val transactions: List<MpesaTransactions>,
-    val dayIncome: Double,
-    val dayExpense: Double,
-    val dayBalance: Double
-)
-
-private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
-
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
@@ -88,79 +78,35 @@ fun TransactionScreen(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val allCategories by categoryViewModel.allCategories.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
     var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
     var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
-    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
-    val today = remember { LocalDate.now() }
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
 
-    val parsedAll by remember(state.allTransactions) {
-        derivedStateOf {
-            state.allTransactions.map { tx ->
-                val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
-                ParsedTx(tx, date, weekBucket(date))
-            }
-        }
-    }
-    val filtered by remember(
-        parsedAll, searchQuery, selectedCategoryFilter, dateRangeStart, dateRangeEnd
+    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
+    val categoryLabelsMap =
+        remember(allCategories) { allCategories.associate { it.id to it.label } }
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
+    val upcomingUiState = upcomingViewModel.uiState
+
+    // ── Pipeline Filter Synchronisation ────────────────────────────────────
+    LaunchedEffect(
+        searchQuery,
+        selectedCategoryFilter,
+        dateRangeStart,
+        dateRangeEnd,
+        categoryLabelsMap
     ) {
-        derivedStateOf {
-            val amountQuery = searchQuery.trim().toDoubleOrNull()
-            parsedAll.filter { p ->
-                val tx = p.tx
-                val textMatch = searchQuery.isBlank() ||
-                        tx.recipient.contains(searchQuery, ignoreCase = true) ||
-                        tx.id.contains(searchQuery, ignoreCase = true) ||
-                        (amountQuery != null && tx.amount == amountQuery) ||
-                        categoryMap[tx.category]?.label?.contains(
-                            searchQuery, ignoreCase = true
-                        ) == true
-                val catMatch =
-                    selectedCategoryFilter == null || tx.category == selectedCategoryFilter
-                val dateMatch =
-                    (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
-                            (dateRangeEnd == null || !p.date.isAfter(dateRangeEnd!!))
-                textMatch && catMatch && dateMatch
-            }
-        }
-    }
-    val weekGroups by remember(filtered) {
-        derivedStateOf {
-            filtered
-                .groupBy { it.bucket }
-                .entries
-                .sortedByDescending { entry -> entry.value.maxOf { it.date } }
-                .map { (bucket, rows) ->
-                    val days = rows
-                        .groupBy { it.date }
-                        .entries
-                        .sortedByDescending { it.key }
-                        .map { (date, dayRows) ->
-                            val txs = dayRows.map { it.tx }
-                            var inc = 0.0
-                            var exp = 0.0
-                            for (tx in txs) {
-                                when (tx.type) {
-                                    "income" -> inc += tx.amount
-                                    "expense" -> exp += tx.amount
-                                }
-                            }
-                            DayGroup(
-                                date = date,
-                                transactions = txs,
-                                dayIncome = inc,
-                                dayExpense = exp,
-                                dayBalance = txs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
-                            )
-                        }
-                    WeekGroup(bucket, days)
-                }
-        }
+        viewModel.updateFilters(
+            query = searchQuery,
+            categoryFilter = selectedCategoryFilter,
+            start = dateRangeStart,
+            end = dateRangeEnd,
+            categoryMap = categoryLabelsMap
+        )
     }
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
@@ -183,7 +129,6 @@ fun TransactionScreen(
         if (pendingCount > 0 && !hasAutoOpened) {
             hasAutoOpened = true
             modalTargetSms = nextPending
-            showUnmatchedModal = true
         }
     }
 
@@ -196,7 +141,6 @@ fun TransactionScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
-
             // ── Category swipe sheet ──────────────────────────────────────
             swipeCategoryTarget?.let { tx ->
                 CategoryPickerSheet(
@@ -215,12 +159,12 @@ fun TransactionScreen(
             if (showUnmatchedModal) {
                 modalTargetSms?.let { target ->
                     UnmatchedSmsModal(
-                        target,
-                        pendingCount,
-                        allCategories,
-                        categoryViewModel,
-                        { type, category ->
-                            viewModel.saveManualTransaction(target, type, category)
+                        sms = target,
+                        pendingCount = pendingCount,
+                        allCategories = allCategories,
+                        categoryViewModel = categoryViewModel,
+                        onSave = { type, category ->
+                            viewModel.saveTransactionFromSms(target, type, category)
                             val next = nextPending?.takeIf { it.id != target.id }
                             if (next != null) {
                                 modalTargetSms = next
@@ -229,7 +173,7 @@ fun TransactionScreen(
                                 modalTargetSms = null
                             }
                         },
-                        {
+                        onSkip = {
                             viewModel.markSkipped(target.id)
                             val next = nextPending?.takeIf { it.id != target.id }
                             if (next != null) {
@@ -239,8 +183,17 @@ fun TransactionScreen(
                                 modalTargetSms = null
                             }
                         },
-                        { showUnmatchedModal = false },
-                        { showUnmatchedModal = false }
+                        onIgnore = {
+                            viewModel.markIgnored(target)
+                            val next = nextPending?.takeIf { it.id != target.id }
+                            if (next != null) {
+                                modalTargetSms = next
+                            } else {
+                                showUnmatchedModal = false
+                                modalTargetSms = null
+                            }
+                        },
+                        onDismiss = { showUnmatchedModal = false }
                     )
                 }
             }
@@ -248,8 +201,7 @@ fun TransactionScreen(
             PullToRefreshBox(
                 isRefreshing = state.isLoading,
                 onRefresh = { viewModel.refreshFromSms() },
-                modifier = Modifier
-                    .fillMaxSize()
+                modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
                     state = listState,
@@ -378,18 +330,8 @@ fun TransactionScreen(
                         }
                     }
 
-                    // ── History section header ────────────────────────────
-//                    if (!hasFilters) {
-//                        item(key = "history_header") {
-//                            HistorySectionHeader(
-//                                txCount = filtered.size,
-//                                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-//                            )
-//                        }
-//                    }
-
                     // ── Empty state ───────────────────────────────────────
-                    if (filtered.isEmpty() && !state.isLoading) {
+                    if (state.filteredTransactions.isEmpty() && !state.isLoading) {
                         item(key = "empty") {
                             EmptyStateMessage(
                                 if (hasFilters) "No matching transactions" else "No History Found"
@@ -398,7 +340,7 @@ fun TransactionScreen(
                     }
 
                     // ── Transactions grouped by week then day ─────────────
-                    weekGroups.forEach { weekGroup ->
+                    state.groupedTransactions.forEach { weekGroup ->
                         val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
 
                         stickyHeader(key = "bucket_${weekGroup.bucket}") {
@@ -438,10 +380,15 @@ fun TransactionScreen(
             }
         }
 
-        // ── Patched Fix Anchor: Global Layer Recurring Setup Sheet ───
-        // Declaring this here globally ensures exactly ONE instance responds instantly
-        // across all row items without rendering overhead latency.
-//        RecurringSetupSheet(viewModel = upcomingViewModel)
+        if (upcomingUiState.showSheet) {
+            UpcomingTransactionSheet(
+                uiState = upcomingUiState,
+                viewModel = upcomingViewModel,
+                allCategories = allCategories,
+                categoryViewModel = categoryViewModel,
+                onDismiss = { upcomingViewModel.closeSheet() }
+            )
+        }
 
         // ── Back-to-top FAB ───────────────────────────────────────────────
         AnimatedVisibility(

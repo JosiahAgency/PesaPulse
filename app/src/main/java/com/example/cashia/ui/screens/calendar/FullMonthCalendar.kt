@@ -64,10 +64,22 @@ fun FullMonthCalendar(
         initialPage = initialPage,
         pageCount = { 1000 }
     )
+
+    val firstDay = remember { PesaTimeConfiguration.firstDayOfWeek }
+    val today = remember { LocalDate.now() }
+    val todayStr = remember { today.toString() }
+
+    val (incomeDates, expenseDates, upcomingDates, overdueDates) = remember(allTransactions, upcomingTransactions, todayStr) {
+        val inc = allTransactions.filter { it.type.equals("income", true) }.map { it.date }.toHashSet()
+        val exp = allTransactions.filter { it.type.equals("expense", true) }.map { it.date }.toHashSet()
+        val upc = upcomingTransactions.map { it.dueDate }.toHashSet()
+        val ovd = upcomingTransactions.filter { it.dueDate < todayStr }.map { it.dueDate }.toHashSet()
+        Quadruple(inc, exp, upc, ovd)
+    }
+
     val currentMonth = remember(pagerState.currentPage) {
         YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
     }
-    val firstDay = PesaTimeConfiguration.firstDayOfWeek
     val dayLabels = remember(firstDay) {
         (0..6).map { firstDay.plus(it.toLong()) }
             .map { it.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() } }
@@ -106,26 +118,9 @@ fun FullMonthCalendar(
     val monthTitle = currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() } +
             " " + currentMonth.year
 
-    val (incomeDates, expenseDates) = remember(allTransactions) {
-        val inc = mutableSetOf<String>()
-        val exp = mutableSetOf<String>()
-        for (tx in allTransactions) {
-            when (tx.type) {
-                "income" -> inc.add(tx.date)
-                "expense" -> exp.add(tx.date)
-            }
-        }
-        inc to exp
-    }
-
-    val upcomingDates = remember(upcomingTransactions) {
-        upcomingTransactions.map { it.dueDate }.toHashSet()
-    }
-    val todayStr = remember { LocalDate.now().toString() }
     val overdueUpcomingDates = remember(upcomingTransactions, todayStr) {
         upcomingTransactions.filter { it.dueDate < todayStr }.map { it.dueDate }.toHashSet()
     }
-    val today = remember { LocalDate.now() }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -212,10 +207,9 @@ fun FullMonthCalendar(
             Spacer(Modifier.height(8.dp))
             HorizontalPager(
                 state = pagerState,
-                verticalAlignment = Alignment.Top,
                 modifier = Modifier.fillMaxWidth()
             ) { page ->
-                val monthOfPage = YearMonth.now().plusMonths((page - initialPage).toLong())
+                val monthOfPage = remember(page) { YearMonth.now().plusMonths((page - initialPage).toLong()) }
                 val monthGrid = remember(monthOfPage) { generateMonthGrid(monthOfPage, firstDay) }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -315,3 +309,5 @@ fun generateMonthGrid(month: YearMonth, firstDayOfWeek: DayOfWeek): List<List<Lo
     }
     return weeks
 }
+
+private data class Quadruple<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

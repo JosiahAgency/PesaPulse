@@ -7,6 +7,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
+import com.example.cashia.utility.NotificationHelper
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -21,26 +22,44 @@ class MonthlySummaryWorker(private val ctx: Context, param: WorkerParameters) :
         return try {
             val dao = AppDatabase.getDatabase(ctx).transactionDao()
 
-            // Summarise the month that just ended
             val lastMonth = LocalDate.now().minusMonths(1)
             val monthStart = lastMonth.withDayOfMonth(1)
             val monthEnd = lastMonth.with(TemporalAdjusters.lastDayOfMonth())
             val monthLabel = lastMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
 
-            val all = dao.getAllTransactionsOnce()
-            val monthTxs = all.filter {
-                runCatching { LocalDate.parse(it.date) }.getOrNull()
-                    ?.let { d -> !d.isBefore(monthStart) && !d.isAfter(monthEnd) } == true
-            }
+            val monthTxs = dao.getTransactionsForDateRange(
+                monthStart.toString(),
+                monthEnd.toString()
+            )
 
             if (monthTxs.isEmpty()) return Result.success()
 
-            val income = monthTxs.filter { it.type == "income" }.sumOf { it.amount }
-            val expenses = monthTxs.filter { it.type == "expense" }.sumOf { it.amount }
+            var income = 0.0
+            var expenses = 0.0
+            monthTxs.forEach {
+                when (it.type) {
+                    "income" -> income += it.amount
+                    "expense" -> expenses += it.amount + it.transactionCost
+                }
+            }
 
-            NotificationHelper.sendMonthlySummary(
-                ctx, monthLabel, income, expenses, income - expenses, monthTxs.size
+            val net = income - expenses
+            val body = buildString {
+                append("$monthLabel\n")
+                append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
+                append("💸 Expenses: ${NotificationHelper.ksh(expenses)}\n")
+                append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
+                append("📋 ${monthTxs.size} transactions")
+            }
+
+            NotificationHelper.post(
+                ctx,
+                id = 1003,
+                channelId = NotificationHelper.CH_PERIODIC,
+                title = "📅 $monthLabel Summary",
+                body = body
             )
+
             Result.success()
         } catch (e: Exception) {
             Result.failure()
@@ -51,27 +70,20 @@ class MonthlySummaryWorker(private val ctx: Context, param: WorkerParameters) :
         private const val WORK_NAME = "monthly_summary"
 
         fun schedule(context: Context) {
-            try {
-                // Fire on the 1st of each month at 9 AM
-                val now = LocalDateTime.now()
-                val target = now.with(TemporalAdjusters.firstDayOfNextMonth())
-                    .with(LocalTime.of(9, 0))
+            val now = LocalDateTime.now()
+            val target = now.with(TemporalAdjusters.firstDayOfNextMonth())
+                .with(LocalTime.of(9, 0))
+            val delay  = Duration.between(now, target).toMillis()
 
-                val daysUntil = Duration.between(now, target).toMillis()
-                TimeUnit.DAYS.toMillis(30)
-
-                val request = PeriodicWorkRequestBuilder<MonthlySummaryWorker>(30, TimeUnit.DAYS)
-                    .setInitialDelay(daysUntil, TimeUnit.MILLISECONDS)
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                PeriodicWorkRequestBuilder<MonthlySummaryWorker>(30, TimeUnit.DAYS)
+                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                     .addTag(WORK_NAME)
                     .build()
+            )
 
-                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                    WORK_NAME,
-                    ExistingPeriodicWorkPolicy.UPDATE,
-                    request
-                )
-            } catch (_: Exception) {
-            }
         }
     }
 }

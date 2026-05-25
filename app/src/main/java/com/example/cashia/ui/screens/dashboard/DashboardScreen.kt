@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -22,8 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +43,11 @@ import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
-import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.TemporalAdjusters
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,15 +58,17 @@ fun DashboardScreen(
     upcomingViewModel: UpcomingViewModel
 ) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    val today = LocalDate.now()
-    val state = viewModel.state
-    val hapticFeedback = LocalHapticFeedback.current
+    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
     var isListExpanded by remember { mutableStateOf(true) }
+
+    val today = LocalDate.now()
+    val hapticFeedback = LocalHapticFeedback.current
+
+    val state = viewModel.state
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val firstDay = PesaTimeConfiguration.firstDayOfWeek
-    val startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(firstDay))
-    val endOfWeek = startOfWeek.plusDays(6)
+    val periodLabel by viewModel.dashboardPeriodLabel.collectAsState()
+    val upcomingUiState = upcomingViewModel.uiState
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -78,38 +79,12 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
-    val summaryData by remember(selectedDate, selectedScope, state.allTransactions) {
-        derivedStateOf { viewModel.calculateSummary(selectedDate, selectedScope) }
+    val categoryLabelsMap = remember(allCategories) {
+        allCategories.associate { it.id to it.label }
     }
 
-    val transactionsForScope = remember(state.allTransactions, selectedDate, selectedScope) {
-        state.allTransactions.filter { tx ->
-            val txDate = LocalDate.parse(tx.date)
-            when (selectedScope) {
-                TimeScope.DAY -> txDate == selectedDate
-                TimeScope.WEEK -> !txDate.isBefore(startOfWeek) && !txDate.isAfter(endOfWeek)
-                TimeScope.MONTH -> txDate.month == selectedDate.month && txDate.year == selectedDate.year
-                TimeScope.YEAR -> txDate.year == selectedDate.year
-                else -> txDate == selectedDate
-            }
-        }.sortedByDescending { it.date }
-    }
-
-    val periodLabel = remember(selectedDate, selectedScope) {
-        when (selectedScope) {
-            TimeScope.DAY -> selectedDate.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
-            TimeScope.WEEK -> "${startOfWeek.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))} " +
-                    "– ${
-                        endOfWeek.format(
-                            DateTimeFormatter.ofPattern("dd MMM yyyy")
-                        )
-                    }"
-
-            TimeScope.MONTH -> selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-            TimeScope.YEAR -> selectedDate.format(DateTimeFormatter.ofPattern("yyyy"))
-            else -> ""
-        }
+    LaunchedEffect(selectedDate, selectedScope, categoryLabelsMap) {
+        viewModel.setDashboardScope(selectedDate, selectedScope, categoryLabelsMap)
     }
 
     Scaffold(
@@ -130,72 +105,84 @@ fun DashboardScreen(
             }
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = state.isLoading,
-            onRefresh = { viewModel.refreshFromSms() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding()
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = state.isLoading,
+                onRefresh = { viewModel.refreshFromSms() },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding()
             ) {
-
-                item {
-                    BalanceHeroCard(
-                        state.latestBalance,
-                        state.latestBalanceDate,
-                        isVisible = viewModel.isBalanceVisible,
-                        onToggleVisibility = viewModel::toggleBalanceVisibility
-                    )
-                }
-
-                item {
-                    PeriodSummaryCard(
-                        selectedScope = selectedScope,
-                        onScopeChange = { selectedScope = it },
-                        periodLabel = periodLabel,
-                        summaryData = summaryData,
-                        hapticFeedback = hapticFeedback
-                    )
-                }
-
-                item {
-                    WeeklyCalendar(
-                        hapticFeedback,
-                        state.allTransactions,
-                        selectedDate
-                    ) { selectedDate = it }
-                }
-
-                item {
-                    TransactionListHeader(
-                        periodLabel = periodLabel,
-                        count = transactionsForScope.size,
-                        isExpanded = isListExpanded,
-                        onToggle = {
-                            PesaActions.playClick(hapticFeedback)
-                            isListExpanded = !isListExpanded
-                        }
-                    )
-                }
-
-                if (transactionsForScope.isNotEmpty() && isListExpanded) {
-                    items(transactionsForScope, key = { it.id }) { tx ->
-                        TransactionItem(
-                            tx,
-                            allCategories,
-                            categoryViewModel,
-                            upcomingViewModel,
-                            hapticFeedback,
-                            reversalIndex,
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        BalanceHeroCard(
+                            state.latestBalance,
+                            state.latestBalanceDate,
+                            isVisible = viewModel.isBalanceVisible,
+                            onToggleVisibility = viewModel::toggleBalanceVisibility
                         )
                     }
-                } else if (transactionsForScope.isEmpty() && isListExpanded) {
-                    item { EmptyStateMessage("No transactions in this period") }
+                    item {
+                        PeriodSummaryCard(
+                            selectedScope,
+                            { selectedScope = it },
+                            periodLabel,
+                            state.totalIncome,
+                            state.totalExpenses,
+                            hapticFeedback
+                        )
+                    }
+                    item {
+                        WeeklyCalendar(
+                            hapticFeedback,
+                            state.allTransactions,
+                            selectedDate
+                        ) { newDate ->
+                            selectedDate = newDate
+                        }
+                    }
+
+                    item {
+                        TransactionListHeader(
+                            periodLabel,
+                            state.filteredTransactions.size,
+                            isListExpanded,
+                            {
+                                PesaActions.playClick(hapticFeedback)
+                                isListExpanded = !isListExpanded
+                            }
+                        )
+                    }
+
+                    if (state.filteredTransactions.isNotEmpty() && isListExpanded) {
+                        items(state.filteredTransactions, key = { it.id }) { tx ->
+                            TransactionItem(
+                                tx,
+                                allCategories,
+                                categoryViewModel,
+                                upcomingViewModel,
+                                hapticFeedback,
+                                reversalIndex,
+                            )
+                        }
+                    } else if (state.filteredTransactions.isEmpty() && isListExpanded) {
+                        item { EmptyStateMessage("No transactions in this period") }
+                    }
                 }
+            }
+            if (upcomingUiState.showSheet) {
+                UpcomingTransactionSheet(
+                    uiState = upcomingUiState,
+                    viewModel = upcomingViewModel,
+                    allCategories = allCategories,
+                    categoryViewModel = categoryViewModel,
+                    onDismiss = { upcomingViewModel.closeSheet() }
+                )
             }
         }
     }
 }
+

@@ -99,7 +99,6 @@ fun UpcomingTransactionsSection(
 ) {
     val haptic = LocalHapticFeedback.current
     val upcoming by upcomingViewModel.upcoming.collectAsState()
-    val uiState = upcomingViewModel.uiState
     var expanded by remember { mutableStateOf(true) }
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
 
@@ -110,7 +109,7 @@ fun UpcomingTransactionsSection(
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f))
                 .clickable { PesaActions.playClick(haptic); expanded = !expanded }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(16.dp, 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -179,38 +178,7 @@ fun UpcomingTransactionsSection(
             }
         }
     }
-    if (uiState.showSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = upcomingViewModel::closeSheet,
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        ) {
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)   // ← scroll content above keyboard
-                    .navigationBarsPadding()
-            ) {
-                UpcomingEditorSheet(
-                    uiState = uiState,
-                    allCategories = allCategories,
-                    onTitleChange = upcomingViewModel::onTitleChange,
-                    onAmountChange = upcomingViewModel::onAmountChange,
-                    onCategoryChange = upcomingViewModel::onCategoryChange,
-                    onDueDateChange = upcomingViewModel::onDueDateChange,
-                    onTypeChange = upcomingViewModel::onTypeChange,
-                    onRecurrenceChange = upcomingViewModel::onRecurrenceChange,
-                    onNotesChange = upcomingViewModel::onNotesChange,
-                    onSave = upcomingViewModel::save,
-                    onDismiss = upcomingViewModel::closeSheet,
-                    categoryViewModel = categoryViewModel,
-                )
-            }
-        }
-    }
+
     deleteTarget?.let { tx ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -271,7 +239,10 @@ fun UpcomingTransactionCard(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(accentColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                        .background(
+                            accentColor.copy(alpha = 0.12f),
+                            RoundedCornerShape(12.dp)
+                        ),
                     contentAlignment = Alignment.Center
                 ) { Text(emoji, fontSize = 22.sp) }
 
@@ -298,7 +269,7 @@ fun UpcomingTransactionCard(
                         ) {
                             Text(
                                 dueDateLabel,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(8.dp, 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentColor,
                                 fontWeight = FontWeight.Bold
@@ -313,7 +284,7 @@ fun UpcomingTransactionCard(
                                 Text(
                                     tx.recurrence.name.lowercase()
                                         .replaceFirstChar { it.uppercase() },
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.padding(8.dp, 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -405,6 +376,47 @@ fun UpcomingTransactionCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UpcomingTransactionSheet(
+    uiState: UpcomingUiState,
+    viewModel: UpcomingViewModel,
+    allCategories: List<ResolvedCategory>,
+    categoryViewModel: CategoryViewModel,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        val scrollState = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .navigationBarsPadding()
+        ) {
+            UpcomingEditorSheet(
+                uiState = uiState,
+                allCategories = allCategories,
+                onTitleChange = viewModel::onTitleChange,
+                onAmountChange = viewModel::onAmountChange,
+                onCategoryChange = viewModel::onCategoryChange,
+                onDueDateChange = viewModel::onDueDateChange,
+                onTypeChange = viewModel::onTypeChange,
+                onRecurrenceChange = viewModel::onRecurrenceChange,
+                onNotesChange = viewModel::onNotesChange,
+                onSave = viewModel::save,
+                onDismiss = onDismiss,
+                categoryViewModel = categoryViewModel,
+            )
         }
     }
 }

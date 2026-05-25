@@ -267,39 +267,6 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-//        // Account
-//        item {
-//            SettingsSection(title = "Account") {
-//                if (linkedGoogleEmail != null) {
-//                    LinkedAccountItem(
-//                        email = linkedGoogleEmail!!,
-//                        onUnlink = {
-//                            PesaActions.playClick(haptic)
-//                            scope.launch {
-//                                googleAuthHelper.signOut()
-//                                settingsViewModel.unlinkGoogleAccount()
-//                            }
-//                        }
-//                    )
-//                } else {
-//                    SettingsActionItem(
-//                        label = "Link Google Account",
-//                        subtitle = "Enable cloud sync and data backup",
-//                        icon = Icons.Rounded.Shield, // Changed from Info for better context
-//                        onClick = {
-//                            PesaActions.playClick(haptic)
-//                            scope.launch {
-//                                val email = googleAuthHelper.signInWithGoogle()
-//                                if (email != null) {
-//                                    settingsViewModel.linkGoogleAccount(email)
-//                                }
-//                            }
-//                        },
-//                        isExpanded = false
-//                    )
-//                }
-//            }
-//        }
 
         // Categories
         item {
@@ -396,8 +363,6 @@ fun SettingsScreen(
                     checked = isDailyDigestOn,
                     onCheckedChange = { enable ->
                         PesaActions.playClick(haptic)
-                        // ✅ FIX: setDailyDigestEnabled now safely handles WorkManager internally
-                        settingsViewModel.setDailyDigestEnabled(enable)
                         if (enable) {
                             Toast.makeText(
                                 context,

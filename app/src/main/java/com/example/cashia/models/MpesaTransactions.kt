@@ -90,6 +90,16 @@ private val regexInvalidInput = Regex(
 )
 private val phoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
 
+data class DayGroup(
+    val date: LocalDate,
+    val transactions: List<MpesaTransactions>,
+    val dayIncome: Double,
+    val dayExpense: Double,
+    val dayBalance: Double
+)
+
+data class WeekGroup(val bucket: String, val days: List<DayGroup>)
+
 @Entity(
     tableName = "MpesaTransactions",
     indices = [
@@ -101,6 +111,7 @@ private val phoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
         Index(value = ["reversedTxId"])
     ]
 )
+
 data class MpesaTransactions(
     @PrimaryKey
     val id: String,
@@ -393,7 +404,7 @@ fun parseMpesaMessage(
     }
 }
 
-private fun buildTransaction(
+fun buildTransaction(
     smsId: Long,
     id: String,
     amountStr: String,

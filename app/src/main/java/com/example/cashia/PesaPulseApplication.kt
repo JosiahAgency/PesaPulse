@@ -144,7 +144,6 @@ fun PesaPulseApp() {
                             Column {
                                 AnimatedContent(
                                     targetState = PesaTimeConfiguration.screenTitle(currentRoute),
-                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
                                     label = "title"
                                 ) { title ->
                                     Text(
@@ -158,7 +157,6 @@ fun PesaPulseApp() {
                                 AnimatedContent(
                                     targetState = PesaTimeConfiguration.screenSubtitle
                                         (currentRoute),
-                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
                                     label = "subtitle"
                                 ) { subtitle ->
                                     if (subtitle.isNotEmpty()) {

@@ -35,7 +35,8 @@ fun PeriodSummaryCard(
     selectedScope: TimeScope,
     onScopeChange: (TimeScope) -> Unit,
     periodLabel: String,
-    summaryData: com.example.cashia.models.SummaryData,
+    income: Double,
+    expenses: Double,
     hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
 ) {
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
@@ -88,7 +89,7 @@ fun PeriodSummaryCard(
             ) {
                 PeriodStat(
                     label = "Money In",
-                    value = PesaTimeConfiguration.formatCurrency(summaryData.income),
+                    value = PesaTimeConfiguration.formatCurrency(income),
                     color = MaterialTheme.colorScheme.tertiary,
                     icon = Icons.AutoMirrored.Filled.TrendingUp
                 )
@@ -100,13 +101,13 @@ fun PeriodSummaryCard(
                 )
                 PeriodStat(
                     label = "Money Out",
-                    value = PesaTimeConfiguration.formatCurrency(summaryData.expenses),
+                    value = PesaTimeConfiguration.formatCurrency(expenses),
                     color = MaterialTheme.colorScheme.error,
                     icon = Icons.AutoMirrored.Filled.TrendingDown,
                     alignEnd = true
                 )
             }
-            val net = summaryData.income - summaryData.expenses
+            val net = income - expenses
             val netPositive = net >= 0
             Surface(
                 modifier = Modifier.fillMaxWidth(),

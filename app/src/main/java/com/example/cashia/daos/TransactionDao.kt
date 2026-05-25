@@ -51,9 +51,11 @@ interface TransactionDao {
     /** Fetch a single transaction by primary key — used by the corrections feedback loop. */
     @Query("SELECT * FROM MpesaTransactions WHERE id = :id LIMIT 1")
     suspend fun getTransactionById(id: String): MpesaTransactions?
-
-    // In TransactionDao
-
+    /** Used by summary workers — pure suspend, no Flow overhead */
+    @Query("""SELECT * FROM MpesaTransactions WHERE date >= :start AND date <= :end ORDER BY date DESC""")
+    suspend fun getTransactionsForDateRange(start: String, end: String): List<MpesaTransactions>
+    @Query("SELECT balance FROM MpesaTransactions ORDER BY date DESC LIMIT 1")
+    suspend fun getLatestBalance(): Double?
     @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId = :txId LIMIT 1")
     suspend fun getReversalFor(txId: String): MpesaTransactions?
 
