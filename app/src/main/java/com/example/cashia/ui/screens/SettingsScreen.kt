@@ -90,7 +90,6 @@ fun SettingsScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
     val settingsViewModel: SettingsViewModel = viewModel(
@@ -102,10 +101,8 @@ fun SettingsScreen(
     // Collect all state flows from ViewModel — this is the single source of truth
     val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
     val is24Hour by settingsViewModel.use24Hour.collectAsState()
-    val linkedGoogleEmail by settingsViewModel.linkedGoogleEmail.collectAsState()
 
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
-    val googleAuthHelper = remember { GoogleAuthHelper(context) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     // Day picker dialog

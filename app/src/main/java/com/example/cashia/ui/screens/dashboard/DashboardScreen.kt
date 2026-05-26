@@ -20,7 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,7 +63,7 @@ fun DashboardScreen(
     val today = LocalDate.now()
     val hapticFeedback = LocalHapticFeedback.current
 
-    val state = viewModel.state
+    val state by viewModel.state.collectAsState()
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val reversalIndex by viewModel.reversalIndex.collectAsState()
     val periodLabel by viewModel.dashboardPeriodLabel.collectAsState()
@@ -105,83 +104,79 @@ fun DashboardScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            PullToRefreshBox(
-                isRefreshing = state.isLoading,
-                onRefresh = { viewModel.refreshFromSms() },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding()
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        BalanceHeroCard(
-                            state.latestBalance,
-                            state.latestBalanceDate,
-                            isVisible = viewModel.isBalanceVisible,
-                            onToggleVisibility = viewModel::toggleBalanceVisibility
-                        )
-                    }
-                    item {
-                        PeriodSummaryCard(
-                            selectedScope,
-                            { selectedScope = it },
-                            periodLabel,
-                            state.totalIncome,
-                            state.totalExpenses,
-                            hapticFeedback
-                        )
-                    }
-                    item {
-                        WeeklyCalendar(
-                            hapticFeedback,
-                            state.allTransactions,
-                            selectedDate
-                        ) { newDate ->
-                            selectedDate = newDate
-                        }
-                    }
-
-                    item {
-                        TransactionListHeader(
-                            periodLabel,
-                            state.filteredTransactions.size,
-                            isListExpanded,
-                            {
-                                PesaActions.playClick(hapticFeedback)
-                                isListExpanded = !isListExpanded
-                            }
-                        )
-                    }
-
-                    if (state.filteredTransactions.isNotEmpty() && isListExpanded) {
-                        items(state.filteredTransactions, key = { it.id }) { tx ->
-                            TransactionItem(
-                                tx,
-                                allCategories,
-                                categoryViewModel,
-                                upcomingViewModel,
-                                hapticFeedback,
-                                reversalIndex,
-                            )
-                        }
-                    } else if (state.filteredTransactions.isEmpty() && isListExpanded) {
-                        item { EmptyStateMessage("No transactions in this period") }
+                item {
+                    BalanceHeroCard(
+                        state.latestBalance,
+                        state.latestBalanceDate,
+                        isVisible = viewModel.isBalanceVisible,
+                        onToggleVisibility = viewModel::toggleBalanceVisibility
+                    )
+                }
+                item {
+                    PeriodSummaryCard(
+                        selectedScope,
+                        { selectedScope = it },
+                        periodLabel,
+                        state.totalIncome,
+                        state.totalExpenses,
+                        hapticFeedback
+                    )
+                }
+                item {
+                    WeeklyCalendar(
+                        hapticFeedback,
+                        state.allTransactions,
+                        selectedDate
+                    ) { newDate ->
+                        selectedDate = newDate
                     }
                 }
+
+                item {
+                    TransactionListHeader(
+                        periodLabel,
+                        state.filteredTransactions.size,
+                        isListExpanded,
+                        {
+                            PesaActions.playClick(hapticFeedback)
+                            isListExpanded = !isListExpanded
+                        }
+                    )
+                }
+
+                if (state.filteredTransactions.isNotEmpty() && isListExpanded) {
+                    items(state.filteredTransactions, key = { it.id }) { tx ->
+                        TransactionItem(
+                            tx,
+                            allCategories,
+                            categoryViewModel,
+                            upcomingViewModel,
+                            hapticFeedback,
+                            reversalIndex,
+                        )
+                    }
+                } else if (state.filteredTransactions.isEmpty() && isListExpanded) {
+                    item { EmptyStateMessage("No transactions in this period") }
+                }
             }
-            if (upcomingUiState.showSheet) {
-                UpcomingTransactionSheet(
-                    uiState = upcomingUiState,
-                    viewModel = upcomingViewModel,
-                    allCategories = allCategories,
-                    categoryViewModel = categoryViewModel,
-                    onDismiss = { upcomingViewModel.closeSheet() }
-                )
-            }
+        }
+        if (upcomingUiState.showSheet) {
+            UpcomingTransactionSheet(
+                uiState = upcomingUiState,
+                viewModel = upcomingViewModel,
+                allCategories = allCategories,
+                categoryViewModel = categoryViewModel,
+                onDismiss = { upcomingViewModel.closeSheet() }
+            )
         }
     }
 }

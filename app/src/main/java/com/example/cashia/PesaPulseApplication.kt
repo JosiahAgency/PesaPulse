@@ -4,11 +4,10 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,10 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -61,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -90,7 +87,6 @@ import com.example.cashia.utility.PesaTimeConfiguration
 fun PesaPulseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
-
     val navItems = remember {
         listOf(
             AppDestinations.Dashboard,
@@ -102,7 +98,6 @@ fun PesaPulseApp() {
     }
 
     val haptic = LocalHapticFeedback.current
-
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -113,7 +108,6 @@ fun PesaPulseApp() {
         factory = UpcomingViewModel.provideFactory(context)
     )
     val settingsViewModel: SettingsViewModel = viewModel()
-
     val isDark by settingsViewModel.darkTheme.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -130,7 +124,6 @@ fun PesaPulseApp() {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        BackgroundGlow(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -197,6 +190,10 @@ fun PesaPulseApp() {
             NavHost(
                 navController = navController,
                 startDestination = AppDestinations.Dashboard.route,
+                enterTransition = { fadeIn(animationSpec = tween(200)) },
+                exitTransition = { fadeOut(animationSpec = tween(150)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(200)) },
+                popExitTransition = { fadeOut(animationSpec = tween(150)) },
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(AppDestinations.Dashboard.route) {
@@ -247,32 +244,6 @@ fun PesaPulseApp() {
 }
 
 @Composable
-fun BackgroundGlow(color: Color) {
-    Canvas(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer(renderEffect = null)
-    ) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(color, Color.Transparent),
-                center = Offset(size.width * 0.2f, size.height * 0.15f),
-                radius = size.width * 0.8f
-            ),
-            alpha = 0.4f
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(color, Color.Transparent),
-                center = Offset(size.width * 0.8f, size.height * 0.9f),
-                radius = size.width * 0.6f
-            ),
-            alpha = 0.3f
-        )
-    }
-}
-
-@Composable
 fun GlassNavigationBar(
     haptic: HapticFeedback,
     navController: NavController,
@@ -317,7 +288,7 @@ fun GlassNavigationBar(
                             if (currentRoute != screen.route) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
                                     launchSingleTop = true

@@ -3,6 +3,7 @@ agp = "9.2.1"
 biometric = "1.2.0-alpha05"
 datastorePreferences = "1.2.1"
 credentials = "1.6.0"
+glanceMaterial3 = "1.1.1"
 googleid = "1.2.0"
 firebaseBom = "34.13.0"
 glanceAppwidget = "1.1.1"
@@ -31,6 +32,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+androidx-glance-material3 = { module = "androidx.glance:glance-material3", version.ref = "glanceMaterial3" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glanceAppwidget" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }

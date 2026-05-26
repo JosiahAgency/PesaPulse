@@ -19,9 +19,6 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
         "projections", "Forecast",
         Icons.AutoMirrored.Filled.TrendingUp
     )
-
     object Settings : AppDestinations("settings", "Settings", Icons.Default.Settings)
-
     object Categories : AppDestinations("categories", "categories", Icons.Default.Category)
-
 }

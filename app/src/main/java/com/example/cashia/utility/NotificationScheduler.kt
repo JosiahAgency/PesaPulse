@@ -17,8 +17,6 @@ import java.time.Month
 import java.util.concurrent.TimeUnit
 
 object NotificationScheduler {
-
-    /** Call on app launch and after each settings toggle */
     fun scheduleAll(context: Context) {
         if (PesaTimeConfiguration.isDailyDigestEnabled) scheduleDailyDigest(context)
         if (PesaTimeConfiguration.isWeeklySummaryEnabled) scheduleWeeklySummary(context)

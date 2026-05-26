@@ -5,7 +5,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.cashia.utility.PesaTimeConfiguration
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -186,14 +185,18 @@ fun parseMpesaMessage(
     if (isSystemNoise) return ParseResult.Irrelevant
 
     return try {
-        val balance = (regexNewBalance.find(message) ?: balanceRegex.find(message))
-            ?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-        val transactionCost = costRegex.find(message)?.groupValues?.get(1)
-            ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+        val extractBalanceAndCost: () -> Pair<Double, Double> = {
+            val bal = (regexNewBalance.find(message) ?: balanceRegex.find(message))
+                ?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+            val cost = costRegex.find(message)?.groupValues?.get(1)
+                ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+            Pair(bal, cost)
+        }
 
         when {
             regexSentTo.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexSentTo.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -211,6 +214,7 @@ fun parseMpesaMessage(
 
             regexPaidTo.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexPaidTo.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -228,6 +232,7 @@ fun parseMpesaMessage(
 
             regexAirtime.find(message) != null -> {
                 val (id, amount, date, time) = regexAirtime.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -245,6 +250,7 @@ fun parseMpesaMessage(
 
             regexWithdraw.find(message) != null -> {
                 val (id, date, time, amount, recipient) = regexWithdraw.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -262,6 +268,7 @@ fun parseMpesaMessage(
 
             regexReceived.find(message) != null -> {
                 val (id, amount, recipient, date, time) = regexReceived.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -279,6 +286,7 @@ fun parseMpesaMessage(
 
             regexReversal.find(message) != null -> {
                 val (id, recipient, date, time, amount) = regexReversal.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -297,6 +305,7 @@ fun parseMpesaMessage(
 
             regexReversalV2.find(message) != null -> {
                 val (id, reversedTxId, date, time, amount) = regexReversalV2.find(message)!!.destructured
+                val (balance, transactionCost) = extractBalanceAndCost()
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -316,6 +325,8 @@ fun parseMpesaMessage(
 
             regexBalanceInquiry.find(message) != null -> {
                 val (id, balAmount, date, time) = regexBalanceInquiry.find(message)!!.destructured
+                val transactionCost = costRegex.find(message)?.groupValues?.get(1)
+                    ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
                 ParseResult.Success(
                     buildTransaction(
                         smsId,
@@ -331,71 +342,6 @@ fun parseMpesaMessage(
                     )
                 )
             }
-
-            regexFulizaBorrow.find(message) != null -> {
-                val match = regexFulizaBorrow.find(message)!!
-                val (id, amount, fee, _, dueDate) = match.destructured
-
-                val txDate = Instant.ofEpochMilli(smsReceivedAt)
-                    .atZone(ZoneId.systemDefault()).toLocalDate().toString()
-                val txTime = Instant.ofEpochMilli(smsReceivedAt)
-                    .atZone(ZoneId.systemDefault()).toLocalTime()
-                    .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-
-                val datePattern = if (dueDate.length <= 8) "d/M/yy" else "d/M/yyyy"
-                val dueDateFormatted = try {
-                    LocalDate.parse(dueDate, DateTimeFormatter.ofPattern(datePattern))
-                        .format(DateTimeFormatter.ofPattern("d MMM yy"))
-                } catch (_: Exception) {
-                    dueDate
-                }
-
-                ParseResult.Success(
-                    MpesaTransactions(
-                        id = id.trim(),
-                        amount = amount.replace(",", "").toDouble(),
-                        transactionCost = fee.replace(",", "").toDouble(),
-                        recipient = "Fuliza M-PESA (due $dueDateFormatted)",
-                        date = txDate,
-                        type = "expense",
-                        balance = 0.0,
-                        time = txTime,
-                        timestamp = smsReceivedAt,
-                        // LOAN_DISBURSEMENT replaces the removed FULIZA_LOAN subcategory
-                        category = TransactionCategory.LOAN_DISBURSEMENT.name
-                    )
-                )
-            }
-
-            regexFulizaRepay.find(message) != null -> {
-                val match = regexFulizaRepay.find(message)!!
-                val (id, amount) = match.destructured
-
-                val txDate = Instant.ofEpochMilli(smsReceivedAt)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-                    .toString()
-                val txTime = Instant.ofEpochMilli(smsReceivedAt)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalTime()
-                    .format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-
-                ParseResult.Success(
-                    MpesaTransactions(
-                        id = id.trim(),
-                        amount = amount.replace(",", "").toDouble(),
-                        transactionCost = transactionCost,
-                        recipient = "Fuliza Repayment",
-                        date = txDate,
-                        type = "expense",
-                        balance = balance,
-                        time = txTime,
-                        timestamp = smsReceivedAt,
-                        category = TransactionCategory.FULIZA_REPAYMENT.name
-                    )
-                )
-            }
-
             else -> ParseResult.Unmatched(message)
         }
     } catch (e: Exception) {

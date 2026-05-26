@@ -40,7 +40,7 @@ fun ProjectionScreen(
     val haptic = LocalHapticFeedback.current
 
     // Use the shared ViewModel directly — no redundant local instance
-    val state = transactionsViewModel.state
+    val state by transactionsViewModel.state.collectAsState()
     val transactions = state.allTransactions
 
     val allCategories by categoryViewModel.allCategories.collectAsState()
@@ -127,7 +127,7 @@ fun ProjectionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+            contentPadding = PaddingValues(16.dp, 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {

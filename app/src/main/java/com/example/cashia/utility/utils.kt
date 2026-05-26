@@ -128,7 +128,6 @@ object PesaTimeConfiguration {
         isUpcomingReminderEnabled = enabled
     }
 
-    /** How many days before due date to start alerting (1 / 3 / 7) */
     var upcomingReminderDaysBefore: Int
         get() = prefs.getInt("upcoming_reminder_days", 3)
         set(v) {

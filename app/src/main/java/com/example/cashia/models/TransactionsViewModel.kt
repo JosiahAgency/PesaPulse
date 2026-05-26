@@ -46,7 +46,6 @@ data class TransactionState(
     val totalExpenses: Double = 0.0,
     val totalTransactionCost: Double = 0.0,
     val currentMonth: String = "",
-    val isLoading: Boolean = true,
     val selectedCategory: String? = null,
     val searchQuery: String = "",
 )
@@ -54,11 +53,6 @@ data class TransactionState(
 data class ReversalIndex(
     val byOriginal: Map<String, MpesaTransactions> = emptyMap(),
     val byReversal: Map<String, MpesaTransactions> = emptyMap(),
-)
-
-data class SummaryData(
-    val income: Double,
-    val expenses: Double
 )
 
 private val dayFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")
@@ -78,13 +72,38 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val _categoryLabelsMap = MutableStateFlow<Map<String, String>>(emptyMap())
     private val _dashboardPeriodLabel = MutableStateFlow("")
     val dashboardPeriodLabel = _dashboardPeriodLabel.asStateFlow()
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    var state by mutableStateOf(TransactionState())
-        private set
+
+    val state: StateFlow<TransactionState> = combine(
+        dao.getAllTransactions(),       // No debounce — DB changes propagate immediately
+        _searchQuery.debounce(300),    // Only search input benefits from debouncing
+        _selectedCategoryFilter,
+        _dateRangeStart,
+        _dateRangeEnd,
+        _categoryLabelsMap
+    ) { args ->
+        val transactions = args[0] as List<MpesaTransactions>
+        val query = args[1] as String
+        val catFilter = args[2] as String?
+        val start = args[3] as LocalDate?
+        val end = args[4] as LocalDate?
+        val catMap = args[5] as Map<String, String>
+        computeFilteredState(transactions, query, catFilter, start, end, catMap)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = TransactionState()
+        )
 
     var isBalanceVisible by mutableStateOf(false)
         private set
 
+    // Callback is now only invoked after a real SMS sync, not on every filter
+    // change. See silentSync() below.
     var onNewTransactionsSynced: ((List<MpesaTransactions>) -> Unit)? = null
 
     val pendingReviewCount: StateFlow<Int> = unmatchedDao
@@ -133,14 +152,33 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     init {
-        observeTransactionPipeline()
-        viewModelScope.launch {
-            refreshFromSms()
+        viewModelScope.launch(Dispatchers.IO) {
+            silentSync()
+        }
+    }
+
+    private suspend fun silentSync() {
+        if (_isSyncing.value) return
+        _isSyncing.value = true
+        try {
+            syncTransactions(context, database)
+            val fresh = withContext(Dispatchers.IO) {
+                dao.getAllTransactionsOnce()
+            }
+            if (fresh.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    onNewTransactionsSynced?.invoke(fresh)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Transactions", "Background sync failure", e)
+        } finally {
+            _isSyncing.value = false
         }
     }
 
     /**
-     * Updates the reactive filters down to the background pipeline
+     * Updates the reactive filters fed into the background pipeline.
      */
     fun updateFilters(
         query: String,
@@ -165,12 +203,18 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                     val s = date.with(TemporalAdjusters.previousOrSame(firstDay))
                     s to s.plusDays(6)
                 }
-                TimeScope.MONTH -> date.with(TemporalAdjusters.firstDayOfMonth()) to date.with(TemporalAdjusters.lastDayOfMonth())
-                TimeScope.YEAR -> date.with(TemporalAdjusters.firstDayOfYear()) to date.with(TemporalAdjusters.lastDayOfYear())
+
+                TimeScope.MONTH -> date.with(TemporalAdjusters.firstDayOfMonth()) to date.with(
+                    TemporalAdjusters.lastDayOfMonth()
+                )
+
+                TimeScope.YEAR -> date.with(TemporalAdjusters.firstDayOfYear()) to date.with(
+                    TemporalAdjusters.lastDayOfYear()
+                )
+
                 TimeScope.CUSTOM -> date to date
             }
 
-            // Format Label
             val label = when (scope) {
                 TimeScope.DAY -> date.format(dayFormatter)
                 TimeScope.WEEK -> "${start.format(weekFormatter)} – ${end.format(weekFormatter)}"
@@ -181,43 +225,13 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
             _dashboardPeriodLabel.value = label
 
-            // Push dates to your existing pipeline filter
             updateFilters(
-                query = state.searchQuery,
-                categoryFilter = state.selectedCategory,
+                query = state.value.searchQuery,
+                categoryFilter = state.value.selectedCategory,
                 start = start,
                 end = end,
                 categoryMap = categoryMap
             )
-        }
-    }
-
-    private fun observeTransactionPipeline() {
-        viewModelScope.launch {
-            combine(
-                dao.getAllTransactions().debounce(100),
-                _searchQuery,
-                _selectedCategoryFilter,
-                _dateRangeStart,
-                _dateRangeEnd,
-                _categoryLabelsMap
-            ) { args ->
-                val transactions = args[0] as List<MpesaTransactions>
-                val query = args[1] as String
-                val catFilter = args[2] as String?
-                val start = args[3] as LocalDate?
-                val end = args[4] as LocalDate?
-                val catMap = args[5] as Map<String, String>
-
-                computeFilteredState(transactions, query, catFilter, start, end, catMap)
-            }
-                .distinctUntilChanged()
-                .flowOn(Dispatchers.IO)
-                .collect { newState ->
-                    withContext(Dispatchers.Main) {
-                        state = newState
-                    }
-                }
         }
     }
 
@@ -233,7 +247,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         val amountQuery = query.trim().toDoubleOrNull()
         val isQueryBlank = query.isBlank()
 
-        // 1. Map into parsing structures & evaluate filters concurrently on IO thread
         val filteredList = allTxs.filter { tx ->
             val textMatch = isQueryBlank ||
                     tx.recipient.contains(query, ignoreCase = true) ||
@@ -250,7 +263,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             textMatch && catMatch && dateMatch
         }
 
-        // 2. Pre-calculate metrics safely away from Main Frame cycles
         var totalIncome = 0.0
         var totalExpenses = 0.0
         var totalCost = 0.0
@@ -264,8 +276,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             }
         }
 
-
-        // ── Ultra Lightweight Pass Grouping ──────────────────────────────────
         val groupedTransactions = filteredList
             .map { tx ->
                 val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
@@ -317,7 +327,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             totalExpenses = totalExpenses,
             totalTransactionCost = totalCost,
             currentMonth = "${now.month.getDisplayName(TextStyle.FULL, Locale.US)} ${now.year}",
-            isLoading = false,
             selectedCategory = catFilter,
             searchQuery = query
         )
@@ -332,17 +341,8 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     fun refreshFromSms() {
-        viewModelScope.launch {
-            state = state.copy(isLoading = true)
-            try {
-                withContext(Dispatchers.IO) {
-                    syncTransactions(context, database)
-                }
-            } catch (e: Exception) {
-                Log.e("Transactions", "Sync error", e)
-            } finally {
-                state = state.copy(isLoading = false)
-            }
+        viewModelScope.launch(Dispatchers.IO) {
+            silentSync()
         }
     }
 
@@ -375,12 +375,12 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             val transaction = try {
                 buildTransaction(
                     smsId = source.smsId,
-                    id = source.smsId.toString(), // Use the SMS ID as a fallback for the TX ID
+                    id = source.smsId.toString(),
                     amountStr = partial?.amount?.toString() ?: "0.00",
                     recipient = "Manual Entry (from SMS)",
                     dateStr = partial?.date ?: LocalDate.now()
                         .format(DateTimeFormatter.ofPattern("d/M/yyyy")),
-                    timeStr = "12:00 PM", // Default time if missing
+                    timeStr = "12:00 PM",
                     type = type,
                     balance = 0.0,
                     cost = 0.0,
@@ -391,10 +391,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 return@launch
             }
 
-            // 2. Insert into the main transactions table
             dao.insertTransactions(listOf(transaction))
-
-            // 3. Mark the SMS as SAVED in the unmatched table
             unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
         }
     }

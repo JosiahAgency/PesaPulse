@@ -83,7 +83,6 @@ fun TransactionItem(
     upcomingViewModel: UpcomingViewModel,
     hapticFeedback: HapticFeedback,
     reversalIndex: ReversalIndex,
-    onNavigateToTx: ((String) -> Unit)? = null,
 ) {
     val isReversalTx = tx.reversedTxId != null
     val originalTx = if (isReversalTx) reversalIndex.byReversal[tx.id] else null

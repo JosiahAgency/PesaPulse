@@ -8,7 +8,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 
 class BiometricAuthenticator(private val context: Context) {
-
     fun promptAuthenticator(activity: FragmentActivity, onSuccess: () -> Unit, onError: (String) -> Unit){
         val executor = ContextCompat.getMainExecutor(context)
         val biometricPrompt = BiometricPrompt(activity, executor,

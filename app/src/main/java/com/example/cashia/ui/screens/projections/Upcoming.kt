@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +82,7 @@ fun UpcomingSection(
     val uiState = upcomingViewModel.uiState
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
     val total = overdue.size + dueSoon.size + later.size
+    val state by viewModel.state.collectAsState()
 
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -95,7 +97,8 @@ fun UpcomingSection(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 var matchRunning by remember { mutableStateOf(false) }
-                val allTx = viewModel.state.allTransactions
+                val allTx = state.allTransactions
+
 
                 Surface(
                     shape = CircleShape,

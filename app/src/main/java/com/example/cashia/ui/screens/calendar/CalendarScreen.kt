@@ -29,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -75,7 +74,7 @@ fun CalendarScreen(
     val reversalIndex by viewModel.reversalIndex.collectAsState()
     var selectedDate by remember { mutableStateOf(today) }
     var filterByDay by remember { mutableStateOf(false) }
-    val state = viewModel.state
+    val state by viewModel.state.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
@@ -148,83 +147,75 @@ fun CalendarScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-
-            PullToRefreshBox(
-                isRefreshing = state.isLoading,
-                onRefresh = { viewModel.refreshFromSms() },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding()
+        Box(modifier = Modifier
+            .padding()
+            .fillMaxSize()) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        FinancialOverviewCards(
-                            state.allTransactions,
-                            selectedDate,
-                            selectedFilter,
-                            { selectedFilter = it })
+                item {
+                    FinancialOverviewCards(
+                        state.allTransactions,
+                        selectedDate,
+                        selectedFilter,
+                        { selectedFilter = it })
+                }
+                item {
+                    FullMonthCalendar(
+                        allTransactions = state.allTransactions,
+                        selectedDate = selectedDate,
+                        upcomingTransactions = upcomingAll
+                    ) { clickedDate ->
+                        filterByDay =
+                            !(clickedDate.month != selectedDate.month || clickedDate.year != selectedDate.year)
+                        selectedDate = clickedDate
                     }
-                    item {
-                        FullMonthCalendar(
-                            allTransactions = state.allTransactions,
-                            selectedDate = selectedDate,
-                            upcomingTransactions = upcomingAll
-                        ) { clickedDate ->
-                            filterByDay =
-                                !(clickedDate.month != selectedDate.month || clickedDate.year != selectedDate.year)
-                            selectedDate = clickedDate
-                        }
-                    }
-                    item {
-                        ListHeader(
-                            selectedFilter = selectedFilter,
-                            filterByDay = filterByDay,
-                            selectedDate = selectedDate,
-                            onClearDayFilter = { filterByDay = false }
-                        )
-                    }
+                }
+                item {
+                    ListHeader(
+                        selectedFilter = selectedFilter,
+                        filterByDay = filterByDay,
+                        selectedDate = selectedDate,
+                        onClearDayFilter = { filterByDay = false }
+                    )
+                }
 
-                    if (filteredTransctions.isEmpty() && (!filterByDay || upcomingForDay.isEmpty())) {
-                        item { EmptyStateMessage("No Transactions Found") }
-                    } else {
-                        // Render upcoming scheduled liabilities when inspecting specific date nodes
-                        if (filterByDay && upcomingForDay.isNotEmpty()) {
-                            items(
-                                upcomingForDay,
-                                key = { "upcoming-${it.dueDate}-${filteredTransctions.size}" }) { upcomingTx ->
-                                CalendarUpcomingItem(
-                                    title = "Scheduled Commitment",
-                                    dateStr = upcomingTx.dueDate
-                                )
-                            }
-                        }
-                        items(filteredTransctions, key = { it.id }) { tx ->
-                            TransactionItem(
-                                tx,
-                                allCategories,
-                                categoryViewModel,
-                                upcomingViewModel,
-                                hapticFeedback,
-                                reversalIndex
+                if (filteredTransctions.isEmpty() && (!filterByDay || upcomingForDay.isEmpty())) {
+                    item { EmptyStateMessage("No Transactions Found") }
+                } else {
+                    // Render upcoming scheduled liabilities when inspecting specific date nodes
+                    if (filterByDay && upcomingForDay.isNotEmpty()) {
+                        items(
+                            upcomingForDay,
+                            key = { "upcoming-${it.dueDate}-${filteredTransctions.size}" }) { upcomingTx ->
+                            CalendarUpcomingItem(
+                                title = "Scheduled Commitment",
+                                dateStr = upcomingTx.dueDate
                             )
                         }
                     }
+                    items(filteredTransctions, key = { it.id }) { tx ->
+                        TransactionItem(
+                            tx,
+                            allCategories,
+                            categoryViewModel,
+                            upcomingViewModel,
+                            hapticFeedback,
+                            reversalIndex
+                        )
+                    }
                 }
             }
-            if (upcomingUiState.showSheet) {
-                UpcomingTransactionSheet(
-                    uiState = upcomingUiState,
-                    viewModel = upcomingViewModel,
-                    allCategories = allCategories,
-                    categoryViewModel = categoryViewModel,
-                    onDismiss = { upcomingViewModel.closeSheet() }
-                )
-            }
-
+        }
+        if (upcomingUiState.showSheet) {
+            UpcomingTransactionSheet(
+                uiState = upcomingUiState,
+                viewModel = upcomingViewModel,
+                allCategories = allCategories,
+                categoryViewModel = categoryViewModel,
+                onDismiss = { upcomingViewModel.closeSheet() }
+            )
         }
     }
 }
