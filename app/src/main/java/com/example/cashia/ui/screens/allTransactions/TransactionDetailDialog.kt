@@ -28,6 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,23 +65,29 @@ fun TransactionDetailDialog(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
+    // [OPT] Fixed AnimatedVisibility(visible = true) anti-pattern — same issue as
+    //        UnmatchedSmsModal. The enter animation was silently skipped because Compose
+    //        only animates false→true transitions; starting at true means it renders
+    //        immediately with no animation. LaunchedEffect triggers on the next frame.
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
     Dialog(
-        onDismissRequest = onDismiss, properties = DialogProperties(
-            usePlatformDefaultWidth =
-                false
-        )
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         AnimatedVisibility(
-            visible = true, enter = fadeIn(tween(200)) + scaleIn(
-                tween(200),
-                initialScale = 0.92f
-            ), exit = fadeOut(tween(150)) + scaleOut(tween(150))
+            visible = visible,
+            enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.92f),
+            exit = fadeOut(tween(150)) + scaleOut(tween(150))
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp), shape =
-                    RoundedCornerShape(28.dp), color = colorScheme.surface, tonalElevation = 6.dp
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = colorScheme.surface,
+                tonalElevation = 6.dp
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
@@ -145,10 +156,9 @@ fun TransactionDetailDialog(
                         )
                         Spacer(Modifier.height(6.dp))
                         InlineDetailRow(
-                            "Total Deducted", PesaTimeConfiguration.formatCurrency(
-                                tx
-                                    .amount + tx.transactionCost
-                            ), bold = true
+                            "Total Deducted",
+                            PesaTimeConfiguration.formatCurrency(tx.amount + tx.transactionCost),
+                            bold = true
                         )
                     }
                     Spacer(Modifier.height(6.dp))

@@ -84,10 +84,10 @@ fun TransactionScreen(
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val categoryLabelsMap =
         remember(allCategories) { allCategories.associate { it.id to it.label } }
+
     val reversalIndex by viewModel.reversalIndex.collectAsState()
     val upcomingUiState = upcomingViewModel.uiState
 
-    // ── Pipeline Filter Synchronisation ────────────────────────────────────
     LaunchedEffect(
         searchQuery,
         selectedCategoryFilter,
@@ -106,6 +106,12 @@ fun TransactionScreen(
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
     val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
+    val hasFilters by remember {
+        derivedStateOf {
+            selectedCategoryFilter != null || dateRangeStart != null || searchQuery.isNotBlank()
+        }
+    }
+
     var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val pendingCount by viewModel.pendingReviewCount.collectAsState()
@@ -115,9 +121,6 @@ fun TransactionScreen(
     var showUnmatchedModal by remember { mutableStateOf(false) }
     var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
-
-    val hasFilters = selectedCategoryFilter != null ||
-            dateRangeStart != null || searchQuery.isNotBlank()
 
     var hasAutoOpened by remember { mutableStateOf(false) }
     LaunchedEffect(pendingCount) {
@@ -136,7 +139,6 @@ fun TransactionScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
-            // ── Category swipe sheet ──────────────────────────────────────
             swipeCategoryTarget?.let { tx ->
                 CategoryPickerSheet(
                     allCategories = allCategories,
@@ -150,9 +152,15 @@ fun TransactionScreen(
                 )
             }
 
-            // ── Unmatched SMS modal ───────────────────────────────────────
             if (showUnmatchedModal) {
                 modalTargetSms?.let { target ->
+                    val advance = { id: Long ->
+                        val next = nextPending?.takeIf { it.id != id }
+                        if (next != null) modalTargetSms = next
+                        else {
+                            showUnmatchedModal = false; modalTargetSms = null
+                        }
+                    }
                     UnmatchedSmsModal(
                         sms = target,
                         pendingCount = pendingCount,
@@ -160,33 +168,15 @@ fun TransactionScreen(
                         categoryViewModel = categoryViewModel,
                         onSave = { type, category ->
                             viewModel.saveTransactionFromSms(target, type, category)
-                            val next = nextPending?.takeIf { it.id != target.id }
-                            if (next != null) {
-                                modalTargetSms = next
-                            } else {
-                                showUnmatchedModal = false
-                                modalTargetSms = null
-                            }
+                            advance(target.id)
                         },
                         onSkip = {
                             viewModel.markSkipped(target.id)
-                            val next = nextPending?.takeIf { it.id != target.id }
-                            if (next != null) {
-                                modalTargetSms = next
-                            } else {
-                                showUnmatchedModal = false
-                                modalTargetSms = null
-                            }
+                            advance(target.id)
                         },
                         onIgnore = {
                             viewModel.markIgnored(target)
-                            val next = nextPending?.takeIf { it.id != target.id }
-                            if (next != null) {
-                                modalTargetSms = next
-                            } else {
-                                showUnmatchedModal = false
-                                modalTargetSms = null
-                            }
+                            advance(target.id)
                         },
                         onDismiss = { showUnmatchedModal = false }
                     )
@@ -202,7 +192,6 @@ fun TransactionScreen(
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
 
-                // ── Search bar ────────────────────────────────────────
                 item(key = "search") {
                     EnhancedSearchBar(
                         query = searchQuery,
@@ -221,7 +210,6 @@ fun TransactionScreen(
                     Spacer(Modifier.height(8.dp))
                 }
 
-                // ── Active filter pills ───────────────────────────────
                 if (hasFilters) {
                     item(key = "filter_pills") {
                         ActiveFilterPills(
@@ -237,7 +225,6 @@ fun TransactionScreen(
                     }
                 }
 
-                // ── Upcoming payments section ─────────────────────────
                 if (!hasFilters) {
                     item(key = "upcoming_section") {
                         UpcomingTransactionsSection(
@@ -249,7 +236,6 @@ fun TransactionScreen(
                     }
                 }
 
-                // ── Pending review badge ──────────────────────────────
                 item(key = "pending_badge") {
                     PendingReviewBadge(
                         count = pendingCount,
@@ -261,7 +247,6 @@ fun TransactionScreen(
                     )
                 }
 
-                // ── Unmatched SMS list ────────────────────────────────
                 if (allUnmatched.isNotEmpty()) {
                     item(key = "unmatched_header") {
                         Surface(
@@ -320,7 +305,6 @@ fun TransactionScreen(
                     }
                 }
 
-                // ── Empty state ───────────────────────────────────────
                 if (state.filteredTransactions.isEmpty()) {
                     item(key = "empty") {
                         EmptyStateMessage(
@@ -329,7 +313,6 @@ fun TransactionScreen(
                     }
                 }
 
-                // ── Transactions grouped by week then day ─────────────
                 state.groupedTransactions.forEach { weekGroup ->
                     val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
 
@@ -367,7 +350,6 @@ fun TransactionScreen(
                     }
                 }
             }
-
         }
 
         if (upcomingUiState.showSheet) {
@@ -380,11 +362,8 @@ fun TransactionScreen(
             )
         }
 
-        // ── Back-to-top FAB ───────────────────────────────────────────────
         AnimatedVisibility(
             visible = showBackToTop,
-//            enter = fadeIn() + slideInVertically { it },
-//            exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 90.dp)

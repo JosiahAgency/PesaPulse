@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,20 +74,35 @@ fun UnmatchedSmsModal(
     categoryViewModel: CategoryViewModel,
     onSave: (type: String, category: String) -> Unit,
     onSkip: () -> Unit,
-    onIgnore: () -> Unit,           // ← new
+    onIgnore: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
     val partial = remember(sms.extractedFields) { partialFieldsFromJson(sms.extractedFields) }
-    val hasPartialData = partial != null &&
-            (partial.amount != null || partial.date != null || partial.transactionId != null)
+
+    // [OPT] These three were recomputed on every recomposition; memoize on their inputs
+    val hasPartialData = remember(partial) {
+        partial != null && (partial.amount != null || partial.date != null || partial.transactionId != null)
+    }
+    val confidenceLabel = remember(sms.confidence) {
+        when {
+            sms.confidence >= 0.65f -> "Partial match · some fields extracted"
+            sms.confidence >= 0.35f -> "Low confidence · verify details"
+            else -> "Unrecognised · fill in manually"
+        }
+    }
+    val confidenceColor: Color = remember(sms.confidence, colorScheme) {
+        when {
+            sms.confidence >= 0.65f -> colorScheme.tertiary
+            sms.confidence >= 0.35f -> colorScheme.secondary
+            else -> colorScheme.onSurfaceVariant
+        }
+    }
 
     var selectedType by remember(sms.id) { mutableStateOf(partial?.likelyType ?: "expense") }
     var selectedCategory by remember(sms.id) {
-        mutableStateOf(
-            allCategories.firstOrNull()?.id ?: ""
-        )
+        mutableStateOf(allCategories.firstOrNull()?.id ?: "")
     }
     var showCategoryPicker by remember { mutableStateOf(false) }
     var showIgnoreConfirm by remember { mutableStateOf(false) }
@@ -95,16 +112,6 @@ fun UnmatchedSmsModal(
     }
     val receivedDate = remember(sms.receivedAt) {
         SimpleDateFormat("dd MMM yyyy, h:mm a", Locale.getDefault()).format(Date(sms.receivedAt))
-    }
-    val confidenceLabel = when {
-        sms.confidence >= 0.65f -> "Partial match · some fields extracted"
-        sms.confidence >= 0.35f -> "Low confidence · verify details"
-        else -> "Unrecognised · fill in manually"
-    }
-    val confidenceColor = when {
-        sms.confidence >= 0.65f -> colorScheme.tertiary
-        sms.confidence >= 0.35f -> colorScheme.secondary
-        else -> colorScheme.onSurfaceVariant
     }
 
     if (showCategoryPicker) {
@@ -117,12 +124,18 @@ fun UnmatchedSmsModal(
         )
     }
 
+    // [OPT] Fixed AnimatedVisibility(visible = true) anti-pattern. When visible starts
+    //        as true, Compose skips the enter animation entirely — the dialog just pops
+    //        in without the intended fade+scale. Drive it via a LaunchedEffect instead.
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         AnimatedVisibility(
-            visible = true,
+            visible = visible,
             enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.92f),
             exit = fadeOut(tween(150)) + scaleOut(tween(150))
         ) {
@@ -357,7 +370,6 @@ fun UnmatchedSmsModal(
                     }
 
                     // ── Actions ────────────────────────────────────────────
-                    // Row 1: Skip + Save (primary actions)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -376,7 +388,6 @@ fun UnmatchedSmsModal(
                         ) { Text("Save", fontWeight = FontWeight.Bold) }
                     }
 
-                    // Row 2: Ignore (destructive — smaller, muted, with confirm step)
                     if (!showIgnoreConfirm) {
                         TextButton(
                             onClick = { showIgnoreConfirm = true },
@@ -399,7 +410,6 @@ fun UnmatchedSmsModal(
                             )
                         }
                     } else {
-                        // Inline confirmation — avoids a second dialog
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = colorScheme.errorContainer.copy(alpha = 0.35f),
@@ -452,7 +462,7 @@ fun UnmatchedSmsModal(
 }
 
 @Composable
-private fun ExtractedFieldPill(text: String, color: androidx.compose.ui.graphics.Color) {
+private fun ExtractedFieldPill(text: String, color: Color) {
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = color.copy(alpha = 0.12f),

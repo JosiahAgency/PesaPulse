@@ -56,11 +56,12 @@ fun DashboardScreen(
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel
 ) {
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    val today = remember { LocalDate.now() }
+
+    var selectedDate by remember { mutableStateOf(today) }
     var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
     var isListExpanded by remember { mutableStateOf(true) }
 
-    val today = LocalDate.now()
     val hapticFeedback = LocalHapticFeedback.current
 
     val state by viewModel.state.collectAsState()
@@ -180,4 +181,3 @@ fun DashboardScreen(
         }
     }
 }
-

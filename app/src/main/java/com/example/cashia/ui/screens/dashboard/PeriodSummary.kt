@@ -29,6 +29,12 @@ import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
 
+private val PERIOD_SCOPES = listOf(
+    TimeScope.DAY to "Day",
+    TimeScope.WEEK to "Week",
+    TimeScope.MONTH to "Month",
+    TimeScope.YEAR to "Year",
+)
 
 @Composable
 fun PeriodSummaryCard(
@@ -39,6 +45,10 @@ fun PeriodSummaryCard(
     expenses: Double,
     hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
 ) {
+    // net and netPositive are cheap arithmetic on parameters — no remember needed
+    val net = income - expenses
+    val netPositive = net >= 0
+
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -46,18 +56,13 @@ fun PeriodSummaryCard(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Period scope tabs
             Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf(
-                    TimeScope.DAY,
-                    TimeScope.WEEK,
-                    TimeScope.MONTH,
-                    TimeScope.YEAR
-                ).forEach { scope ->
+                // [OPT] Iterating the stable top-level list instead of a freshly
+                //        allocated one
+                PERIOD_SCOPES.forEach { (scope, label) ->
                     val isSelected = selectedScope == scope
                     SelectableBox(
                         hapticFeedback,
@@ -66,13 +71,7 @@ fun PeriodSummaryCard(
                         Modifier.weight(1f)
                     ) {
                         Text(
-                            text = when (scope) {
-                                TimeScope.DAY -> "Day"
-                                TimeScope.WEEK -> "Week"
-                                TimeScope.MONTH -> "Month"
-                                TimeScope.YEAR -> "Year"
-                                else -> ""
-                            },
+                            text = label,
                             color = if (isSelected) Color.White
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium,
@@ -107,13 +106,12 @@ fun PeriodSummaryCard(
                     alignEnd = true
                 )
             }
-            val net = income - expenses
-            val netPositive = net >= 0
+            val netColor = if (netPositive) MaterialTheme.colorScheme.tertiary
+            else MaterialTheme.colorScheme.error
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                color = (if (netPositive) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.error).copy(alpha = 0.08f)
+                color = netColor.copy(alpha = 0.08f)
             ) {
                 Row(
                     modifier = Modifier
@@ -125,14 +123,11 @@ fun PeriodSummaryCard(
                     Subtitles("Net")
                     Text(
                         text = "${if (netPositive) "+" else ""}${
-                            PesaTimeConfiguration.formatCurrency(
-                                net
-                            )
+                            PesaTimeConfiguration.formatCurrency(net)
                         }",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = if (netPositive) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.error
+                        color = netColor
                     )
                 }
             }
