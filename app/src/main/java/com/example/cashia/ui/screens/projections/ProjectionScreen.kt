@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingStatus
+import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.utility.FinanceProjectionEngine
 import com.example.cashia.utility.PesaActions
@@ -39,7 +40,6 @@ fun ProjectionScreen(
 ) {
     val haptic = LocalHapticFeedback.current
 
-    // Use the shared ViewModel directly — no redundant local instance
     val state by transactionsViewModel.state.collectAsState()
     val transactions = state.allTransactions
 
@@ -87,8 +87,8 @@ fun ProjectionScreen(
             currentBalance = effectiveBalance,
             balanceAsOfDate = if (balanceOverride.toDoubleOrNull() != null) LocalDate.now()
             else state.latestBalanceDateParsed,
-            horizonDays,
-            pendingUpcoming
+            daysForward = horizonDays,
+            upcomingTransactions = pendingUpcoming
         )
     }
 
@@ -102,19 +102,25 @@ fun ProjectionScreen(
 
     val today = remember { LocalDate.now() }
 
+    // [FIX] Original used LocalDate.parse(tx.dueDate) directly — no try-catch, would crash
+    // on any malformed date string. Now uses tx.dueDateParsed (lazy, already guarded) and
+    // skips the item with ?: continue instead of crashing.
     val (overdue, dueSoon, later) = remember(pendingUpcoming, today) {
-        val ov = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
-        val ds = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
-        val lt = mutableListOf<com.example.cashia.models.UpcomingTransaction>()
+        val ov = mutableListOf<UpcomingTransaction>()
+        val ds = mutableListOf<UpcomingTransaction>()
+        val lt = mutableListOf<UpcomingTransaction>()
         val soonCutoff = today.plusDays(8)
+
         for (tx in pendingUpcoming) {
-            val d = LocalDate.parse(tx.dueDate)
+            val d = tx.dueDateParsed ?: continue     // skip if date is malformed
             when {
                 d.isBefore(today) -> ov.add(tx)
                 d.isBefore(soonCutoff) -> ds.add(tx)
                 else -> lt.add(tx)
             }
         }
+
+        // Sort by dueDate string — ISO-8601 sorts lexicographically correctly.
         Triple(
             ov.sortedBy { it.dueDate },
             ds.sortedBy { it.dueDate },
@@ -123,14 +129,15 @@ fun ProjectionScreen(
     }
 
     Scaffold(containerColor = Color.Transparent) { padding ->
+        // [FIX] Added keys to every item so Compose can skip recomposition for
+        // sections whose inputs haven't changed. Without keys, the framework
+        // recomposes all items whenever any single input changes.
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(),
+            modifier = Modifier.fillMaxSize().padding(),
             contentPadding = PaddingValues(16.dp, 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(key = "config") {
                 ProjectionConfigCard(
                     isExpanded = configExpanded,
                     onToggle = { PesaActions.playClick(haptic); configExpanded = !configExpanded },
@@ -143,7 +150,8 @@ fun ProjectionScreen(
                     haptic = haptic
                 )
             }
-            item {
+
+            item(key = "balance_card") {
                 PredictedBalanceCard(
                     currentBalance = effectiveBalance,
                     period = period,
@@ -152,7 +160,8 @@ fun ProjectionScreen(
                     zeroCrossingDay = zeroCrossingDay
                 )
             }
-            item {
+
+            item(key = "trend_chart") {
                 ProjectionTrendChart(
                     projection = projection,
                     period = period,
@@ -160,7 +169,8 @@ fun ProjectionScreen(
                     confidence = confidence
                 )
             }
-            item {
+
+            item(key = "upcoming_section") {
                 UpcomingSection(
                     transactionsViewModel,
                     overdue,
@@ -172,7 +182,8 @@ fun ProjectionScreen(
                     categoryViewModel
                 )
             }
-            item {
+
+            item(key = "insights_card") {
                 ProjectionInsightsCard(
                     projection = projection,
                     transactionCount = recentTransactions.size,
