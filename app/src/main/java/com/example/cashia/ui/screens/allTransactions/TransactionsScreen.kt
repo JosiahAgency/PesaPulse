@@ -60,6 +60,7 @@ import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSe
 import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -209,7 +210,41 @@ fun TransactionScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                 }
-
+                if (state.fulizaLimit > 0.0 && !hasFilters) {
+                    item(key = "fuliza_limit_card") {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "🔄 Current Fuliza Limit",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Ksh ${String.format(Locale.US, "%,.2f", state.fulizaLimit)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
                 if (hasFilters) {
                     item(key = "filter_pills") {
                         ActiveFilterPills(

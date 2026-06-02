@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.ui.reusedElements.Subtitles
@@ -22,9 +23,11 @@ fun PeriodStat(
     label: String,
     value: String,
     color: Color,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    alignEnd: Boolean = false
-) {
+    icon: ImageVector,
+    alignEnd: Boolean = false,
+    modifier: Modifier = Modifier,
+
+    ) {
     Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

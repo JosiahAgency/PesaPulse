@@ -48,6 +48,7 @@ data class TransactionState(
     val currentMonth: String = "",
     val selectedCategory: String? = null,
     val searchQuery: String = "",
+    val fulizaLimit: Double = 0.0,
 )
 
 data class ReversalIndex(
@@ -247,7 +248,14 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         val amountQuery = query.trim().toDoubleOrNull()
         val isQueryBlank = query.isBlank()
 
+        val latestFulizaLimit = allTxs.firstOrNull {
+            it.category == TransactionCategory.FULIZA.name && it.type == "neutral" && it.recipient == "Fuliza Limit Update"
+        }?.amount ?: 0.0
+
         val filteredList = allTxs.filter { tx ->
+            val isLimitUpdate = tx.category == TransactionCategory.FULIZA.name && tx.type == "neutral" && tx.recipient == "Fuliza Limit Update"
+            if (isLimitUpdate) return@filter false
+
             val textMatch = isQueryBlank ||
                     tx.recipient.contains(query, ignoreCase = true) ||
                     tx.id.contains(query, ignoreCase = true) ||
@@ -328,7 +336,8 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             totalTransactionCost = totalCost,
             currentMonth = "${now.month.getDisplayName(TextStyle.FULL, Locale.US)} ${now.year}",
             selectedCategory = catFilter,
-            searchQuery = query
+            searchQuery = query,
+            latestFulizaLimit,
         )
     }
 
