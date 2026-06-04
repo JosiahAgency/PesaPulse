@@ -23,7 +23,7 @@ import com.example.cashia.models.UserCorrection
 
 @Database(
     entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -41,22 +41,14 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE MpesaTransactions ADD COLUMN category TEXT NOT NULL DEFAULT 'OTHER'"
-                )
+                db.execSQL("ALTER TABLE MpesaTransactions ADD COLUMN category TEXT NOT NULL DEFAULT 'OTHER'")
             }
         }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    """CREATE TABLE IF NOT EXISTS CustomCategories (
-                        id TEXT NOT NULL PRIMARY KEY,
-                        label TEXT NOT NULL,
-                        emoji TEXT NOT NULL,
-                        keywords TEXT NOT NULL,
-                        createdAt INTEGER NOT NULL
-                    )"""
+                    """CREATE TABLE IF NOT EXISTS CustomCategories ( id TEXT NOT NULL PRIMARY KEY, label TEXT NOT NULL, emoji TEXT NOT NULL, keywords TEXT NOT NULL, createdAt INTEGER NOT NULL)"""
                 )
                 db.execSQL(
                     """CREATE TABLE IF NOT EXISTS SystemCategoryOverrides (
@@ -99,14 +91,8 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    """
-            CREATE TABLE IF NOT EXISTS UnmatchedSms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                rawBody TEXT NOT NULL,
-                receivedAt INTEGER NOT NULL,
-                reviewed INTEGER NOT NULL DEFAULT 0
-            )
-        """
+                    """CREATE TABLE IF NOT EXISTS UnmatchedSms (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                rawBody TEXT NOT NULL, receivedAt INTEGER NOT NULL, reviewed INTEGER NOT NULL DEFAULT 0)"""
                 )
             }
         }
@@ -119,7 +105,6 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE UnmatchedSms ADD COLUMN extractedFields TEXT")
                 db.execSQL("ALTER TABLE UnmatchedSms ADD COLUMN patternGroup TEXT")
 
-                // Indexes to support the queries added in the new DAO
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_UnmatchedSms_contentHash ON UnmatchedSms(contentHash)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_UnmatchedSms_parserVersion ON UnmatchedSms(parserVersion)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_UnmatchedSms_confidence ON UnmatchedSms(confidence)")
@@ -225,7 +210,27 @@ abstract class AppDatabase : RoomDatabase() {
 
         val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE MpesaTransactions ADD COLUMN reversedTxId TEXT")
+                // Safely inspect structural metadata to see if column already exists
+                val cursor = db.query("PRAGMA table_info(MpesaTransactions)")
+                var columnExists = false
+
+                cursor.use { c ->
+                    val nameIndex = c.getColumnIndex("name")
+                    if (nameIndex != -1) {
+                        while (c.moveToNext()) {
+                            if (c.getString(nameIndex) == "reversedTxId") {
+                                columnExists = true
+                                break
+                            }
+                        }
+                    }
+                }
+
+                // If column doesn't exist, execute the column addition statement safely
+                if (!columnExists) {
+                    db.execSQL("ALTER TABLE MpesaTransactions ADD COLUMN reversedTxId TEXT")
+                }
+
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_reversedTxId ON MpesaTransactions(reversedTxId)")
             }
         }

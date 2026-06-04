@@ -90,7 +90,6 @@ fun SettingsScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val appVersion = remember { PesaTimeConfiguration.getAppVersion(context) }
     var showDayPicker by remember { mutableStateOf(false) }
     val settingsViewModel: SettingsViewModel = viewModel(
@@ -102,10 +101,8 @@ fun SettingsScreen(
     // Collect all state flows from ViewModel — this is the single source of truth
     val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
     val is24Hour by settingsViewModel.use24Hour.collectAsState()
-    val linkedGoogleEmail by settingsViewModel.linkedGoogleEmail.collectAsState()
 
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
-    val googleAuthHelper = remember { GoogleAuthHelper(context) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     // Day picker dialog
@@ -267,39 +264,6 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-//        // Account
-//        item {
-//            SettingsSection(title = "Account") {
-//                if (linkedGoogleEmail != null) {
-//                    LinkedAccountItem(
-//                        email = linkedGoogleEmail!!,
-//                        onUnlink = {
-//                            PesaActions.playClick(haptic)
-//                            scope.launch {
-//                                googleAuthHelper.signOut()
-//                                settingsViewModel.unlinkGoogleAccount()
-//                            }
-//                        }
-//                    )
-//                } else {
-//                    SettingsActionItem(
-//                        label = "Link Google Account",
-//                        subtitle = "Enable cloud sync and data backup",
-//                        icon = Icons.Rounded.Shield, // Changed from Info for better context
-//                        onClick = {
-//                            PesaActions.playClick(haptic)
-//                            scope.launch {
-//                                val email = googleAuthHelper.signInWithGoogle()
-//                                if (email != null) {
-//                                    settingsViewModel.linkGoogleAccount(email)
-//                                }
-//                            }
-//                        },
-//                        isExpanded = false
-//                    )
-//                }
-//            }
-//        }
 
         // Categories
         item {
@@ -396,8 +360,6 @@ fun SettingsScreen(
                     checked = isDailyDigestOn,
                     onCheckedChange = { enable ->
                         PesaActions.playClick(haptic)
-                        // ✅ FIX: setDailyDigestEnabled now safely handles WorkManager internally
-                        settingsViewModel.setDailyDigestEnabled(enable)
                         if (enable) {
                             Toast.makeText(
                                 context,

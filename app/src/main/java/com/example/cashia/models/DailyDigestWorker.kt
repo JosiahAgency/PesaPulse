@@ -1,70 +1,58 @@
 package com.example.cashia.models
 
+import android.Manifest
 import android.content.Context
+import androidx.annotation.RequiresPermission
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
+import com.example.cashia.utility.NotificationHelper
 import com.example.cashia.utility.PesaTimeConfiguration
-import java.time.Duration
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
-import java.util.concurrent.TimeUnit
 
-class DailyDigestWorker(private val ctx: Context, params: WorkerParameters) :
-    CoroutineWorker(ctx, params) {
+class DailyDigestWorker(
+    private val context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
 
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        return try {
-            val dao = AppDatabase.getDatabase(ctx).upcomingTransactionDao()
-            val today = LocalDate.now().toString()
-            val tomorrow = LocalDate.now().plusDays(1).toString()
-            val pending = dao.getPendingOnce()
+        if (!PesaTimeConfiguration.isDailyDigestEnabled) return Result.success()
 
-            val lines = buildList {
-                pending.filter { it.dueDate == today }
-                    .forEach { add("• ${it.title} — KES ${"%.0f".format(it.amount)} due TODAY") }
-                pending.filter { it.dueDate == tomorrow }
-                    .forEach { add("• ${it.title} — KES ${"%.0f".format(it.amount)} due tomorrow") }
-            }
-            if (lines.isNotEmpty()) {
-                NotificationHelper.sendDailyBills(ctx, lines)
-            }
-            Result.success()
-        } catch (e: Exception) {
-            Result.failure()
+        val today = LocalDate.now().toString()
+        val db = AppDatabase.getDatabase(context)
+        val txs = withContext(Dispatchers.IO) {
+            db.transactionDao().getTransactionsForDateRange(today, today)
         }
+        val balance = withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() } ?: 0.0
+
+        var income = 0.0
+        var expense = 0.0
+        txs.forEach {
+            when (it.type) {
+                "income" -> income += it.amount
+                "expense" -> expense += it.amount + it.transactionCost
+            }
+        }
+        val net = income - expense
+
+        val body = buildString {
+            append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
+            append("💸 Spent:    ${NotificationHelper.ksh(expense)}\n")
+            append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
+            append("🏦 Balance:  ${NotificationHelper.ksh(balance)}")
+            if (txs.isNotEmpty()) append("\n📋 ${txs.size} transaction(s) today")
+            if (txs.isEmpty()) append("\n🌿 No M-Pesa activity today")
+        }
+
+        NotificationHelper.post(context, ID, NotificationHelper.CH_DAILY, "📅 Daily Digest", body)
+        return Result.success()
     }
 
-
     companion object {
-        private const val WORK_NAME = "daily_digest"
-
-        fun schedule(context: Context) {
-            try {
-                val now = LocalDateTime.now()
-                val hour = PesaTimeConfiguration.reminderHour.coerceIn(0, 23)
-                val min = PesaTimeConfiguration.reminderMinute.coerceIn(0, 59)
-                val target = now.with(LocalTime.of(hour, min)).let {
-                    if (!now.isBefore(it)) it.plusDays(1) else it
-                }
-                val delay = Duration.between(now, target).toMillis()
-
-                val request = PeriodicWorkRequestBuilder<DailyDigestWorker>(1, TimeUnit.DAYS)
-                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                    .addTag(WORK_NAME)
-                    .build()
-
-                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                    WORK_NAME,
-                    ExistingPeriodicWorkPolicy.UPDATE,
-                    request
-                )
-            } catch (_: Exception) {
-            }
-        }
+        const val WORK_NAME = "daily_digest"
+        private const val ID = 1001
     }
 }

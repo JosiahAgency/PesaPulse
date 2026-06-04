@@ -1,5 +1,6 @@
 package com.example.cashia.ui.screens.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,10 +18,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.ui.reusedElements.GlassySurface
@@ -29,15 +31,30 @@ import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
 
+private val PERIOD_SCOPES = listOf(
+    TimeScope.DAY to "Day",
+    TimeScope.WEEK to "Week",
+    TimeScope.MONTH to "Month",
+    TimeScope.YEAR to "Year",
+)
 
 @Composable
 fun PeriodSummaryCard(
     selectedScope: TimeScope,
     onScopeChange: (TimeScope) -> Unit,
     periodLabel: String,
-    summaryData: com.example.cashia.models.SummaryData,
-    hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
+    income: Double,
+    expenses: Double,
+    hapticFeedback: HapticFeedback
 ) {
+    val net = income - expenses
+    val netPositive = net >= 0
+    val netColor = if (netPositive) {
+        MaterialTheme.colorScheme.tertiary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -45,50 +62,47 @@ fun PeriodSummaryCard(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Period scope tabs
             Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf(
-                    TimeScope.DAY,
-                    TimeScope.WEEK,
-                    TimeScope.MONTH,
-                    TimeScope.YEAR
-                ).forEach { scope ->
+                PERIOD_SCOPES.forEach { (scope, label) ->
                     val isSelected = selectedScope == scope
+
                     SelectableBox(
-                        hapticFeedback,
-                        isSelected,
-                        { onScopeChange(scope) },
-                        Modifier.weight(1f)
+                        hapticFeedback = hapticFeedback,
+                        isSelected = isSelected,
+                        onClick = { onScopeChange(scope) },
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = when (scope) {
-                                TimeScope.DAY -> "Day"
-                                TimeScope.WEEK -> "Week"
-                                TimeScope.MONTH -> "Month"
-                                TimeScope.YEAR -> "Year"
-                                else -> ""
+                            text = label,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
                             },
-                            color = if (isSelected) Color.White
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                     }
                 }
             }
+
             Subtitles(periodLabel)
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 PeriodStat(
                     label = "Money In",
-                    value = PesaTimeConfiguration.formatCurrency(summaryData.income),
+                    value = PesaTimeConfiguration.formatCurrency(income),
                     color = MaterialTheme.colorScheme.tertiary,
                     icon = Icons.AutoMirrored.Filled.TrendingUp
                 )
@@ -100,38 +114,39 @@ fun PeriodSummaryCard(
                 )
                 PeriodStat(
                     label = "Money Out",
-                    value = PesaTimeConfiguration.formatCurrency(summaryData.expenses),
+                    value = PesaTimeConfiguration.formatCurrency(expenses),
                     color = MaterialTheme.colorScheme.error,
                     icon = Icons.AutoMirrored.Filled.TrendingDown,
                     alignEnd = true
                 )
             }
-            val net = summaryData.income - summaryData.expenses
-            val netPositive = net >= 0
+
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = (if (netPositive) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.error).copy(alpha = 0.08f)
+                shape = RoundedCornerShape(14.dp),
+                color = netColor.copy(alpha = if (netPositive) 0.10f else 0.12f),
+                border = BorderStroke(
+                    width = 0.5.dp,
+                    color = netColor.copy(alpha = 0.18f)
+                )
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Subtitles("Net")
+
                     Text(
                         text = "${if (netPositive) "+" else ""}${
-                            PesaTimeConfiguration.formatCurrency(
-                                net
-                            )
+                            PesaTimeConfiguration.formatCurrency(net)
                         }",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = if (netPositive) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.error
+                        color = netColor,
+                        maxLines = 1
                     )
                 }
             }

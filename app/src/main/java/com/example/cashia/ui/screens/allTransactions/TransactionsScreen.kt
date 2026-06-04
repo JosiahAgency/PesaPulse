@@ -1,11 +1,8 @@
 package com.example.cashia.ui.screens.allTransactions
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,115 +50,69 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UnmatchedSms
+import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
-import com.example.cashia.utility.ParsedTx
-import com.example.cashia.utility.weekBucket
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.Locale
 
-private data class DayGroup(
-    val date: LocalDate,
-    val transactions: List<MpesaTransactions>,
-    val dayIncome: Double,
-    val dayExpense: Double,
-    val dayBalance: Double
-)
-
-private data class WeekGroup(val bucket: String, val days: List<DayGroup>)
-
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
-    categoryViewModel: CategoryViewModel
+    categoryViewModel: CategoryViewModel,
+    upcomingViewModel: UpcomingViewModel
 ) {
-    val state = viewModel.state
+    val state by viewModel.state.collectAsState()
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val allCategories by categoryViewModel.allCategories.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
     var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
     var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
-    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
-    val today = remember { LocalDate.now() }
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
 
-    val parsedAll by remember(state.allTransactions) {
-        derivedStateOf {
-            state.allTransactions.map { tx ->
-                val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { today }
-                ParsedTx(tx, date, weekBucket(date))
-            }
-        }
-    }
-    val filtered by remember(
-        parsedAll, searchQuery, selectedCategoryFilter, dateRangeStart, dateRangeEnd
+    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
+    val categoryLabelsMap =
+        remember(allCategories) { allCategories.associate { it.id to it.label } }
+
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
+    val upcomingUiState = upcomingViewModel.uiState
+
+    LaunchedEffect(
+        searchQuery,
+        selectedCategoryFilter,
+        dateRangeStart,
+        dateRangeEnd,
+        categoryLabelsMap
     ) {
-        derivedStateOf {
-            val amountQuery = searchQuery.trim().toDoubleOrNull()
-            parsedAll.filter { p ->
-                val tx = p.tx
-                val textMatch = searchQuery.isBlank() ||
-                        tx.recipient.contains(searchQuery, ignoreCase = true) ||
-                        tx.id.contains(searchQuery, ignoreCase = true) ||
-                        (amountQuery != null && tx.amount == amountQuery) ||
-                        categoryMap[tx.category]?.label?.contains(
-                            searchQuery,
-                            ignoreCase = true
-                        ) == true
-                val catMatch =
-                    selectedCategoryFilter == null || tx.category == selectedCategoryFilter
-                val dateMatch =
-                    (dateRangeStart == null || !p.date.isBefore(dateRangeStart!!)) &&
-                            (dateRangeEnd == null || !p.date.isAfter(dateRangeEnd!!))
-                textMatch && catMatch && dateMatch
-            }
-        }
-    }
-    val weekGroups by remember(filtered) {
-        derivedStateOf {
-            filtered
-                .groupBy { it.bucket }
-                .entries
-                .sortedByDescending { entry -> entry.value.maxOf { it.date } }
-                .map { (bucket, rows) ->
-                    val days = rows
-                        .groupBy { it.date }
-                        .entries
-                        .sortedByDescending { it.key }
-                        .map { (date, dayRows) ->
-                            val txs = dayRows.map { it.tx }
-                            var inc = 0.0
-                            var exp = 0.0
-                            for (tx in txs) {
-                                when (tx.type) {
-                                    "income" -> inc += tx.amount
-                                    "expense" -> exp += tx.amount
-                                }
-                            }
-                            DayGroup(
-                                date = date,
-                                transactions = txs,
-                                dayIncome = inc,
-                                dayExpense = exp,
-                                dayBalance = txs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
-                            )
-                        }
-                    WeekGroup(bucket, days)
-                }
-        }
+        viewModel.updateFilters(
+            query = searchQuery,
+            categoryFilter = selectedCategoryFilter,
+            start = dateRangeStart,
+            end = dateRangeEnd,
+            categoryMap = categoryLabelsMap
+        )
     }
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
     val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
+    val hasFilters by remember {
+        derivedStateOf {
+            selectedCategoryFilter != null || dateRangeStart != null || searchQuery.isNotBlank()
+        }
+    }
+
     var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val pendingCount by viewModel.pendingReviewCount.collectAsState()
@@ -170,45 +120,26 @@ fun TransactionScreen(
     val allUnmatched by viewModel.allUnmatched.collectAsState()
 
     var showUnmatchedModal by remember { mutableStateOf(false) }
-    // Holds whichever specific SMS the modal is currently showing.
-    // Kept separate from nextPending so the user can tap any item in the list to open it.
     var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
-    // ── Auto-open: show modal once on first load if there are pending items ──
-    // Uses a flag so navigating away and back doesn't re-open it.
     var hasAutoOpened by remember { mutableStateOf(false) }
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
             hasAutoOpened = true
-            modalTargetSms = nextPending   // snapshot current value; nextPending may change later
-            showUnmatchedModal = true
+            modalTargetSms = nextPending
         }
     }
 
-    // ── After save/skip: advance to the next pending item ────────────────────
-    // When the ViewModel emits a new nextPending we update the modal target
-    // WITHOUT closing it, so the user flows through the queue seamlessly.
-    // If nextPending becomes null the queue is empty — close the modal.
     LaunchedEffect(nextPending) {
-        if (showUnmatchedModal) {
-            if (nextPending == null) {
-                showUnmatchedModal = false
-                modalTargetSms = null
-            } else {
-                // Only advance automatically when the modal is already open (i.e. user
-                // just saved/skipped). If they opened a specific item from the list we
-                // don't want to replace it mid-interaction — that's handled by onSave/onSkip.
-                // So we only update here when modalTargetSms is null (queue just emptied)
-                // or matches the previous nextPending (we were in auto-advance mode).
-            }
+        if (showUnmatchedModal && nextPending == null) {
+            showUnmatchedModal = false
+            modalTargetSms = null
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
-
-            // ── Category swipe sheet ──────────────────────────────────────
             swipeCategoryTarget?.let { tx ->
                 CategoryPickerSheet(
                     allCategories = allCategories,
@@ -222,213 +153,233 @@ fun TransactionScreen(
                 )
             }
 
-            // ── Unmatched SMS modal ───────────────────────────────────────
-            // Guard on both showUnmatchedModal AND modalTargetSms != null so we
-            // never render the modal with a null target (which would crash or show stale data).
             if (showUnmatchedModal) {
                 modalTargetSms?.let { target ->
-                    UnmatchedSmsModal(
-                        target,
-                        pendingCount,
-                        allCategories,
-                        categoryViewModel,
-                        { type, category ->
-                            viewModel.saveManualTransaction(target, type, category)
-                            val next = nextPending?.takeIf { it.id != target.id }
-                            if (next != null) {
-                                modalTargetSms = next
-                            } else {
-                                showUnmatchedModal = false
-                                modalTargetSms = null
-                            }
-                        },
-                        {
-                            viewModel.markSkipped(target.id)
-                            val next = nextPending?.takeIf { it.id != target.id }
-                            if (next != null) {
-                                modalTargetSms = next
-                            } else {
-                                showUnmatchedModal = false
-                                modalTargetSms = null
-                            }
-                        },
-                        {
-                            showUnmatchedModal = false
-                        },
-                        {
-                            showUnmatchedModal = false
+                    val advance = { id: Long ->
+                        val next = nextPending?.takeIf { it.id != id }
+                        if (next != null) modalTargetSms = next
+                        else {
+                            showUnmatchedModal = false; modalTargetSms = null
                         }
+                    }
+                    UnmatchedSmsModal(
+                        sms = target,
+                        pendingCount = pendingCount,
+                        allCategories = allCategories,
+                        categoryViewModel = categoryViewModel,
+                        onSave = { type, category ->
+                            viewModel.saveTransactionFromSms(target, type, category)
+                            advance(target.id)
+                        },
+                        onSkip = {
+                            viewModel.markSkipped(target.id)
+                            advance(target.id)
+                        },
+                        onIgnore = {
+                            viewModel.markIgnored(target)
+                            advance(target.id)
+                        },
+                        onDismiss = { showUnmatchedModal = false }
                     )
                 }
             }
 
-            PullToRefreshBox(
-                isRefreshing = state.isLoading,
-                onRefresh = { viewModel.refreshFromSms() },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    // ── Search bar ────────────────────────────────────────
-                    item(key = "search") {
-                        EnhancedSearchBar(
-                            query = searchQuery,
-                            expanded = searchExpanded,
-                            recentSearches = recentSearches,
-                            allCategories = allCategories,
-                            selectedCategory = selectedCategoryFilter,
+
+                item(key = "search") {
+                    EnhancedSearchBar(
+                        query = searchQuery,
+                        expanded = searchExpanded,
+                        recentSearches = recentSearches,
+                        allCategories = allCategories,
+                        selectedCategory = selectedCategoryFilter,
+                        dateRangeStart = dateRangeStart,
+                        dateRangeEnd = dateRangeEnd,
+                        onQueryChange = { searchQuery = it },
+                        onExpandChange = { searchExpanded = it },
+                        onRecentPick = { searchQuery = it; searchExpanded = false },
+                        onCategoryPick = { selectedCategoryFilter = it },
+                        onDateRange = { s, e -> dateRangeStart = s; dateRangeEnd = e },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (state.fulizaLimit > 0.0 && !hasFilters) {
+                    item(key = "fuliza_limit_card") {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "🔄 Current Fuliza Limit",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Ksh ${String.format(Locale.US, "%,.2f", state.fulizaLimit)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+                if (hasFilters) {
+                    item(key = "filter_pills") {
+                        ActiveFilterPills(
+                            searchQuery = searchQuery,
+                            selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
                             dateRangeStart = dateRangeStart,
                             dateRangeEnd = dateRangeEnd,
-                            onQueryChange = { searchQuery = it },
-                            onExpandChange = { searchExpanded = it },
-                            onRecentPick = { searchQuery = it; searchExpanded = false },
-                            onCategoryPick = { selectedCategoryFilter = it },
-                            onDateRange = { s, e -> dateRangeStart = s; dateRangeEnd = e },
+                            onClearSearch = { searchQuery = "" },
+                            onClearCategory = { selectedCategoryFilter = null },
+                            onClearDate = { dateRangeStart = null; dateRangeEnd = null }
                         )
                         Spacer(Modifier.height(8.dp))
                     }
+                }
 
-                    // ── Active filter pills ───────────────────────────────
-                    val hasFilters = selectedCategoryFilter != null ||
-                            dateRangeStart != null || searchQuery.isNotBlank()
-                    if (hasFilters) {
-                        item(key = "filter_pills") {
-                            ActiveFilterPills(
-                                searchQuery = searchQuery,
-                                selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
-                                dateRangeStart = dateRangeStart,
-                                dateRangeEnd = dateRangeEnd,
-                                onClearSearch = { searchQuery = "" },
-                                onClearCategory = { selectedCategoryFilter = null },
-                                onClearDate = { dateRangeStart = null; dateRangeEnd = null }
-                            )
-                            Spacer(Modifier.height(8.dp))
+                if (!hasFilters) {
+                    item(key = "upcoming_section") {
+                        UpcomingTransactionsSection(
+                            upcomingViewModel = upcomingViewModel,
+                            categoryViewModel = categoryViewModel,
+                            allCategories = allCategories
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+
+                item(key = "pending_badge") {
+                    PendingReviewBadge(
+                        count = pendingCount,
+                        onClick = {
+                            modalTargetSms = nextPending
+                            showUnmatchedModal = true
+                        },
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+
+                if (allUnmatched.isNotEmpty()) {
+                    item(key = "unmatched_header") {
+                        Surface(
+                            onClick = { unmatchedExpanded = !unmatchedExpanded },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(
+                                    horizontal = 14.dp, vertical = 10.dp
+                                ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Unrecognised Messages (${allUnmatched.size})",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Icon(
+                                    if (unmatchedExpanded) Icons.Rounded.KeyboardArrowUp
+                                    else Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            }
                         }
                     }
 
-                    // ── Empty state ───────────────────────────────────────
-                    if (filtered.isEmpty() && !state.isLoading) {
-                        item(key = "empty") {
-                            EmptyStateMessage(
-                                if (hasFilters) "No matching transactions" else "No History Found"
+                    if (unmatchedExpanded) {
+                        items(items = allUnmatched, key = { "unmatched_${it.id}" }) { sms ->
+                            UnmatchedSmsItem(
+                                sms,
+                                { clicked ->
+                                    modalTargetSms = clicked
+                                    showUnmatchedModal = true
+                                },
+                                { clicked -> viewModel.markIgnored(clicked) }
+                            )
+                        }
+                        item(key = "unmatched_divider") {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                             )
                         }
                     }
+                }
 
-                    // ── Pending review badge ──────────────────────────────
-                    item(key = "pending_badge") {
-                        PendingReviewBadge(
-                            count = pendingCount,
+                if (state.filteredTransactions.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyStateMessage(
+                            if (hasFilters) "No matching transactions" else "No History Found"
+                        )
+                    }
+                }
+
+                state.groupedTransactions.forEach { weekGroup ->
+                    val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
+
+                    stickyHeader(key = "bucket_${weekGroup.bucket}") {
+                        WeekBucketHeader(
+                            label = weekGroup.bucket,
+                            txCount = weekGroup.days.sumOf { it.transactions.size },
+                            isCollapsed = bucketCollapsed,
                             onClick = {
-                                // Always snap to the current nextPending when tapping the badge,
-                                // not whatever stale modalTargetSms might be sitting there.
-                                modalTargetSms = nextPending
-                                showUnmatchedModal = true
-                            },
-                            modifier = Modifier.padding(bottom = 4.dp)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                collapsedBuckets = if (bucketCollapsed)
+                                    collapsedBuckets - weekGroup.bucket
+                                else
+                                    collapsedBuckets + weekGroup.bucket
+                            }
                         )
                     }
 
-                    // ── Unmatched SMS list ────────────────────────────────
-                    if (allUnmatched.isNotEmpty()) {
-                        item(key = "unmatched_header") {
-                            Surface(
-                                onClick = { unmatchedExpanded = !unmatchedExpanded },
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = BorderStroke(
-                                    0.5.dp,
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(
-                                        horizontal = 14.dp,
-                                        vertical = 10.dp
-                                    ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        "Unrecognised Messages (${allUnmatched.size})",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Icon(
-                                        if (unmatchedExpanded) Icons.Rounded.KeyboardArrowUp
-                                        else Icons.Rounded.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                        }
-
-                        if (unmatchedExpanded) {
-                            items(items = allUnmatched, key = { "unmatched_${it.id}" }) { sms ->
-                                UnmatchedSmsItem(
-                                    sms,
-                                    { clicked ->
-                                        modalTargetSms = clicked
-                                        showUnmatchedModal = true
-                                    },
-                                    { clicked ->
-                                        viewModel.markIgnored(clicked)
-                                    }
+                    if (!bucketCollapsed) {
+                        weekGroup.days.forEach { dayGroup ->
+                            items(
+                                items = dayGroup.transactions,
+                                key = { it.id }
+                            ) { tx ->
+                                TransactionItem(
+                                    tx = tx,
+                                    allCategories = allCategories,
+                                    categoryViewModel = categoryViewModel,
+                                    upcomingViewModel = upcomingViewModel,
+                                    hapticFeedback = haptic,
+                                    reversalIndex = reversalIndex
                                 )
-                            }
-                            item(key = "unmatched_divider") {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 12.dp),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                )
-                            }
-                        }
-                    }
-
-                    // ── Transactions grouped by week then day ─────────────
-                    weekGroups.forEach { weekGroup ->
-                        val bucketCollapsed = collapsedBuckets.contains(weekGroup.bucket)
-
-                        stickyHeader(key = "bucket_${weekGroup.bucket}") {
-                            WeekBucketHeader(
-                                label = weekGroup.bucket,
-                                txCount = weekGroup.days.sumOf { it.transactions.size },
-                                isCollapsed = bucketCollapsed,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    collapsedBuckets = if (bucketCollapsed)
-                                        collapsedBuckets - weekGroup.bucket
-                                    else
-                                        collapsedBuckets + weekGroup.bucket
-                                }
-                            )
-                        }
-
-                        if (!bucketCollapsed) {
-                            weekGroup.days.forEach { dayGroup ->
-                                items(items = dayGroup.transactions, key = { it.id }) { tx ->
-                                    TransactionItem(
-                                        tx,
-                                        allCategories,
-                                        categoryViewModel,
-                                        hapticFeedback = haptic,
-                                        reversalIndex
-                                    )
-                                }
                             }
                         }
                     }
@@ -436,11 +387,18 @@ fun TransactionScreen(
             }
         }
 
-        // ── Back-to-top FAB ───────────────────────────────────────────────
+        if (upcomingUiState.showSheet) {
+            UpcomingTransactionSheet(
+                uiState = upcomingUiState,
+                viewModel = upcomingViewModel,
+                allCategories = allCategories,
+                categoryViewModel = categoryViewModel,
+                onDismiss = { upcomingViewModel.closeSheet() }
+            )
+        }
+
         AnimatedVisibility(
             visible = showBackToTop,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 90.dp)

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,13 +44,15 @@ fun BalanceHeroCard(
             SectionLabel("current Balance")
             Spacer(Modifier.height(8.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onToggleVisibility() },
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Crossfade(targetState = isVisible) { visible ->
+                // [OPT] Crossfade label added for Compose tooling / tracing
+                Crossfade(
+                    targetState = isVisible,
+                    label = "balance_visibility"
+                ) { visible ->
                     Text(
                         text = if (visible)
                             PesaTimeConfiguration.formatCurrency(balance)
@@ -60,14 +63,16 @@ fun BalanceHeroCard(
                             letterSpacing = 0.5.sp
                         ),
                         fontWeight = FontWeight.Black,
+                        modifier = Modifier.clickable { onToggleVisibility() }
                     )
                 }
-
-                Icon(
-                    if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                    "Toggle Visibility",
-                    Modifier.clickable { onToggleVisibility() }
-                )
+                IconButton(onClick = onToggleVisibility) {
+                    Icon(
+                        imageVector = if (isVisible) Icons.Default.Visibility
+                        else Icons.Default.VisibilityOff,
+                        contentDescription = "Toggle balance visibility"
+                    )
+                }
             }
             Spacer(Modifier.height(4.dp))
             Subtitles("Latest Updated: $latestBalanceDate")

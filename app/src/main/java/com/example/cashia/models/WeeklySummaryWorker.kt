@@ -1,74 +1,79 @@
 package com.example.cashia.models
 
+import android.Manifest
 import android.content.Context
+import androidx.annotation.RequiresPermission
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
-import java.time.DayOfWeek
-import java.time.Duration
+import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.PesaTimeConfiguration
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
-import java.util.concurrent.TimeUnit
 
-class WeeklySummaryWorker(private val ctx: Context, param: WorkerParameters) :
-    CoroutineWorker(ctx, param) {
-
+class WeeklySummaryWorker(
+    private val context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        return try {
-            val dao = AppDatabase.Companion.getDatabase(ctx).transactionDao()
-            val weekStart = LocalDate.now().minusDays(7)
-            val weekEnd = LocalDate.now().minusDays(1) // yesterday = end of last week
+        if (!PesaTimeConfiguration.isWeeklySummaryEnabled) return Result.success()
 
-            val all = dao.getAllTransactionsOnce()  // add this query if not present
-            val weekTxs = all.filter {
-                runCatching { LocalDate.parse(it.date) }.getOrNull()
-                    ?.let { d -> !d.isBefore(weekStart) && !d.isAfter(weekEnd) } == true
-            }
+        val today = LocalDate.now()
+        val firstDay = PesaTimeConfiguration.firstDayOfWeek
+        // Summarise the week that just ended
+        val weekEnd = today.with(TemporalAdjusters.previousOrSame(firstDay)).minusDays(1)
+        val weekStart = weekEnd.minusDays(6)
 
-            if (weekTxs.isEmpty()) return Result.success()
-
-            val income = weekTxs.filter { it.type == "income" }.sumOf { it.amount }
-            val expenses = weekTxs.filter { it.type == "expense" }.sumOf { it.amount }
-
-            NotificationHelper.sendWeeklySummary(
-                ctx, income, expenses, income - expenses, weekTxs.size
-            )
-            Result.success()
-        } catch (e: Exception) {
-            Result.failure()
+        val db = AppDatabase.getDatabase(context)
+        val txs = withContext(Dispatchers.IO) {
+            db.transactionDao()
+                .getTransactionsForDateRange(weekStart.toString(), weekEnd.toString())
         }
+
+        var income = 0.0
+        var expense = 0.0
+        var topExpense = 0.0
+        var topRecipient = ""
+
+        txs.forEach {
+            when (it.type) {
+                "income" -> income += it.amount
+                "expense" -> {
+                    val total = it.amount + it.transactionCost
+                    expense += total
+                    if (it.amount > topExpense) {
+                        topExpense = it.amount; topRecipient = it.recipient
+                    }
+                }
+            }
+        }
+
+        val fmt = DateTimeFormatter.ofPattern("dd MMM")
+        val body = buildString {
+            append("${weekStart.format(fmt)} – ${weekEnd.format(fmt)}\n")
+            append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
+            append("💸 Expenses: ${NotificationHelper.ksh(expense)}\n")
+            append("📊 Net:      ${NotificationHelper.ksh(income - expense)}")
+            if (txs.isNotEmpty()) append("\n📋 ${txs.size} transactions")
+            if (topRecipient.isNotBlank()) append(
+                "\n🔝 Biggest: $topRecipient (${
+                    NotificationHelper.ksh(
+                        topExpense
+                    )
+                })"
+            )
+        }
+
+        NotificationHelper.post(context, ID, NotificationHelper.CH_WEEKLY, "📆 Weekly Summary", body)
+        return Result.success()
     }
 
     companion object {
-        private const val WORK_NAME = "weekly_summary"
-
-        fun schedule(context: Context) {
-            try {
-                val now = LocalDateTime.now()
-                val target = now.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY))
-                    .with(LocalTime.of(8, 0))
-                    .let { if (!now.isBefore(it)) it.plusWeeks(1) else it }
-
-                val delay = Duration.between(now, target).toMillis()
-
-                val request = PeriodicWorkRequestBuilder<WeeklySummaryWorker>(7, TimeUnit.DAYS)
-                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                    .addTag(WORK_NAME)
-                    .build()
-
-                WorkManager.Companion.getInstance(context).enqueueUniquePeriodicWork(
-                    WORK_NAME,
-                    ExistingPeriodicWorkPolicy.UPDATE,
-                    request
-                )
-            } catch (_: Exception) {
-            }
-        }
+        const val WORK_NAME = "weekly_summary"
+        private const val ID = 1002
     }
-
 }

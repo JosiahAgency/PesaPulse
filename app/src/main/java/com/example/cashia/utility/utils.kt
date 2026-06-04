@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -54,9 +53,91 @@ object PesaTimeConfiguration {
     var isDarkTheme by mutableStateOf(true)
     const val CURRENCY = "KES"
     var isBiometricEnabled by mutableStateOf(false)
-    var isDailyDigestEnabled by mutableStateOf(false)
-    var reminderHour by mutableIntStateOf(8)
-    var reminderMinute by mutableIntStateOf(0)
+    var reminderHour: Int
+        get() = prefs.getInt("reminder_hour", 20)       // 8 PM default
+        set(v) {
+            prefs.edit().putInt("reminder_hour", v).apply()
+        }
+    var reminderMinute: Int
+        get() = prefs.getInt("reminder_minute", 0)
+        set(v) {
+            prefs.edit().putInt("reminder_minute", v).apply()
+        }
+
+    fun saveReminderTime(hour: Int, minute: Int) {
+        reminderHour = hour; reminderMinute = minute
+    }
+
+    var isDailyDigestEnabled: Boolean
+        get() = prefs.getBoolean("daily_digest_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("daily_digest_enabled", v).apply()
+        }
+
+    fun saveDailyDigest(enabled: Boolean) {
+        isDailyDigestEnabled = enabled
+    }
+
+    var isWeeklySummaryEnabled: Boolean
+        get() = prefs.getBoolean("weekly_summary_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("weekly_summary_enabled", v).apply()
+        }
+
+    fun saveWeeklySummary(enabled: Boolean) {
+        isWeeklySummaryEnabled = enabled
+    }
+
+    var isMonthlySummaryEnabled: Boolean
+        get() = prefs.getBoolean("monthly_summary_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("monthly_summary_enabled", v).apply()
+        }
+
+    fun saveMonthlySummary(enabled: Boolean) {
+        isMonthlySummaryEnabled = enabled
+    }
+
+    var isQuarterlySummaryEnabled: Boolean
+        get() = prefs.getBoolean("quarterly_summary_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("quarterly_summary_enabled", v).apply()
+        }
+
+    fun saveQuarterlySummary(enabled: Boolean) {
+        isQuarterlySummaryEnabled = enabled
+    }
+
+    var isYearlySummaryEnabled: Boolean
+        get() = prefs.getBoolean("yearly_summary_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("yearly_summary_enabled", v).apply()
+        }
+
+    fun saveYearlySummary(enabled: Boolean) {
+        isYearlySummaryEnabled = enabled
+    }
+
+    var isUpcomingReminderEnabled: Boolean
+        get() = prefs.getBoolean("upcoming_reminder_enabled", true)
+        set(v) {
+            prefs.edit().putBoolean("upcoming_reminder_enabled", v).apply()
+        }
+
+    fun saveUpcomingReminder(enabled: Boolean) {
+        isUpcomingReminderEnabled = enabled
+    }
+
+    var upcomingReminderDaysBefore: Int
+        get() = prefs.getInt("upcoming_reminder_days", 3)
+        set(v) {
+            prefs.edit().putInt("upcoming_reminder_days", v).apply()
+        }
+
+    fun saveUpcomingReminderDays(days: Int) {
+        upcomingReminderDaysBefore = days
+    }
+
     private const val PREFS_NAME = "pesa_prefs"
 
     fun formatCurrency(amount: Double): String {
@@ -97,7 +178,6 @@ object PesaTimeConfiguration {
             }
         }
 
-    // Individual save methods to be called by ViewModel
     fun saveTimeFormat(enabled: Boolean) {
         use24HrsFormat = enabled
         prefs.edit { putBoolean("use_24h", enabled) }
@@ -116,20 +196,6 @@ object PesaTimeConfiguration {
     fun saveFirstDayOfWeek(day: DayOfWeek) {
         firstDayOfWeek = day
         prefs.edit { putString("start_day", day.name) }
-    }
-
-    fun saveDailyDigest(enabled: Boolean) {
-        isDailyDigestEnabled = enabled
-        prefs.edit { putBoolean("daily_digest_on", enabled) }
-    }
-
-    fun saveReminderTime(hour: Int, minute: Int) {
-        reminderHour = hour
-        reminderMinute = minute
-        prefs.edit {
-            putInt("reminder_hour", hour)
-            putInt("reminder_minute", minute)
-        }
     }
 
     fun screenSubtitle(route: String?): String = when (route) {

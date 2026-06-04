@@ -93,7 +93,6 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     }
 
     // ── Save ──────────────────────────────────────────────────────────────
-
     fun save() {
         val title = uiState.draftTitle.trim()
         val amount = uiState.draftAmount.toDoubleOrNull()
@@ -105,21 +104,25 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
             uiState = uiState.copy(error = "Enter a valid amount"); return
         }
 
+        val txToSave = UpcomingTransaction(
+            id = uiState.editing?.id ?: java.util.UUID.randomUUID().toString(),
+            title = title,
+            amount = amount,
+            categoryId = uiState.draftCategory,
+            dueDate = uiState.draftDueDate.toString(),
+            type = uiState.draftType,
+            recurrence = uiState.draftRecurrence,
+            notes = uiState.draftNotes.trim(),
+            status = uiState.editing?.status ?: UpcomingStatus.PENDING,
+            createdAt = uiState.editing?.createdAt ?: System.currentTimeMillis()
+        )
+
         viewModelScope.launch(Dispatchers.IO) {
-            val tx = UpcomingTransaction(
-                id = uiState.editing?.id ?: java.util.UUID.randomUUID().toString(),
-                title = title,
-                amount = amount,
-                categoryId = uiState.draftCategory,
-                dueDate = uiState.draftDueDate.toString(),
-                type = uiState.draftType,
-                recurrence = uiState.draftRecurrence,
-                notes = uiState.draftNotes.trim(),
-                status = uiState.editing?.status ?: UpcomingStatus.PENDING,
-                createdAt = uiState.editing?.createdAt ?: System.currentTimeMillis()
-            )
-            dao.upsert(tx)
-            uiState = UpcomingUiState()
+            dao.upsert(txToSave)
+            // Switch back to the Main thread to update Compose state safely
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                uiState = UpcomingUiState()
+            }
         }
     }
 
@@ -187,6 +190,32 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
             val recent = allMpesaTx.filter { it.date >= cutoff }
             recent.forEach { matchTransaction(it) }
         }
+    }
+
+    fun openCreateFromHistory(
+        txId: String,
+        recipient: String,
+        amount: Double,
+        category: String,
+        type: String
+    ) {
+        val scheduledType = if (type.equals("income", ignoreCase = true)) {
+            UpcomingType.INCOME
+        } else {
+            UpcomingType.EXPENSE
+        }
+        val nextDate = LocalDate.now().plusMonths(1)
+
+        uiState = UpcomingUiState(
+            showSheet = true,
+            draftTitle = recipient,
+            draftAmount = amount.toString(),
+            draftCategory = category,
+            draftDueDate = nextDate,
+            draftType = scheduledType,
+            draftRecurrence = RecurrenceType.MONTHLY,
+            draftNotes = "Created automatically from transaction reference: $txId"
+        )
     }
 
     private suspend fun matchTransaction(mpesaTx: MpesaTransactions) {
@@ -266,17 +295,16 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
 
         // ── Keyword overlap signal ────────────────────────────────────────────
         // Tokenise both title and notes, filter short/common words
-        val stopWords = setOf("the", "and", "for", "ltd", "inc", "plc", "pay", "ksh", "mpesa")
         val upcomingWords = (upcoming.title + " " + upcoming.notes)
             .lowercase()
-            .split(Regex("[\\s,.-]+"))
-            .filter { it.length >= 3 && it !in stopWords }
+            .split(TOKEN_REGEX)
+            .filter { it.length >= 3 && it !in STOP_WORDS }
             .toSet()
 
         val recipientWords = mpesaTx.recipient
             .lowercase()
-            .split(Regex("[\\s,.-]+"))
-            .filter { it.length >= 3 && it !in stopWords }
+            .split(TOKEN_REGEX)
+            .filter { it.length >= 3 && it !in STOP_WORDS }
             .toSet()
 
         // Also check if any upcoming word is a substring of the recipient or vice versa
@@ -291,6 +319,7 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         val typeMatch = when {
             mpesaTx.type == "income" && upcoming.type in
                     listOf(UpcomingType.INCOME, UpcomingType.SAVING) -> true
+
             mpesaTx.type == "expense" && upcoming.type == UpcomingType.EXPENSE -> true
             else -> false
         }
@@ -308,6 +337,10 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
 
     companion object {
         private const val MATCH_THRESHOLD = 40
+        private val TOKEN_REGEX = Regex("[\\s,.-]+")
+        private val STOP_WORDS =
+            setOf("the", "and", "for", "ltd", "inc", "plc", "pay", "ksh", "mpesa")
+
         fun provideFactory(context: Context) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =

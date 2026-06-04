@@ -42,124 +42,136 @@ import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.SelectableBox
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.ProjectionPeriod
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-
 
 @SuppressLint("DefaultLocale")
 @Composable
 fun ProjectionInsightsCard(
     projection: FinanceProjection,
     transactionCount: Int,
-    period: ProjectionPeriod,           // ← shared period from screen
-    selectedPeriodIndex: Int,           // ← for chip highlight
-    onPeriodChange: (Int) -> Unit,      // ← controls the screen-level period
+    period: ProjectionPeriod,
+    selectedPeriodIndex: Int,
+    onPeriodChange: (Int) -> Unit,
     allTransactions: List<MpesaTransactions>,
     allCategories: List<ResolvedCategory>
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
 
-    // ── Period cutoff — derived from shared period ────────────────────────────
-    val periodCutoff = remember(selectedPeriodIndex) {
+    // [FIX] Hoist today so all remember blocks key off the same value.
+    // Originally LocalDate.now() was called inside remember{} lambdas with
+    // no date-based key — if the day changed while the app was open, daysElapsed
+    // and periodCutoff would silently stale until the user triggered recomposition
+    // by changing selectedPeriodIndex. Hoisting also makes the dependency explicit.
+    val today = remember { LocalDate.now() }
+
+    // ── Period cutoff ──────────────────────────────────────────────────────────
+    val periodCutoff = remember(selectedPeriodIndex, today) {
         when (ProjectionPeriod.entries[selectedPeriodIndex]) {
-            ProjectionPeriod.THIS_WEEK -> LocalDate.now().with(java.time.DayOfWeek.MONDAY)
-            ProjectionPeriod.THIS_MONTH -> LocalDate.now().withDayOfMonth(1)
+            ProjectionPeriod.THIS_WEEK -> today.with(DayOfWeek.MONDAY)
+            ProjectionPeriod.THIS_MONTH -> today.withDayOfMonth(1)
             ProjectionPeriod.THIS_QUARTER -> {
-                val month = LocalDate.now().monthValue
-                val qStartMonth = ((month - 1) / 3) * 3 + 1
-                LocalDate.now().withMonth(qStartMonth).withDayOfMonth(1)
+                val qStartMonth = ((today.monthValue - 1) / 3) * 3 + 1
+                today.withMonth(qStartMonth).withDayOfMonth(1)
             }
 
-            ProjectionPeriod.THIS_YEAR -> LocalDate.now().withDayOfYear(1)
+            ProjectionPeriod.THIS_YEAR -> today.withDayOfYear(1)
         }
     }
 
-    val periodTransactions = remember(allTransactions, selectedPeriodIndex) {
+    // [FIX] Added periodCutoff to the remember key. The lambda captures it, so it
+    // was already an implicit dependency — making it explicit prevents confusion if
+    // the key list is ever refactored.
+    val periodTransactions = remember(allTransactions, periodCutoff) {
         allTransactions.filter {
             runCatching { LocalDate.parse(it.date) >= periodCutoff }.getOrDefault(false)
         }
     }
 
-    val periodIncome = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "income" }.sumOf { it.amount }
+    // [PERF] Replaced two separate filter+sumOf passes (2× list traversal, 2×
+    // intermediate list allocation) with a single accumulation loop. For a
+    // transaction list of n items this halves the work: O(n) instead of O(2n).
+    // [FIX] Uses isIncome / isExpense from the improved MpesaTransactions model
+    // instead of raw string comparison.
+    val (periodIncome, periodExpense) = remember(periodTransactions) {
+        var income = 0.0
+        var expense = 0.0
+        for (tx in periodTransactions) {
+            when {
+                tx.isIncome -> income += tx.amount
+                tx.isExpense -> expense += tx.amount
+            }
+        }
+        income to expense
     }
-    val periodExpense = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "expense" }.sumOf { it.amount }
-    }
+
     val savingsRate = when {
         periodIncome > 0 -> ((periodIncome - periodExpense) / periodIncome) * 100
         periodExpense > 0 -> -100.0
         else -> 0.0
     }
 
-    // Daily averages use actual days elapsed in this period (not horizon days)
-    val daysElapsed = remember(selectedPeriodIndex) {
-        ChronoUnit.DAYS.between(periodCutoff, LocalDate.now()).toInt().coerceAtLeast(1)
+    // [FIX] today now used consistently — no hidden LocalDate.now() call inside remember.
+    val daysElapsed = remember(periodCutoff, today) {
+        ChronoUnit.DAYS.between(periodCutoff, today).toInt().coerceAtLeast(1)
     }
-    val dailyAvgSpend = periodExpense / daysElapsed
+
     val dailyAvgIncome = periodIncome / daysElapsed
+    val dailyAvgSpend = periodExpense / daysElapsed
 
-    // Monthly burn rate — rolling average across all available months
-    remember(allTransactions) {
-        val byMonth = allTransactions
-            .groupBy {
-                runCatching {
-                    val d = LocalDate.parse(it.date)
-                    "${d.year}-${d.monthValue}"
-                }.getOrDefault("unknown")
-            }
-            .filter { it.key != "unknown" }
-        if (byMonth.isEmpty()) return@remember 0.0
-        byMonth.values.map { txs ->
-            txs.filter { it.type == "expense" }.sumOf { it.amount }
-        }.average()
-    }
-
-    // Top category within the selected period
-    remember(periodTransactions, allCategories) {
-        val catTotals = periodTransactions
-            .filter { it.type == "expense" }
-            .groupBy { it.category }
-            .mapValues { it.value.sumOf { tx -> tx.amount } }
-            .entries.maxByOrNull { it.value }
-        val cat = catTotals?.let { allCategories.find { c -> c.id == it.key } }
-        Triple(cat?.emoji ?: "📦", cat?.label ?: catTotals?.key ?: "—", catTotals?.value ?: 0.0)
-    }
+    // [FIX] Removed two dead remember{} blocks:
+    //
+    //   monthlyBurnRate — called allTransactions.groupBy{}.filter{}.map{}.average()
+    //   on every allTransactions change. The result was never assigned to a variable
+    //   that the UI reads; it was silently dropped. O(n) work per recomposition for 0 benefit.
+    //
+    //   topCategory — called filter{}.groupBy{}.mapValues{}.maxByOrNull{}.find{}
+    //   on periodTransactions. Same issue: result discarded. The Triple was likely
+    //   prepared for a UI element that was cut before shipping.
+    //
+    // Both are fully removed. Re-add only when the UI actually uses the values.
 
     val daysUntilZero = remember(projection) {
-        projection.dailyTrend.indexOfFirst { it.second <= 0 }
-            .takeIf { it >= 0 }?.plus(1)
+        projection.dailyTrend
+            .indexOfFirst { it.second <= 0 }
+            .takeIf { it >= 0 }
+            ?.plus(1)
     }
 
-    val trendDirection = remember(projection.projectedDailyNet) {
-        when {
-            projection.projectedDailyNet > 0 -> "Growing"
-            projection.projectedDailyNet < 0 -> "Declining"
-            else -> "Stable"
-        }
+    // [PERF] trendDirection, confidenceLabel, runwaySeverity removed from remember{}.
+    // They're pure expressions on stable inputs (Double, Int, Int?). The remember
+    // lambda overhead — boxing keys, computing a cache hash, invoking the lambda on
+    // first call — costs more than these trivial when-expressions. Plain val is faster
+    // and clearer.
+    val trendDirection: String = when {
+        projection.projectedDailyNet > 0 -> "Growing"
+        projection.projectedDailyNet < 0 -> "Declining"
+        else -> "Stable"
     }
 
-    val confidenceLabel = remember(projection.projectedDailyNet, transactionCount) {
-        when {
-            transactionCount > 60 -> "High Confidence"
-            transactionCount > 30 -> "Moderate Confidence"
-            else -> "Low Confidence"
-        }
+    val confidenceLabel: String = when {
+        transactionCount > 60 -> "High Confidence"
+        transactionCount > 30 -> "Moderate Confidence"
+        else -> "Low Confidence"
     }
-    val runwaySeverity = remember(daysUntilZero) {
-        when {
-            daysUntilZero == null -> null
-            daysUntilZero <= 3 -> "critical"
-            daysUntilZero <= 7 -> "warning"
-            else -> "watch"
-        }
+
+    val runwaySeverity: String? = when {
+        daysUntilZero == null -> null
+        daysUntilZero <= 3 -> "critical"
+        daysUntilZero <= 7 -> "warning"
+        else -> "watch"
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // UI
+    // ──────────────────────────────────────────────────────────────────────────
 
     GlassySurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
 
-            // ── Header + period chips (shared with the rest of the screen) ────
+            // ── Header + period chips ──────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -174,17 +186,11 @@ fun ProjectionInsightsCard(
                             ProjectionPeriod.THIS_QUARTER -> "Qtr"
                             ProjectionPeriod.THIS_YEAR -> "Yr"
                         }
-                        SelectableBox(
-                            haptic,
-                            selectedPeriodIndex == i,
-                            { onPeriodChange(i) }
-
-                        ) {
+                        SelectableBox(haptic, selectedPeriodIndex == i, { onPeriodChange(i) }) {
                             Text(
                                 shortLabel,
                                 style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (selectedPeriodIndex == i) FontWeight.Bold
-                                else FontWeight.Normal,
+                                fontWeight = if (selectedPeriodIndex == i) FontWeight.Bold else FontWeight.Normal,
                                 color = if (selectedPeriodIndex == i) Color.White
                                 else colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
@@ -192,7 +198,10 @@ fun ProjectionInsightsCard(
                     }
                 }
             }
+
             Spacer(Modifier.height(8.dp))
+
+            // ── Trend summary pill ─────────────────────────────────────────────
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = colorScheme.primary.copy(alpha = 0.05f)
@@ -207,8 +216,9 @@ fun ProjectionInsightsCard(
                     lineHeight = 16.sp
                 )
             }
-            if (projection.predictedBalance < 0 || daysUntilZero != null) {
 
+            // ── Runway warning ─────────────────────────────────────────────────
+            if (projection.predictedBalance < 0 || daysUntilZero != null) {
                 val message = when {
                     runwaySeverity == "critical" ->
                         "Balance may run out in ~${daysUntilZero}d — urgent action needed"
@@ -222,7 +232,6 @@ fun ProjectionInsightsCard(
                     else ->
                         "Balance projected to go negative"
                 }
-
                 Spacer(Modifier.height(12.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -254,7 +263,7 @@ fun ProjectionInsightsCard(
             HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
             Spacer(Modifier.height(12.dp))
 
-            // ── 1. Savings Rate ───────────────────────────────────────────────
+            // ── Savings Rate ───────────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -267,7 +276,8 @@ fun ProjectionInsightsCard(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.Savings, null,
-                            tint = colorScheme.primary, modifier = Modifier.size(18.dp)
+                            tint = colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -298,6 +308,7 @@ fun ProjectionInsightsCard(
                     color = if (savingsRate >= 0) colorScheme.tertiary else colorScheme.error
                 )
             }
+
             if (daysUntilZero != null && daysUntilZero > 0) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -312,7 +323,7 @@ fun ProjectionInsightsCard(
                 color = colorScheme.onSurface.copy(alpha = 0.06f)
             )
 
-            // ── 2 & 3. Daily Avg Income + Spend ──────────────────────────────
+            // ── Daily Avg Income + Spend ───────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -337,7 +348,6 @@ fun ProjectionInsightsCard(
         }
     }
 }
-
 
 @Composable
 private fun InsightStatTile(

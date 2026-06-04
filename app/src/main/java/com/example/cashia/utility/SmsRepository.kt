@@ -11,9 +11,12 @@ import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.guessCategory
 import com.example.cashia.models.parseMpesaMessage
 import com.example.cashia.utility.SmsRepository.fetchMpesaMessages
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 
 object SmsRepository {
-
     data class SmsMessage(
         val id: Long,
         val body: String,
@@ -58,6 +61,12 @@ object SmsRepository {
 
 }
 
+sealed class ProcessedResult {
+    data class Parsed(val transaction: MpesaTransactions) : ProcessedResult()
+    data class Unmatched(val unmatchedSms: UnmatchedSms) : ProcessedResult()
+    object Ignored : ProcessedResult()
+}
+
 suspend fun syncTransactions(context: Context, database: AppDatabase) {
     val dao = database.transactionDao()
     val unmatchedDao = database.unmatchedSmsDao()
@@ -69,40 +78,51 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
     val messages = fetchMpesaMessages(context, lastSmsId)
     if (messages.isEmpty()) return
 
+    val newestSmsId = messages.last().id
+
     val customCategories = categoryDao.getAllCustomCategoriesOnce()
     val userCorrections = correctionDao.getAllCorrectionsOnce()
         .associate { it.recipient to it.categoryId }
 
+    val processedResults = withContext(Dispatchers.Default) {
+        messages.map { sms ->
+            async {
+                when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
+                    is ParseResult.Success -> {
+                        val tx = result.transactions.copy(smsId = sms.id)
+                        val betterCategory = guessCategory(
+                            recipient = tx.recipient,
+                            type = tx.type,
+                            customCategories = customCategories,
+                            userCorrections = userCorrections
+                        )
+                        ProcessedResult.Parsed(
+                            if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
+                        )
+                    }
+
+                    is ParseResult.Unmatched -> ProcessedResult.Unmatched(
+                        UnmatchedSms(
+                            smsId = sms.id,
+                            rawBody = result.rawBody
+                        )
+                    )
+
+                    is ParseResult.Irrelevant -> ProcessedResult.Ignored
+                }
+            }
+        }.awaitAll() // Concurrently suspends until all worker threads finish processing
+    }
+
     val parsed = mutableListOf<MpesaTransactions>()
     val unmatched = mutableListOf<UnmatchedSms>()
 
-    var newestSmsId = lastSmsId
 
-    for (sms in messages) {
-        newestSmsId = sms.id
-
-        when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
-            is ParseResult.Success -> {
-                val tx = result.transactions.copy(smsId = sms.id)
-                val betterCategory = guessCategory(
-                    recipient = tx.recipient,
-                    type = tx.type,
-                    customCategories = customCategories,
-                    userCorrections = userCorrections
-                )
-                parsed.add(
-                    if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
-                )
-            }
-
-            is ParseResult.Unmatched -> unmatched.add(
-                UnmatchedSms(
-                    smsId = sms.id,
-                    rawBody = result.rawBody
-                )
-            )
-
-            is ParseResult.Irrelevant -> Unit
+    for (result in processedResults) {
+        when (result) {
+            is ProcessedResult.Parsed -> parsed.add(result.transaction)
+            is ProcessedResult.Unmatched -> unmatched.add(result.unmatchedSms)
+            ProcessedResult.Ignored -> Unit
         }
     }
 
@@ -122,5 +142,4 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
             )
         )
     }
-
 }

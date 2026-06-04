@@ -40,3 +40,13 @@ val DarkColorScheme = darkColorScheme(
     surfaceVariant = Color(0xFF334155),   // Border for dark glass
     onSurfaceVariant = Color(0xFF94A3B8)
 )
+
+val WidgetBackground = Color(0xFF0F172A)
+val WidgetCard = Color(0xFF1E293B)
+
+val WidgetPrimary = Color(0xFF818CF8)
+val WidgetIncome = Color(0xFF34D399)
+val WidgetExpense = Color(0xFFFB7185)
+
+val WidgetText = Color(0xFFF1F5F9)
+val WidgetSubtle = Color(0xFF94A3B8)
