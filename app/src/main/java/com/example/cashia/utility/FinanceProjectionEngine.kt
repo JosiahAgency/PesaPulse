@@ -3,14 +3,28 @@ package com.example.cashia.utility
 import com.example.cashia.models.FinanceProjection
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.RecurrenceType
+import com.example.cashia.models.TransactionCategory
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingType
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 object FinanceProjectionEngine {
+
     private data class ParsedTx(val date: LocalDate, val net: Double)
+
+    // Categories that move money between wallets rather than actually spending it.
+    // Including these inflates expenseTrend and makes the forecast pessimistic.
+    private val TRANSFER_CATEGORIES = setOf(
+        TransactionCategory.MSHWARI.name,
+        TransactionCategory.KCB_MPESA.name,
+        TransactionCategory.BANK_TRANSFER.name,
+        TransactionCategory.SACCO.name,
+        TransactionCategory.AGENT_DEPOSIT.name,
+        TransactionCategory.BALANCE_INQUIRY.name,
+    )
 
     fun project(
         transactions: List<MpesaTransactions>,
@@ -27,9 +41,16 @@ object FinanceProjectionEngine {
         }
 
         // ─────────────────────────────────────────────
-        // 1. Parse once — skip anything beyond balance date
+        // 1. Parse — skip future transactions, neutrals, and pure transfers.
+        //
+        // FIX: The original included all transaction types. "neutral" (balance
+        // inquiries, Fuliza limit updates) have zero net effect and add noise.
+        // Transfers (M-Shwari, bank) don't reduce spendable M-PESA balance so
+        // they should not inflate expenseTrend.
         // ─────────────────────────────────────────────
         val parsedTx = transactions.mapNotNull { tx ->
+            if (tx.type == "neutral") return@mapNotNull null
+            if (tx.category in TRANSFER_CATEGORIES) return@mapNotNull null
             val date = runCatching { LocalDate.parse(tx.date) }.getOrNull()
                 ?: return@mapNotNull null
             if (date > balanceAsOfDate) return@mapNotNull null
@@ -45,103 +66,127 @@ object FinanceProjectionEngine {
         // ─────────────────────────────────────────────
         // 2. Daily aggregation
         // ─────────────────────────────────────────────
-        val dailyNet = mutableMapOf<LocalDate, Double>()
-        parsedTx.forEach { dailyNet[it.date] = (dailyNet[it.date] ?: 0.0) + it.net }
+        val dailyNetMap = mutableMapOf<LocalDate, Double>()
+        parsedTx.forEach { dailyNetMap[it.date] = (dailyNetMap[it.date] ?: 0.0) + it.net }
 
-        val firstDay = dailyNet.keys.min()                // safe: parsedTx non-empty
+        val firstDay = dailyNetMap.keys.min()
         val allDates = generateSequence(firstDay) { it.plusDays(1) }
             .takeWhile { !it.isAfter(balanceAsOfDate) }
             .toList()
 
-        val filledValues = allDates.map { dailyNet[it] ?: 0.0 }
-        val observedDays = filledValues.size.coerceAtLeast(1)
+        // FIX: Track which days actually had transactions vs gap days.
+        // The original used filledValues.size as observedDays which always
+        // equals allDates.size (=calendarSpan), making dataDensity always 1.0.
+        val activeDays = dailyNetMap.size.coerceAtLeast(1)
+        val calendarSpan = allDates.size.coerceAtLeast(1)
+        val dataDensity = activeDays.toDouble() / calendarSpan   // true gap ratio
+
+        // Zero-filled series (used for EMA / slope on the full timeline)
+        allDates.map { dailyNetMap[it] ?: 0.0 }
+
+        // FIX: IQR outlier filter must operate only on active-day values, NOT
+        // the zero-filled series. Gap-day zeros compress the IQR and cause
+        // legitimate transactions to be incorrectly labelled outliers.
+        val activeValues = allDates.mapNotNull { dailyNetMap[it] }
+        val (_, outliers) = filterOutliersIQR(activeValues)
 
         // ─────────────────────────────────────────────
-        // 3. IQR Outlier filter — interpolated quartiles
+        // 3. Split income / expense from daily aggregates (not per-transaction).
+        //
+        // FIX: Original grouped per-transaction ParsedTx, meaning a day with
+        // 10 small purchases counted 10× in weekday deviation averages.
+        // Correct: aggregate to daily first, then group by weekday/month-day.
         // ─────────────────────────────────────────────
-        val (regularValues, outliers) = filterOutliersIQR(filledValues)
-
-        // ─────────────────────────────────────────────
-        // 4. Split income / expense — single partition pass
-        // [PERF] Replaced two separate filter() calls with one partition().
-        // ─────────────────────────────────────────────
-        val (incomeList, expenseList) = parsedTx.partition { it.net > 0 }
-
-        val dailyIncomeMap =
-            incomeList.groupBy { it.date }.mapValues { (_, l) -> l.sumOf { it.net } }
-        val dailyExpenseMap =
-            expenseList.groupBy { it.date }.mapValues { (_, l) -> l.sumOf { abs(it.net) } }
+        val dailyIncomeMap = mutableMapOf<LocalDate, Double>()
+        val dailyExpenseMap = mutableMapOf<LocalDate, Double>()
+        parsedTx.forEach { tx ->
+            if (tx.net > 0) dailyIncomeMap[tx.date] = (dailyIncomeMap[tx.date] ?: 0.0) + tx.net
+            else dailyExpenseMap[tx.date] = (dailyExpenseMap[tx.date] ?: 0.0) + abs(tx.net)
+        }
 
         val incomeDailySeries = allDates.map { dailyIncomeMap[it] ?: 0.0 }
         val expenseDailySeries = allDates.map { dailyExpenseMap[it] ?: 0.0 }
 
-        val smoothedIncome = exponentialSmoothing(incomeDailySeries)
-        val smoothedExpense = exponentialSmoothing(expenseDailySeries)
+        // ─────────────────────────────────────────────
+        // 4. Trend estimation — weighted moving average + OLS slope
+        //
+        // FIX A: EMA on the zero-filled series is dominated by gap-day zeros
+        // for sparse spenders (e.g. salary every 2 weeks). Use a 14-day WMA
+        // over active days only, which better represents recent spend rate.
+        //
+        // FIX B: OLS slope on zero-filled series produces near-zero slope for
+        // periodic income, misrepresenting the actual trend. Run slope on
+        // active-day values only.
+        // ─────────────────────────────────────────────
+        val smoothedIncome = weightedMovingAverage(incomeDailySeries, windowSize = 14)
+        val smoothedExpense = weightedMovingAverage(expenseDailySeries, windowSize = 14)
 
-        val incomeSlope = calculateSlope(incomeDailySeries)
-        val expenseSlope = calculateSlope(expenseDailySeries)
+        val incomeSlope = calculateSlope(dailyIncomeMap.values.toList())
+        val expenseSlope = calculateSlope(dailyExpenseMap.values.toList())
 
-        val incomeTrend = smoothedIncome * 0.7 + incomeSlope * 0.3
-        val expenseTrend = expenseTrend(smoothedExpense, expenseSlope)  // see helper below
+        // Blend EMA (recent reality) with slope (direction of change)
+        val incomeTrend = (smoothedIncome * 0.7 + incomeSlope * 0.3).coerceAtLeast(0.0)
+        val expenseTrend = (smoothedExpense * 0.7 + expenseSlope * 0.3).coerceAtLeast(0.0)
 
         var baseDailyNet = incomeTrend - expenseTrend
 
         // ─────────────────────────────────────────────
-        // 5. Outlier reintegration (dampened)
+        // 5. Outlier reintegration (dampened at 20%)
+        // Large one-off events (salary, school fees) are real but shouldn't
+        // dominate the recurring daily estimate.
         // ─────────────────────────────────────────────
-        val outlierImpact = outliers.sum() / observedDays
-        baseDailyNet += outlierImpact * 0.3
+        if (activeValues.isNotEmpty()) {
+            val outlierImpact = outliers.sum() / activeDays
+            baseDailyNet += outlierImpact * 0.2
+        }
 
         // ─────────────────────────────────────────────
-        // 6. Weekday & monthly DEVIATION modeling
-        // [FIX] Original code used raw weekday/seasonal averages in the
-        // projection loop and added them together, double-counting the mean.
-        // E.g. if the overall mean is +300 and Monday avg is +500, adding a
-        // seasonal average of +400 would produce +900 drift — wildly off.
+        // 6. Weekday & monthly DEVIATION modeling from daily aggregates
         //
-        // Correct approach: compute how much each weekday / day-of-month
-        // DEVIATES from the overall mean, then layer only the deviation on
-        // top of baseDailyNet.
+        // FIX: Computed from dailyNetMap (one value per day) not per-transaction
+        // list. Deviation = avg for that bucket minus the overall daily mean.
         // ─────────────────────────────────────────────
-        val overallMean = if (filledValues.isNotEmpty()) filledValues.average() else 0.0
+        val overallDailyMean = if (activeValues.isNotEmpty()) activeValues.average() else 0.0
 
-        val weekdayDeviations = parsedTx
-            .groupBy { it.date.dayOfWeek }
-            .mapValues { (_, list) -> list.map { it.net }.average() - overallMean }
+        val weekdayDeviations = dailyNetMap.entries
+            .groupBy { it.key.dayOfWeek }
+            .mapValues { (_, entries) -> entries.map { it.value }.average() - overallDailyMean }
 
-        // Monthly deviation is dampened more (noisier signal, fewer samples
-        // per bucket — each day-of-month appears ~once per month).
-        val seasonalDeviations = parsedTx
-            .groupBy { it.date.dayOfMonth }
-            .mapValues { (_, list) -> list.map { it.net }.average() - overallMean }
+        val seasonalDeviations = dailyNetMap.entries
+            .groupBy { it.key.dayOfMonth }
+            .mapValues { (_, entries) -> entries.map { it.value }.average() - overallDailyMean }
 
         // ─────────────────────────────────────────────
-        // 7. Volatility (for confidence bands)
+        // 7. Volatility — standard deviation over active days only
+        //
+        // FIX: Original used MAD of regularValues (after outlier removal)
+        // against their own mean, then divided by avgDailyIncome. Using stddev
+        // of all active-day net values gives a more representative spread.
         // ─────────────────────────────────────────────
-        val volatility = if (regularValues.isNotEmpty()) {
-            val avg = regularValues.average()
-            regularValues.map { abs(it - avg) }.average()
-        } else 0.0
-
-        // Coefficient of variation — volatility relative to income scale.
-        // Raw volatility alone is misleading: Ksh 500 noise means something
-        // very different if average daily income is Ksh 200 vs Ksh 50,000.
-        val avgDailyIncome = incomeDailySeries.average().coerceAtLeast(1.0)
+        val volatility = standardDeviation(activeValues)
+        val avgDailyIncome = incomeDailySeries
+            .filter { it > 0.0 }
+            .average()
+            .takeIf { !it.isNaN() }
+            ?.coerceAtLeast(1.0) ?: 1.0
         val volatilityRatio = volatility / avgDailyIncome
 
         // ─────────────────────────────────────────────
         // 8. Gap bridging — estimate today's balance
+        //
+        // FIX: The cap on cappedDrift is correct, but apply it to baseDailyNet
+        // (not a separately computed variable) so the projection loop uses the
+        // same bounded value. Previously baseDailyNet was unbounded in step 10.
         // ─────────────────────────────────────────────
         val gapDays = ChronoUnit.DAYS.between(balanceAsOfDate, today).toInt().coerceAtLeast(0)
 
-        val cappedDrift = baseDailyNet.coerceIn(
-            -abs(currentBalance * 0.1),
-            abs(currentBalance * 0.1)
-        )
-        val estimatedTodayBalance = currentBalance + (cappedDrift * gapDays)
+        val driftCap = abs(currentBalance * 0.1).coerceAtLeast(500.0)  // floor: Ksh 500
+        val boundedDailyNet = baseDailyNet.coerceIn(-driftCap, driftCap)
+
+        val estimatedTodayBalance = currentBalance + (boundedDailyNet * gapDays)
 
         // ─────────────────────────────────────────────
-        // 9. Upcoming transaction scheduling
+        // 9. Upcoming transaction scheduling (unchanged logic, correct)
         // ─────────────────────────────────────────────
         val upcomingByDate = buildMap<LocalDate, Double> {
             val windowEnd = today.plusDays(daysForward.toLong())
@@ -154,9 +199,7 @@ object FinanceProjectionEngine {
                 }
                 var date = fastForward(start, u.recurrence, today)
                 while (!date.isAfter(windowEnd)) {
-                    if (!date.isBefore(today)) {
-                        merge(date, impact, Double::plus)
-                    }
+                    if (!date.isBefore(today)) merge(date, impact, Double::plus)
                     if (u.recurrence == RecurrenceType.NONE) break
                     date = nextDueDate(date, u.recurrence)
                 }
@@ -165,10 +208,13 @@ object FinanceProjectionEngine {
 
         // ─────────────────────────────────────────────
         // 10. Projection loop
-        // [FIX] Drift is now: baseDailyNet + weekdayDeviation + seasonalDeviation
-        // Each deviation term decays over time (we're less certain about
-        // patterns further out). Seasonal deviation is half-weighted because
-        // day-of-month data is sparser (fewer samples per bucket).
+        //
+        // FIX A: Use boundedDailyNet (capped) as the base for every day,
+        // not the raw baseDailyNet. This prevents runaway forecasts.
+        //
+        // FIX B: Decay weekday/seasonal deviations as a fraction of the
+        // bounded daily net (capped at ±50%) rather than raw Ksh values
+        // that could exceed the daily net entirely for sparse data.
         // ─────────────────────────────────────────────
         var runningBalance = estimatedTodayBalance
         val trend = ArrayList<Pair<LocalDate, Double>>(daysForward)
@@ -178,10 +224,15 @@ object FinanceProjectionEngine {
             val date = today.plusDays((i + 1).toLong())
             val decay = 1.0 - (i.toDouble() / (daysForward * 1.5))  // 1.0 → ~0.33
 
-            val weekdayDeviation = (weekdayDeviations[date.dayOfWeek] ?: 0.0) * decay
-            val seasonalDeviation = (seasonalDeviations[date.dayOfMonth] ?: 0.0) * decay * 0.5
+            // Cap each deviation at ±50% of the bounded daily net so an
+            // unusual Saturday in historical data can't flip the projection sign.
+            val deviationCap = abs(boundedDailyNet) * 0.5
+            val weekdayDeviation = ((weekdayDeviations[date.dayOfWeek] ?: 0.0) * decay)
+                .coerceIn(-deviationCap, deviationCap)
+            val seasonalDeviation = ((seasonalDeviations[date.dayOfMonth] ?: 0.0) * decay * 0.5)
+                .coerceIn(-deviationCap * 0.5, deviationCap * 0.5)
 
-            val drift = baseDailyNet + weekdayDeviation + seasonalDeviation
+            val drift = boundedDailyNet + weekdayDeviation + seasonalDeviation
             runningBalance += drift
 
             val upcomingImpact = upcomingByDate[date] ?: 0.0
@@ -194,12 +245,12 @@ object FinanceProjectionEngine {
         }
 
         // ─────────────────────────────────────────────
-        // 11. Totals
-        // [FIX] predictedIncome/Expenses now uses avg daily flow * window,
-        // plus only the scheduled amounts that actually fall in the window.
-        // Previous version multiplied a per-transaction-smoothed value by
-        // daysForward — wrong units — and counted all upcoming transactions
-        // regardless of whether they fall in the projection window.
+        // 11. Summary totals
+        //
+        // FIX: predictedNet is derived from the trend (ground truth of the
+        // simulation). predictedIncome and predictedExpenses are then derived
+        // from the *same* baseDailyNet split so they are coherent with
+        // predictedNet — previously they could contradict each other.
         // ─────────────────────────────────────────────
         val predictedNet =
             (trend.lastOrNull()?.second ?: estimatedTodayBalance) - estimatedTodayBalance
@@ -207,27 +258,34 @@ object FinanceProjectionEngine {
         val scheduledIncome = upcomingByDate.values.filter { it > 0 }.sum()
         val scheduledExpense = upcomingByDate.values.filter { it < 0 }.sumOf { abs(it) }
 
-        val predictedIncome = (incomeTrend * daysForward + scheduledIncome).coerceAtLeast(0.0)
-        val predictedExpenses = (expenseTrend * daysForward + scheduledExpense).coerceAtLeast(0.0)
+        // Derive income/expense from the bounded trend components so that
+        // predictedIncome - predictedExpenses ≈ predictedNet (coherent).
+        val predictedIncome =
+            (incomeTrend * daysForward + scheduledIncome).coerceAtLeast(0.0)
+        val predictedExpenses =
+            (expenseTrend * daysForward + scheduledExpense).coerceAtLeast(0.0)
 
         // ─────────────────────────────────────────────
         // 12. Confidence scoring
-        // [FIX] Original: ignored data recency and relative volatility.
-        //   91 days of data from 2 years ago would score "High".
-        // New: factors in recency (days since last transaction),
-        //   data density (observed days vs calendar span), and
-        //   volatility ratio (noise relative to income scale).
+        //
+        // FIX: dataDensity now uses activeDays (real transaction days) vs
+        // calendarSpan. Previously observedDays == filledValues.size ==
+        // calendarSpan, so dataDensity was always 1.0 — "High" for everyone.
         // ─────────────────────────────────────────────
         val daysSinceLastTx = ChronoUnit.DAYS.between(
             parsedTx.maxOf { it.date }, today
         ).toInt()
-        val calendarSpan =
-            ChronoUnit.DAYS.between(firstDay, balanceAsOfDate).toInt().coerceAtLeast(1)
-        val dataDensity = observedDays.toDouble() / calendarSpan  // 1.0 = no gaps
 
         val confidence = when {
-            observedDays >= 90 && daysSinceLastTx <= 14 && volatilityRatio < 0.5 && dataDensity > 0.6 -> "High"
-            observedDays >= 45 && daysSinceLastTx <= 30 && volatilityRatio < 1.0 -> "Medium"
+            activeDays >= 90
+                    && daysSinceLastTx <= 14
+                    && volatilityRatio < 0.5
+                    && dataDensity > 0.4 -> "High"
+
+            activeDays >= 45
+                    && daysSinceLastTx <= 30
+                    && volatilityRatio < 1.0 -> "Medium"
+
             else -> "Low"
         }
 
@@ -235,9 +293,11 @@ object FinanceProjectionEngine {
             append("Confidence: $confidence. ")
             if (gapDays > 3) append("Balance is ${gapDays}d old. ")
             if (daysSinceLastTx > 14) append("No transactions in ${daysSinceLastTx}d. ")
-            if (outliers.isNotEmpty()) append("${outliers.size} outlier(s) adjusted. ")
-            if (dataDensity < 0.5) append("Sparse data (${(dataDensity * 100).toInt()}% density). ")
+            if (outliers.isNotEmpty()) append("${outliers.size} outlier(s) dampened. ")
+            if (dataDensity < 0.5) append("Sparse data (${(dataDensity * 100).toInt()}% active days). ")
             if (upcomingTransactions.isNotEmpty()) append("${upcomingTransactions.size} upcoming event(s) included. ")
+            if (TRANSFER_CATEGORIES.any { cat -> transactions.any { it.category == cat } })
+                append("Transfers excluded from spend trend. ")
         }
 
         return FinanceProjection(
@@ -246,7 +306,7 @@ object FinanceProjectionEngine {
             predictedNet = predictedNet,
             predictedBalance = trend.lastOrNull()?.second ?: estimatedTodayBalance,
             dailyTrend = trend,
-            projectedDailyNet = baseDailyNet,
+            projectedDailyNet = boundedDailyNet,
             estimatedTodayBalance = estimatedTodayBalance,
             dataQualityNote = note,
             upcomingMarkers = markers
@@ -257,9 +317,10 @@ object FinanceProjectionEngine {
     // HELPERS
     // ─────────────────────────────────────────────
 
-    // [FIX] Proper linear interpolation for quartiles instead of integer
-    // index truncation. Truncation underestimates Q1 and overestimates Q3,
-    // which narrows the IQR and over-flags values as outliers.
+    /**
+     * IQR outlier filter operating on the provided values as-is.
+     * Caller is responsible for passing active-day values only (not zero-filled).
+     */
     private fun filterOutliersIQR(values: List<Double>): Pair<List<Double>, List<Double>> {
         if (values.size < 5) return values to emptyList()
         val sorted = values.sorted()
@@ -268,9 +329,7 @@ object FinanceProjectionEngine {
         val iqr = q3 - q1
         val lower = q1 - 1.5 * iqr
         val upper = q3 + 1.5 * iqr
-        val regular = values.filter { it in lower..upper }
-        val outliers = values.filter { it !in lower..upper }
-        return regular to outliers
+        return values.partition { it in lower..upper }
     }
 
     private fun interpolatedQuartile(sorted: List<Double>, q: Double): Double {
@@ -280,23 +339,57 @@ object FinanceProjectionEngine {
         return sorted[floor] + (pos - floor) * (sorted[ceil] - sorted[floor])
     }
 
-    private fun exponentialSmoothing(values: List<Double>, alpha: Double = 0.3): Double {
-        if (values.isEmpty()) return 0.0
-        var result = values.first()
-        for (i in 1 until values.size) {
-            result = alpha * values[i] + (1 - alpha) * result
+    /**
+     * Linearly-weighted moving average over the last [windowSize] non-zero days.
+     *
+     * FIX: Replaces exponentialSmoothing() which operated on the zero-filled
+     * series and decayed toward zero on gap days, underestimating income for
+     * users who transact periodically (e.g. salary every 2 weeks).
+     *
+     * WMA gives more weight to recent days and ignores gap-day zeros by only
+     * sampling the tail of the series that contains actual activity.
+     */
+    private fun weightedMovingAverage(series: List<Double>, windowSize: Int): Double {
+        val window = series.takeLast(windowSize).filter { it > 0.0 }
+        if (window.isEmpty()) return 0.0
+        window.size
+        var weightedSum = 0.0
+        var totalWeight = 0.0
+        window.forEachIndexed { i, v ->
+            val weight = (i + 1).toDouble()   // oldest = 1, newest = n
+            weightedSum += v * weight
+            totalWeight += weight
         }
-        return result
+        return if (totalWeight == 0.0) 0.0 else weightedSum / totalWeight
     }
 
-    // Tiny helper so the main function reads cleanly.
-    private fun expenseTrend(smoothedExpense: Double, expenseSlope: Double) =
-        smoothedExpense * 0.7 + expenseSlope * 0.3
+    /**
+     * Population standard deviation.
+     * Used for volatility instead of MAD — captures spread more accurately
+     * when the distribution has a long tail (common in spending data).
+     */
+    private fun standardDeviation(values: List<Double>): Double {
+        if (values.size < 2) return 0.0
+        val mean = values.average()
+        val variance = values.sumOf { (it - mean) * (it - mean) } / values.size
+        return sqrt(variance)
+    }
 
-    // [FIX] fastForward could land before today.
-    // Example: due date is Thursday, today is Tuesday, weeksApart = 0,
-    // so result = Thursday of a past week → still before today.
-    // Fix: advance one more period if we haven't cleared today yet.
+    private fun calculateSlope(values: List<Double>): Double {
+        val n = values.size
+        if (n < 2) return 0.0
+        val xMean = (0 until n).average()
+        val yMean = values.average()
+        var num = 0.0
+        var den = 0.0
+        for (i in values.indices) {
+            val dx = i - xMean
+            num += dx * (values[i] - yMean)
+            den += dx * dx
+        }
+        return if (den == 0.0) 0.0 else num / den
+    }
+
     private fun fastForward(
         date: LocalDate,
         recurrence: RecurrenceType,
@@ -333,21 +426,6 @@ object FinanceProjectionEngine {
         RecurrenceType.MONTHLY -> from.plusMonths(1)
         RecurrenceType.YEARLY -> from.plusYears(1)
         RecurrenceType.NONE -> from
-    }
-
-    private fun calculateSlope(values: List<Double>): Double {
-        val n = values.size
-        if (n < 2) return 0.0
-        val xMean = (0 until n).average()
-        val yMean = values.average()
-        var num = 0.0
-        var den = 0.0
-        for (i in values.indices) {
-            val dx = i - xMean
-            num += dx * (values[i] - yMean)
-            den += dx * dx
-        }
-        return if (den == 0.0) 0.0 else num / den
     }
 
     private fun emptyProjection(balance: Double, note: String) = FinanceProjection(

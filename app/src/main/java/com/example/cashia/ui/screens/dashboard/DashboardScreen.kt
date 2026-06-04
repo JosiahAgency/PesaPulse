@@ -36,7 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
+import com.example.cashia.models.DashboardViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
@@ -54,23 +57,24 @@ import java.time.LocalDate
 fun DashboardScreen(
     viewModel: TransactionsViewModel,
     categoryViewModel: CategoryViewModel,
-    upcomingViewModel: UpcomingViewModel
+    upcomingViewModel: UpcomingViewModel,
+    dashboardViewModel: DashboardViewModel
 ) {
     val today = remember { LocalDate.now() }
 
-    var selectedDate by remember { mutableStateOf(today) }
-    var selectedScope by remember { mutableStateOf(TimeScope.DAY) }
-    var isListExpanded by remember { mutableStateOf(true) }
+    val selectedDate by dashboardViewModel.selectedDate.collectAsStateWithLifecycle()
+    val selectedScope by dashboardViewModel.scope.collectAsStateWithLifecycle()
+    val isListExpanded by dashboardViewModel.isListExpanded.collectAsStateWithLifecycle()
+
 
     val hapticFeedback = LocalHapticFeedback.current
-
     val state by viewModel.state.collectAsState()
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val reversalIndex by viewModel.reversalIndex.collectAsState()
     val periodLabel by viewModel.dashboardPeriodLabel.collectAsState()
-    val upcomingUiState = upcomingViewModel.uiState
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) viewModel.onPermissionGranted()
@@ -79,12 +83,12 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val categoryLabelsMap = remember(allCategories) {
-        allCategories.associate { it.id to it.label }
+    LaunchedEffect(allCategories) {
+        viewModel.updateCategories(allCategories)
     }
 
-    LaunchedEffect(selectedDate, selectedScope, categoryLabelsMap) {
-        viewModel.setDashboardScope(selectedDate, selectedScope, categoryLabelsMap)
+    LaunchedEffect(selectedDate, selectedScope) {
+        viewModel.setDashboardScope(selectedDate, selectedScope)
     }
 
     Scaffold(
@@ -92,11 +96,11 @@ fun DashboardScreen(
         floatingActionButton = {
             if (selectedDate != today) {
                 ExtendedFloatingActionButton(
-                    onClick = { selectedDate = today },
+                    onClick = { dashboardViewModel.setDate(today) },
                     icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
                     text = { Text("Back to Today", fontWeight = FontWeight.SemiBold) },
                     containerColor = Color.Transparent,
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(0.dp),
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .clip(CircleShape)
@@ -104,7 +108,7 @@ fun DashboardScreen(
                 )
             }
         }
-    ) { padding ->
+    ) { _ ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -125,7 +129,7 @@ fun DashboardScreen(
                 item {
                     PeriodSummaryCard(
                         selectedScope,
-                        { selectedScope = it },
+                        { dashboardViewModel.setScope(it) },
                         periodLabel,
                         state.totalIncome,
                         state.totalExpenses,
@@ -137,8 +141,8 @@ fun DashboardScreen(
                         hapticFeedback,
                         state.allTransactions,
                         selectedDate
-                    ) { newDate ->
-                        selectedDate = newDate
+                    ) {
+                        dashboardViewModel.setDate(it)
                     }
                 }
 
@@ -149,7 +153,7 @@ fun DashboardScreen(
                         isListExpanded,
                         {
                             PesaActions.playClick(hapticFeedback)
-                            isListExpanded = !isListExpanded
+                            dashboardViewModel.toggleListExpanded()
                         }
                     )
                 }

@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionsViewModel
@@ -79,7 +80,7 @@ fun UpcomingSection(
     haptic: HapticFeedback,
     categoryViewModel: CategoryViewModel,
 ) {
-    val uiState = upcomingViewModel.uiState
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
     val total = overdue.size + dueSoon.size + later.size
     val state by viewModel.state.collectAsState()
@@ -212,7 +213,7 @@ fun UpcomingSection(
         }
 
         // Editor sheet
-        if (uiState.showSheet) {
+        if (upcomingUiState.showSheet) {
             val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             ModalBottomSheet(
                 onDismissRequest = upcomingViewModel::closeSheet,
@@ -228,7 +229,7 @@ fun UpcomingSection(
                         .navigationBarsPadding()
                 ) {
                     UpcomingEditorSheet(
-                        uiState = uiState,
+                        uiState = upcomingUiState,
                         allCategories = allCategories,
                         onTitleChange = upcomingViewModel::onTitleChange,
                         onAmountChange = upcomingViewModel::onAmountChange,

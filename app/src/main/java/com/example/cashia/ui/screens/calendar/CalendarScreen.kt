@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -79,7 +80,7 @@ fun CalendarScreen(
     val allCategories by categoryViewModel.allCategories.collectAsState()
     val upcomingAll by upcomingViewModel.upcoming.collectAsState()
     var selectedFilter by remember { mutableStateOf(TransactionType.ALL) }
-    val upcomingUiState = upcomingViewModel.uiState
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {

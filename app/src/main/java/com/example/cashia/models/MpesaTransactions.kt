@@ -566,6 +566,9 @@ fun parseMpesaMessage(
         // ★ Fuliza repay (expense)
         regexFulizaRepay.find(message)?.let { m ->
             val (id, amount) = m.destructured
+            check(smsReceivedAt != System.currentTimeMillis()) {
+                "parseMpesaMessage: smsReceivedAt was not supplied for Fuliza repay $id"
+            }
             val (fallbackDate, fallbackTime) = smsReceivedAt.toDateTimePair()
             return ParseResult.Success(
                 buildTransaction(
