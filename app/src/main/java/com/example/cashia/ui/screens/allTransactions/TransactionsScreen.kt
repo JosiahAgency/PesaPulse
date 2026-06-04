@@ -46,6 +46,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
@@ -73,43 +74,42 @@ fun TransactionScreen(
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
 
-    var searchQuery by remember { mutableStateOf("") }
+    val allCategories by categoryViewModel.allCategories.collectAsState()
+    val reversalIndex by viewModel.reversalIndex.collectAsState()
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
+
+//    val searchQuery = state.searchQuery
+    var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
     var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
     var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
-    var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
+
+    var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
 
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
-    val categoryLabelsMap =
-        remember(allCategories) { allCategories.associate { it.id to it.label } }
-
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val upcomingUiState = upcomingViewModel.uiState
+    val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
     LaunchedEffect(
-        searchQuery,
+        state.searchQuery,
         selectedCategoryFilter,
         dateRangeStart,
         dateRangeEnd,
-        categoryLabelsMap
     ) {
         viewModel.updateFilters(
-            query = searchQuery,
+            query = state.searchQuery,
             categoryFilter = selectedCategoryFilter,
             start = dateRangeStart,
             end = dateRangeEnd,
-            categoryMap = categoryLabelsMap
+            categoryMap = allCategories.associate { it.id to it.label }
         )
     }
 
-    var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
-    val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
     val hasFilters by remember {
         derivedStateOf {
-            selectedCategoryFilter != null || dateRangeStart != null || searchQuery.isNotBlank()
+            state.selectedCategory != null || state.searchQuery.isNotBlank()
         }
     }
 
@@ -124,6 +124,7 @@ fun TransactionScreen(
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
     var hasAutoOpened by remember { mutableStateOf(false) }
+
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
             hasAutoOpened = true
@@ -195,18 +196,23 @@ fun TransactionScreen(
 
                 item(key = "search") {
                     EnhancedSearchBar(
-                        query = searchQuery,
+                        query = state.searchQuery,
                         expanded = searchExpanded,
                         recentSearches = recentSearches,
                         allCategories = allCategories,
-                        selectedCategory = selectedCategoryFilter,
-                        dateRangeStart = dateRangeStart,
-                        dateRangeEnd = dateRangeEnd,
-                        onQueryChange = { searchQuery = it },
+                        selectedCategory = state.selectedCategory,
+                        dateRangeStart = null,
+                        dateRangeEnd = null,
+                        onQueryChange = viewModel::setQuery,
                         onExpandChange = { searchExpanded = it },
-                        onRecentPick = { searchQuery = it; searchExpanded = false },
-                        onCategoryPick = { selectedCategoryFilter = it },
-                        onDateRange = { s, e -> dateRangeStart = s; dateRangeEnd = e },
+                        onRecentPick = {
+                            viewModel.setQuery(it)
+                            searchExpanded = false
+                        },
+                        onCategoryPick = viewModel::setCategory,
+                        onDateRange = { start, end ->
+                            viewModel.setDateRange(start, end)
+                        }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -235,7 +241,13 @@ fun TransactionScreen(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Ksh ${String.format(Locale.US, "%,.2f", state.fulizaLimit)}",
+                                    text = "Ksh ${
+                                        String.format(
+                                            Locale.US,
+                                            "%,.2f",
+                                            state.fulizaLimit
+                                        )
+                                    }",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -248,13 +260,22 @@ fun TransactionScreen(
                 if (hasFilters) {
                     item(key = "filter_pills") {
                         ActiveFilterPills(
-                            searchQuery = searchQuery,
+                            searchQuery = state.searchQuery,
                             selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
                             dateRangeStart = dateRangeStart,
                             dateRangeEnd = dateRangeEnd,
-                            onClearSearch = { searchQuery = "" },
-                            onClearCategory = { selectedCategoryFilter = null },
-                            onClearDate = { dateRangeStart = null; dateRangeEnd = null }
+                            onClearSearch = {
+                                viewModel.setQuery("")
+                            },
+                            onClearCategory = {
+                                selectedCategoryFilter = null
+                                viewModel.setCategory(null)
+                            },
+                            onClearDate = {
+                                dateRangeStart = null
+                                dateRangeEnd = null
+                                viewModel.setDateRange(null, null)
+                            }
                         )
                         Spacer(Modifier.height(8.dp))
                     }

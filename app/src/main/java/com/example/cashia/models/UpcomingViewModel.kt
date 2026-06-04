@@ -1,17 +1,17 @@
 package com.example.cashia.models
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -38,16 +38,19 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     val all: StateFlow<List<UpcomingTransaction>> = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    var uiState by mutableStateOf(UpcomingUiState())
-        private set
+//    var uiState by mutableStateOf(UpcomingUiState())
+//        private set
 
+    private val _uiState = MutableStateFlow(UpcomingUiState())
+    val uiState: StateFlow<UpcomingUiState> = _uiState.asStateFlow()
+    var currentState = _uiState.value
 
     fun openCreate() {
-        uiState = UpcomingUiState(showSheet = true)
+        currentState = UpcomingUiState(showSheet = true)
     }
 
     fun openEdit(tx: UpcomingTransaction) {
-        uiState = UpcomingUiState(
+        currentState = UpcomingUiState(
             showSheet = true,
             editing = tx,
             draftTitle = tx.title,
@@ -61,67 +64,84 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     }
 
     fun closeSheet() {
-        uiState = UpcomingUiState()
+        currentState = UpcomingUiState()
     }
 
     fun onTitleChange(v: String) {
-        uiState = uiState.copy(draftTitle = v, error = null)
+        _uiState.update {
+            it.copy(draftTitle = v, error = null)
+        }
     }
 
     fun onAmountChange(v: String) {
-        uiState = uiState.copy(draftAmount = v, error = null)
+        _uiState.update {
+            it.copy(draftAmount = v, error = null)
+        }
     }
 
     fun onCategoryChange(v: String) {
-        uiState = uiState.copy(draftCategory = v)
+        _uiState.update {
+            it.copy(draftCategory = v)
+        }
     }
 
     fun onDueDateChange(v: LocalDate) {
-        uiState = uiState.copy(draftDueDate = v)
+        _uiState.update {
+            it.copy(draftDueDate = v)
+        }
     }
 
     fun onTypeChange(v: UpcomingType) {
-        uiState = uiState.copy(draftType = v)
+        _uiState.update {
+            it.copy(draftType = v)
+        }
     }
 
     fun onRecurrenceChange(v: RecurrenceType) {
-        uiState = uiState.copy(draftRecurrence = v)
+        _uiState.update {
+            it.copy(draftRecurrence = v)
+        }
     }
 
     fun onNotesChange(v: String) {
-        uiState = uiState.copy(draftNotes = v)
+        _uiState.update {
+            it.copy(draftNotes = v)
+        }
     }
 
     // ── Save ──────────────────────────────────────────────────────────────
     fun save() {
-        val title = uiState.draftTitle.trim()
-        val amount = uiState.draftAmount.toDoubleOrNull()
+        val title = currentState.draftTitle.trim()
+        val amount = currentState.draftAmount.toDouble()
 
         if (title.isBlank()) {
-            uiState = uiState.copy(error = "Title cannot be empty"); return
+            _uiState.update {
+                it.copy(error = "Title cannot be empty"); return
+            }
         }
         if (amount == null || amount <= 0) {
-            uiState = uiState.copy(error = "Enter a valid amount"); return
+            _uiState.update {
+                it.copy(error = "Enter a valid amount"); return
+            }
         }
 
         val txToSave = UpcomingTransaction(
-            id = uiState.editing?.id ?: java.util.UUID.randomUUID().toString(),
+            id = currentState.editing?.id ?: java.util.UUID.randomUUID().toString(),
             title = title,
             amount = amount,
-            categoryId = uiState.draftCategory,
-            dueDate = uiState.draftDueDate.toString(),
-            type = uiState.draftType,
-            recurrence = uiState.draftRecurrence,
-            notes = uiState.draftNotes.trim(),
-            status = uiState.editing?.status ?: UpcomingStatus.PENDING,
-            createdAt = uiState.editing?.createdAt ?: System.currentTimeMillis()
+            categoryId = currentState.draftCategory,
+            dueDate = currentState.draftDueDate.toString(),
+            type = currentState.draftType,
+            recurrence = currentState.draftRecurrence,
+            notes = currentState.draftNotes.trim(),
+            status = currentState.editing?.status ?: UpcomingStatus.PENDING,
+            createdAt = currentState.editing?.createdAt ?: System.currentTimeMillis()
         )
 
         viewModelScope.launch(Dispatchers.IO) {
             dao.upsert(txToSave)
-            // Switch back to the Main thread to update Compose state safely
             kotlinx.coroutines.withContext(Dispatchers.Main) {
-                uiState = UpcomingUiState()
+                currentState = UpcomingUiState()
             }
         }
     }
@@ -206,7 +226,7 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         }
         val nextDate = LocalDate.now().plusMonths(1)
 
-        uiState = UpcomingUiState(
+        currentState = UpcomingUiState(
             showSheet = true,
             draftTitle = recipient,
             draftAmount = amount.toString(),

@@ -61,8 +61,6 @@ enum class TransactionCategory(
     // ── CAR MAINTENANCE SUBCATEGORIES ─────────────────────────────────────
 
     CAR_SERVICE("Car Service", "🔩", parentId = "CAR_MAINTENANCE"),
-    CAR_WASH("Car Wash", "🚿", parentId = "CAR_MAINTENANCE"),
-    TYRES("Tyres & Wheels", "🛞", parentId = "CAR_MAINTENANCE"),
 
     // ── UTILITIES SUBCATEGORIES ───────────────────────────────────────────
 
@@ -82,12 +80,12 @@ enum class TransactionCategory(
     ONLINE_SHOPPING("Online Shopping", "📦", parentId = "SHOPPING"),
     CLOTHING("Clothing & Fashion", "👗", parentId = "SHOPPING"),
     ELECTRONICS("Electronics", "📱", parentId = "SHOPPING"),
-    HOME_SUPPLIES("Home & Hardware", "🏠", parentId = "SHOPPING"),   // ★ new
+    HOME_SUPPLIES("Home & Hardware", "🏠", parentId = "SHOPPING"),
 
     // ── SAVINGS SUBCATEGORIES ─────────────────────────────────────────────
 
-    BANK_TRANSFER("Bank Transfer", "🏦", parentId = "SAVINGS"),      // ★ new
-    SACCO("SACCO", "🤝", parentId = "SAVINGS"),                      // ★ new
+    BANK_TRANSFER("Bank Transfer", "🏦", parentId = "SAVINGS"),
+    SACCO("SACCO", "🤝", parentId = "SAVINGS"),
 
     // ── FALLBACK / SYSTEM ─────────────────────────────────────────────────
 
@@ -138,6 +136,8 @@ fun CustomCategory.toResolved() = ResolvedCategory(id, label, emoji, false, pare
 //   1. Custom category keywords
 //   2. M-PESA system types             (Fuliza, M-Shwari, KCB M-PESA, Hustler Fund, Paybill,
 //                                       Buy Goods, Agent Deposit, Withdrawal, Balance Inquiry)
+//      2a. Paybill merchant lookup     (streaming, utilities, gov't, insurance, education)
+//          before falling back to generic PAYBILL
 //   3. Income-specific rules
 //   4. Airtime & Data
 //   5. Food  (groceries → delivery → fast food → restaurants)
@@ -148,15 +148,16 @@ fun CustomCategory.toResolved() = ResolvedCategory(id, label, emoji, false, pare
 //  10. Fuliza / Loan Repayment
 //  11. Government & Tax
 //  12. Insurance
-//  13. Utilities  (electricity → water → internet → gas)
-//  14. Education
-//  15. Health  (pharmacy → hospital → gym)
-//  16. Tolls
-//  17. Transport  (ride-hailing → train → public)
-//  18. Entertainment
-//  19. Shopping  (online → clothing → electronics → home → generic)
-//  20. Send Money  (person-name heuristic)
-//  21. OTHER
+//  13. Investment
+//  14. Utilities  (electricity → water → internet → gas)
+//  15. Education
+//  16. Health  (pharmacy → hospital → gym)
+//  17. Tolls
+//  18. Transport  (ride-hailing → train → public)
+//  19. Entertainment
+//  20. Shopping  (online → clothing → electronics → home → generic)
+//  21. Send Money  (person-name heuristic)
+//  22. OTHER
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun guessCategory(
@@ -208,9 +209,97 @@ fun guessCategory(
         r.startsWith("refund:") ->
             return TransactionCategory.RECEIVED_MONEY.name
 
-        // ★ Paybill recipients carry "(Acc: XXXX)" suffix from the parser
-        r.contains("(acc:") ->
-            return TransactionCategory.PAYBILL.name
+        // ── 2a. Paybill merchant lookup ───────────────────────────────────
+        // Paybill recipients carry "(Acc: XXXX)" suffix from the parser.
+        // The account field often contains the real merchant name (e.g.
+        // "M-PESA CARD (Acc: Prime Video KE  City of MexicKE)"), so we
+        // search the full lowercased recipient string — which includes the
+        // account portion — before defaulting to generic PAYBILL.
+        // This must come before the plain "(acc:" → PAYBILL catch-all.
+        r.contains("(acc:") -> {
+            return when {
+                // ── Streaming & digital subscriptions ─────────────────────
+                r.containsAny(
+                    "netflix", "prime video", "amazon prime", "spotify",
+                    "youtube", "apple music", "deezer", "boomplay", "tidal",
+                    "showmax", "disney+", "disney plus", "apple tv",
+                    "canal plus", "canal+"
+                ) -> TransactionCategory.ENTERTAINMENT.name
+
+                // ── Internet & TV providers ───────────────────────────────
+                r.containsAny(
+                    "zuku", "faiba", "safaricom home", "airtel home",
+                    "telkom home", "poa internet", "liquid home",
+                    "dstv", "gotv", "azam tv", "startimes",
+                    "jamii telecom", "internet", "wifi", "broadband",
+                    "fiber", "fibre"
+                ) -> TransactionCategory.INTERNET.name
+
+                // ── Electricity ───────────────────────────────────────────
+                r.containsAny(
+                    "kplc", "kenya power", "stima", "prepaid token",
+                    "power token", "electricity token", "electricity"
+                ) -> TransactionCategory.ELECTRICITY.name
+
+                // ── Water ─────────────────────────────────────────────────
+                r.containsAny(
+                    "nairobi water", "nwsc", "mombasa water", "kikuyu water",
+                    "mavoko water", "eldoret water", "kisumu water",
+                    "nakuru water", "nyeri water", "water bill", "sewerage"
+                ) -> TransactionCategory.WATER.name
+
+                // ── Cooking Gas ───────────────────────────────────────────
+                r.containsAny(
+                    "afrigas", "k-gas", "total gas", "shell gas", "lake gas",
+                    "pro gas", "dolgas", "orion gas", "lpg", "cooking gas",
+                    "gas cylinder", "gas refill"
+                ) -> TransactionCategory.COOKING_GAS.name
+
+                // ── Government & Tax ──────────────────────────────────────
+                r.containsAny(
+                    "kra", "kenya revenue", "ecitizen", "e-citizen", "ntsa",
+                    "huduma", "nhif", "nssf", "sha ", "helb",
+                    "higher education loans", "housing levy",
+                    "affordable housing", "immigration", "business permit",
+                    "land rates", "county", "nairobi city"
+                ) -> TransactionCategory.GOVERNMENT.name
+
+                // ── Insurance ─────────────────────────────────────────────
+                r.containsAny(
+                    "insurance", "jubilee", "britam", "aar", "madison",
+                    "kenindia", "sanlam", "aig", "resolution",
+                    "first assurance", "old mutual", "cic",
+                    "heritage", "trident", "cannon", "pacis",
+                    "medical cover", "health cover", "life assurance",
+                    "motor insurance", "insurance premium"
+                ) -> TransactionCategory.INSURANCE.name
+
+                // ── Education ─────────────────────────────────────────────
+                r.containsAny(
+                    "school", "university", "college", "tuition", "helb",
+                    "tvet", "exam fee", "school fees", "kindergarten",
+                    "nursery", "udemy", "coursera", "masterclass",
+                    "strathmore", "usiu", "daystar", "kabarak", "zetech"
+                ) -> TransactionCategory.EDUCATION.name
+
+                // ── Health ────────────────────────────────────────────────
+                r.containsAny(
+                    "hospital", "clinic", "medical", "pharmacy", "chemist",
+                    "nhif", "health", "dispensary", "laboratory", "dentist"
+                ) -> TransactionCategory.HEALTH.name
+
+                // ── Investment ────────────────────────────────────────────
+                r.containsAny(
+                    "cytonn", "britam asset", "sanlam investments",
+                    "old mutual investments", "apollo investments",
+                    "genghis", "kingdom securities", "unit trust",
+                    "money market", "mmf", "cdsc", "nse"
+                ) -> TransactionCategory.INVESTMENT.name
+
+                // ── Everything else is a generic paybill ──────────────────
+                else -> TransactionCategory.PAYBILL.name
+            }
+        }
     }
 
     // ── 3. Income types ───────────────────────────────────────────────────
@@ -306,7 +395,7 @@ fun guessCategory(
         )
     ) return TransactionCategory.FAST_FOOD.name
 
-    // Sit-down restaurants / cafes
+    // Sit-down restaurants / cafe
     if (r.containsAny(
             "java", "artcaffe", "art caffe", "dormans", "java house",
             "k'osewe", "carnivore", "restaurant", "cafe", "coffee house",
@@ -339,24 +428,11 @@ fun guessCategory(
     // ── 8. Car Maintenance ────────────────────────────────────────────────
     if (r.containsAny(
             "garage", "mechanic", "auto service", "car service",
-            "vehicle service", "service centre", "oil change",
-            "engine oil", "spare parts", "spares", "auto parts",
-            "car repair", "panel beating", "body work", "auto electrician",
-            "car wash", "autowash", "auto wash", "hand wash", "jetwash",
-            "tyre", "tire", "wheel alignment", "wheel balance",
-            "puncture", "rim", "radiator", "brake", "clutch",
-            "suspension", "exhaust", "battery", "shock absorber",
-            "windscreen", "car glass", "auto glass", "nrb motors",
-            "toyota kenya", "general motors", "cfao motors"
+            "service centre", "oil change", "engine oil", "spare parts", "spares", "auto parts",
+            "toyota kenya", "cfao motors"
         )
     ) {
-        return when {
-            r.containsAny("wash") -> TransactionCategory.CAR_WASH.name
-            r.containsAny("tyre", "tire", "wheel", "puncture", "rim")
-                -> TransactionCategory.TYRES.name
-
-            else -> TransactionCategory.CAR_SERVICE.name
-        }
+        return TransactionCategory.CAR_SERVICE.name
     }
 
     // ── 9. Savings & Banking ──────────────────────────────────────────────

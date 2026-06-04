@@ -63,6 +63,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.cashia.models.CategoryViewModel
+import com.example.cashia.models.DashboardViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -98,6 +99,9 @@ fun PesaPulseApp() {
     }
 
     val haptic = LocalHapticFeedback.current
+    val dashboardViewModel: DashboardViewModel = viewModel(
+        factory = DashboardViewModel.provideFactory(context)
+    )
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
     )
@@ -109,12 +113,12 @@ fun PesaPulseApp() {
     )
     val settingsViewModel: SettingsViewModel = viewModel()
     val isDark by settingsViewModel.darkTheme.collectAsState()
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-
-    LaunchedEffect(Unit) {
-        sharedViewModel.onNewTransactionsSynced = { newTxs ->
+    LaunchedEffect(sharedViewModel, upcomingViewModel) {
+        sharedViewModel.newTransactionsSynced.collect { newTxs ->
             newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
         }
     }
@@ -148,8 +152,7 @@ fun PesaPulseApp() {
                                     )
                                 }
                                 AnimatedContent(
-                                    targetState = PesaTimeConfiguration.screenSubtitle
-                                        (currentRoute),
+                                    targetState = PesaTimeConfiguration.screenSubtitle(currentRoute),
                                     label = "subtitle"
                                 ) { subtitle ->
                                     if (subtitle.isNotEmpty()) {
@@ -200,7 +203,8 @@ fun PesaPulseApp() {
                     DashboardScreen(
                         viewModel = sharedViewModel,
                         categoryViewModel,
-                        upcomingViewModel
+                        upcomingViewModel,
+                        dashboardViewModel
                     )
                 }
                 composable(AppDestinations.Transactions.route) {
