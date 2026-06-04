@@ -189,7 +189,7 @@ fun TransactionScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp
+                    start = 16.dp, end = 16.dp, top = 115.dp, bottom = 100.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
@@ -422,11 +422,10 @@ fun TransactionScreen(
             visible = showBackToTop,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 90.dp)
+                .padding(bottom = 180.dp)
         ) {
             Surface(
                 shape = CircleShape,
-                shadowElevation = 8.dp,
                 modifier = Modifier
                     .size(44.dp)
                     .clickable {

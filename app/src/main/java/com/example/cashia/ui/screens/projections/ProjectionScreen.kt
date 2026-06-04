@@ -3,10 +3,8 @@ package com.example.cashia.ui.screens.projections
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -15,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.example.cashia.models.CategoryViewModel
@@ -112,7 +109,7 @@ fun ProjectionScreen(
         val soonCutoff = today.plusDays(8)
 
         for (tx in pendingUpcoming) {
-            val d = tx.dueDateParsed ?: continue     // skip if date is malformed
+            val d = tx.dueDateParsed ?: continue
             when {
                 d.isBefore(today) -> ov.add(tx)
                 d.isBefore(soonCutoff) -> ds.add(tx)
@@ -120,7 +117,6 @@ fun ProjectionScreen(
             }
         }
 
-        // Sort by dueDate string — ISO-8601 sorts lexicographically correctly.
         Triple(
             ov.sortedBy { it.dueDate },
             ds.sortedBy { it.dueDate },
@@ -128,72 +124,72 @@ fun ProjectionScreen(
         )
     }
 
-    Scaffold(containerColor = Color.Transparent) { padding ->
-        // [FIX] Added keys to every item so Compose can skip recomposition for
-        // sections whose inputs haven't changed. Without keys, the framework
-        // recomposes all items whenever any single input changes.
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(),
-            contentPadding = PaddingValues(16.dp, 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item(key = "config") {
-                ProjectionConfigCard(
-                    isExpanded = configExpanded,
-                    onToggle = { PesaActions.playClick(haptic); configExpanded = !configExpanded },
-                    selectedPeriod = selectedPeriod,
-                    onPeriodChange = { selectedPeriod = it },
-                    balanceOverride = balanceOverride,
-                    onBalanceOverrideChange = { balanceOverride = it },
-                    autoBalance = state.latestBalance,
-                    autoBalanceDate = state.latestBalanceDate,
-                    haptic = haptic
-                )
-            }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 115.dp,
+            bottom = 120.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item(key = "config") {
+            ProjectionConfigCard(
+                isExpanded = configExpanded,
+                onToggle = { PesaActions.playClick(haptic); configExpanded = !configExpanded },
+                selectedPeriod = selectedPeriod,
+                onPeriodChange = { selectedPeriod = it },
+                balanceOverride = balanceOverride,
+                onBalanceOverrideChange = { balanceOverride = it },
+                autoBalance = state.latestBalance,
+                autoBalanceDate = state.latestBalanceDate,
+                haptic = haptic
+            )
+        }
 
-            item(key = "balance_card") {
-                PredictedBalanceCard(
-                    currentBalance = effectiveBalance,
-                    period = period,
-                    projection = projection,
-                    confidence = confidence,
-                    zeroCrossingDay = zeroCrossingDay
-                )
-            }
+        item(key = "balance_card") {
+            PredictedBalanceCard(
+                currentBalance = effectiveBalance,
+                period = period,
+                projection = projection,
+                confidence = confidence,
+                zeroCrossingDay = zeroCrossingDay
+            )
+        }
 
-            item(key = "trend_chart") {
-                ProjectionTrendChart(
-                    projection = projection,
-                    period = period,
-                    currentBalance = effectiveBalance,
-                    confidence = confidence
-                )
-            }
+        item(key = "trend_chart") {
+            ProjectionTrendChart(
+                projection = projection,
+                period = period,
+                currentBalance = effectiveBalance,
+                confidence = confidence
+            )
+        }
 
-            item(key = "upcoming_section") {
-                UpcomingSection(
-                    transactionsViewModel,
-                    overdue,
-                    dueSoon,
-                    later,
-                    allCategories,
-                    upcomingViewModel,
-                    haptic,
-                    categoryViewModel
-                )
-            }
+        item(key = "upcoming_section") {
+            UpcomingSection(
+                transactionsViewModel,
+                overdue,
+                dueSoon,
+                later,
+                allCategories,
+                upcomingViewModel,
+                haptic,
+                categoryViewModel
+            )
+        }
 
-            item(key = "insights_card") {
-                ProjectionInsightsCard(
-                    projection = projection,
-                    transactionCount = recentTransactions.size,
-                    period = period,
-                    selectedPeriodIndex = selectedPeriod,
-                    onPeriodChange = { selectedPeriod = it },
-                    transactions,
-                    allCategories
-                )
-            }
+        item(key = "insights_card") {
+            ProjectionInsightsCard(
+                projection = projection,
+                transactionCount = recentTransactions.size,
+                period = period,
+                selectedPeriodIndex = selectedPeriod,
+                onPeriodChange = { selectedPeriod = it },
+                transactions,
+                allCategories
+            )
         }
     }
 }

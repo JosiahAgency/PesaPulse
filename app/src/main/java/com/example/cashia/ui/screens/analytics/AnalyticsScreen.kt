@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,38 +107,40 @@ fun AnalyticsScreen(
         }
     }
 
-    Scaffold(containerColor = Color.Transparent) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // 1. Period picker
-            item {
-                PeriodSelectorCard(
-                    hapticFeedback, selectedScope,
-                    startDate = startDate, endDate = endDate,
-                    onScopeChange = { selectedScope = it },
-                    onStartDateSelected = { startDate = it; selectedScope = TimeScope.CUSTOM },
-                    onEndDateSelected = { endDate = it; selectedScope = TimeScope.CUSTOM }
-                )
-            }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 115.dp,
+            bottom = 120.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Period picker
+        item {
+            PeriodSelectorCard(
+                hapticFeedback, selectedScope,
+                startDate = startDate, endDate = endDate,
+                onScopeChange = { selectedScope = it },
+                onStartDateSelected = { startDate = it; selectedScope = TimeScope.CUSTOM },
+                onEndDateSelected = { endDate = it; selectedScope = TimeScope.CUSTOM }
+            )
+        }
 
-            item {
-                TypeSelectorCard(
-                    hapticFeedback, selectedType = selectedType,
-                    onTypeChange = { selectedType = it },
-                    transactions = transactions, startTs = startTs, endTs = endTs
-                )
-            }
+        item {
+            TypeSelectorCard(
+                hapticFeedback, selectedType = selectedType,
+                onTypeChange = { selectedType = it },
+                transactions = transactions, startTs = startTs, endTs = endTs
+            )
+        }
 
-            item { CashFlowTrendChart(transactions, startDate, endDate) }
+        item { CashFlowTrendChart(transactions, startDate, endDate) }
 
 //                item { BalanceTrendCard(transactions, startDate, endDate) }
 
-            if (filteredTransactions.isNotEmpty()) {
+        if (filteredTransactions.isNotEmpty()) {
 //                    item {
 //                        SummaryAmountHeader(
 //                            hapticFeedback,
@@ -151,11 +151,11 @@ fun AnalyticsScreen(
 //                            previousPeriodAmount = previousPeriodAmount
 //                        )
 //                    }
-                item {
-                    CategoryPieChart(
-                        filteredTransactions, allCategories, selectedType, hapticFeedback
-                    )
-                }
+            item {
+                CategoryPieChart(
+                    filteredTransactions, allCategories, selectedType, hapticFeedback
+                )
+            }
 //
 //                    item {
 //                        TopMerchantsCard(
@@ -164,44 +164,42 @@ fun AnalyticsScreen(
 //                        )
 //                    }
 
-                if (selectedType == TransactionType.EXPENSE) {
-                    item {
-                        BurnRateCard(
-                            transactions = transactions,
-                            startDate = startDate,
-                            endDate = endDate
-                        )
-                    }
-                }
-
+            if (selectedType == TransactionType.EXPENSE) {
                 item {
-                    WeekdaySpendCard(
-                        transactions = transactions,   // full history for richer pattern
-                        type = typeStr
-                    )
-                }
-
-                // Recurring merchants
-                item {
-                    RecurringMerchantsCard(
+                    BurnRateCard(
                         transactions = transactions,
-                        type = typeStr
+                        startDate = startDate,
+                        endDate = endDate
                     )
                 }
-
-                // Time-of-day heatmap
-                item {
-                    TimeOfDayCard(
-                        transactions = filteredTransactions,
-                        type = typeStr
-                    )
-                }
-            } else {
-                item { InsightsEmptyState(selectedType, periodLabel) }
             }
+
+            item {
+                WeekdaySpendCard(
+                    transactions = transactions,   // full history for richer pattern
+                    type = typeStr
+                )
+            }
+
+            // Recurring merchants
+            item {
+                RecurringMerchantsCard(
+                    transactions = transactions,
+                    type = typeStr
+                )
+            }
+
+            // Time-of-day heatmap
+            item {
+                TimeOfDayCard(
+                    transactions = filteredTransactions,
+                    type = typeStr
+                )
+            }
+        } else {
+            item { InsightsEmptyState(selectedType, periodLabel) }
         }
     }
-
 }
 
 @Composable
