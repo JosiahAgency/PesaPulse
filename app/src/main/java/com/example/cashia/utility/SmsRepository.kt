@@ -1,6 +1,7 @@
 package com.example.cashia.utility
 
 import android.content.Context
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
@@ -68,22 +69,31 @@ sealed class ProcessedResult {
 }
 
 suspend fun syncTransactions(context: Context, database: AppDatabase) {
+    val startTime = System.currentTimeMillis()
     val dao = database.transactionDao()
     val unmatchedDao = database.unmatchedSmsDao()
     val syncDao = database.syncStateDao()
     val categoryDao = database.customCategoryDao()
     val correctionDao = database.userCorrectionDao()
+
     val lastSmsId = syncDao.getLastSmsId("mpesa_sync") ?: 0L
 
+    // 1. Fetch Phase
+    val fetchStart = System.currentTimeMillis()
     val messages = fetchMpesaMessages(context, lastSmsId)
+    val fetchEnd = System.currentTimeMillis()
+
     if (messages.isEmpty()) return
 
-    val newestSmsId = messages.last().id
+    Log.d("SyncPerf", "Fetched ${messages.size} messages in ${fetchEnd - fetchStart}ms")
 
+    val newestSmsId = messages.last().id
     val customCategories = categoryDao.getAllCustomCategoriesOnce()
     val userCorrections = correctionDao.getAllCorrectionsOnce()
         .associate { it.recipient to it.categoryId }
 
+    // 2. Processing Phase (Parsing & Category Guessing)
+    val processStart = System.currentTimeMillis()
     val processedResults = withContext(Dispatchers.Default) {
         messages.map { sms ->
             async {
@@ -102,22 +112,20 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
                     }
 
                     is ParseResult.Unmatched -> ProcessedResult.Unmatched(
-                        UnmatchedSms(
-                            smsId = sms.id,
-                            rawBody = result.rawBody
-                        )
+                        UnmatchedSms(smsId = sms.id, rawBody = result.rawBody)
                     )
 
                     is ParseResult.Irrelevant -> ProcessedResult.Ignored
                 }
             }
-        }.awaitAll() // Concurrently suspends until all worker threads finish processing
+        }.awaitAll()
     }
+    val processEnd = System.currentTimeMillis()
+    Log.d("SyncPerf", "Processed ${messages.size} items in ${processEnd - processStart}ms")
 
+    // Sort results
     val parsed = mutableListOf<MpesaTransactions>()
     val unmatched = mutableListOf<UnmatchedSms>()
-
-
     for (result in processedResults) {
         when (result) {
             is ProcessedResult.Parsed -> parsed.add(result.transaction)
@@ -126,20 +134,95 @@ suspend fun syncTransactions(context: Context, database: AppDatabase) {
         }
     }
 
+    // 3. Database Insertion Phase
+    val dbStart = System.currentTimeMillis()
     database.withTransaction {
-        if (parsed.isNotEmpty()) {
-            dao.insertTransactions(parsed)
-        }
-
-        if (unmatched.isNotEmpty()) {
-            unmatchedDao.insertAll(unmatched)
-        }
-
-        syncDao.upsert(
-            SyncState(
-                key = "mpesa_sync",
-                lastSmsId = newestSmsId
-            )
-        )
+        if (parsed.isNotEmpty()) dao.insertTransactions(parsed)
+        if (unmatched.isNotEmpty()) unmatchedDao.insertAll(unmatched)
+        syncDao.upsert(SyncState(key = "mpesa_sync", lastSmsId = newestSmsId))
     }
+    val dbEnd = System.currentTimeMillis()
+
+    Log.d("SyncPerf", "Database transaction finished in ${dbEnd - dbStart}ms")
+    Log.d("SyncPerf", "Total sync cycle completed in ${dbEnd - startTime}ms")
 }
+
+//suspend fun syncTransactions(context: Context, database: AppDatabase) {
+//    val dao = database.transactionDao()
+//    val unmatchedDao = database.unmatchedSmsDao()
+//    val syncDao = database.syncStateDao()
+//    val categoryDao = database.customCategoryDao()
+//    val correctionDao = database.userCorrectionDao()
+//    val lastSmsId = syncDao.getLastSmsId("mpesa_sync") ?: 0L
+//
+//    val fetchStart = System.currentTimeMillis()
+//    val messages = fetchMpesaMessages(context, lastSmsId)
+//    if (messages.isEmpty()) return
+//    val fetchEnd = System.currentTimeMillis()
+//    Log.d("SyncPerf", "Fetched ${messages.size} messages in ${fetchEnd - fetchStart}ms")
+//
+//    val newestSmsId = messages.last().id
+//
+//    val customCategories = categoryDao.getAllCustomCategoriesOnce()
+//    val userCorrections = correctionDao.getAllCorrectionsOnce()
+//        .associate { it.recipient to it.categoryId }
+//
+//    val processedResults = withContext(Dispatchers.Default) {
+//        messages.map { sms ->
+//            async {
+//                when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
+//                    is ParseResult.Success -> {
+//                        val tx = result.transactions.copy(smsId = sms.id)
+//                        val betterCategory = guessCategory(
+//                            recipient = tx.recipient,
+//                            type = tx.type,
+//                            customCategories = customCategories,
+//                            userCorrections = userCorrections
+//                        )
+//                        ProcessedResult.Parsed(
+//                            if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
+//                        )
+//                    }
+//
+//                    is ParseResult.Unmatched -> ProcessedResult.Unmatched(
+//                        UnmatchedSms(
+//                            smsId = sms.id,
+//                            rawBody = result.rawBody
+//                        )
+//                    )
+//
+//                    is ParseResult.Irrelevant -> ProcessedResult.Ignored
+//                }
+//            }
+//        }.awaitAll() // Concurrently suspends until all worker threads finish processing
+//    }
+//
+//    val parsed = mutableListOf<MpesaTransactions>()
+//    val unmatched = mutableListOf<UnmatchedSms>()
+//
+//
+//    for (result in processedResults) {
+//        when (result) {
+//            is ProcessedResult.Parsed -> parsed.add(result.transaction)
+//            is ProcessedResult.Unmatched -> unmatched.add(result.unmatchedSms)
+//            ProcessedResult.Ignored -> Unit
+//        }
+//    }
+//
+//    database.withTransaction {
+//        if (parsed.isNotEmpty()) {
+//            dao.insertTransactions(parsed)
+//        }
+//
+//        if (unmatched.isNotEmpty()) {
+//            unmatchedDao.insertAll(unmatched)
+//        }
+//
+//        syncDao.upsert(
+//            SyncState(
+//                key = "mpesa_sync",
+//                lastSmsId = newestSmsId
+//            )
+//        )
+//    }
+//}

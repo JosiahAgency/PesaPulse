@@ -34,8 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +50,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -73,17 +72,19 @@ fun CalendarScreen(
     viewModel: TransactionsViewModel,
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel,
+    calendarViewModel: CalendarViewModel
 ) {
     val today = remember { LocalDate.now() }
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+    val upcomingAll by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
     var selectedDate by remember { mutableStateOf(today) }
     var filterByDay by remember { mutableStateOf(false) }
-    val state by viewModel.state.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val upcomingAll by upcomingViewModel.upcoming.collectAsState()
     var selectedFilter by remember { mutableStateOf(TransactionType.ALL) }
-    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+    val calendarState by calendarViewModel.uiState.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -94,34 +95,34 @@ fun CalendarScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val upcomingForDay by remember(upcomingAll, selectedDate) {
-        derivedStateOf { upcomingAll.filter { it.dueDate == selectedDate.toString() } }
-    }
-
-    val filteredTransctions by remember(
-        state.allTransactions,
-        selectedDate,
-        selectedFilter,
-        filterByDay
-    ) {
-        derivedStateOf {
-            val monthlyPrefix =
-                "${selectedDate.year}-${selectedDate.monthValue.toString().padStart(2, '0')}"
-            val dayString = selectedDate.toString()
-            state.allTransactions.filter { tx ->
-                if (filterByDay) {
-                    if (tx.date != dayString) return@filter false
-                } else {
-                    if (!tx.date.startsWith(monthlyPrefix)) return@filter false
-                }
-                when (selectedFilter) {
-                    TransactionType.ALL -> true
-                    TransactionType.INCOME -> tx.type.equals("income", ignoreCase = true)
-                    TransactionType.EXPENSE -> tx.type.equals("expense", ignoreCase = true)
-                }
-            }
-        }
-    }
+//    val upcomingForDay by remember(upcomingAll, selectedDate) {
+//        derivedStateOf { upcomingAll.filter { it.dueDate == selectedDate.toString() } }
+//    }
+//
+//    val filteredTransctions by remember(
+//        state.allTransactions,
+//        selectedDate,
+//        selectedFilter,
+//        filterByDay
+//    ) {
+//        derivedStateOf {
+//            val monthlyPrefix =
+//                "${selectedDate.year}-${selectedDate.monthValue.toString().padStart(2, '0')}"
+//            val dayString = selectedDate.toString()
+//            state.allTransactions.filter { tx ->
+//                if (filterByDay) {
+//                    if (tx.date != dayString) return@filter false
+//                } else {
+//                    if (!tx.date.startsWith(monthlyPrefix)) return@filter false
+//                }
+//                when (selectedFilter) {
+//                    TransactionType.ALL -> true
+//                    TransactionType.INCOME -> tx.type.equals("income", ignoreCase = true)
+//                    TransactionType.EXPENSE -> tx.type.equals("expense", ignoreCase = true)
+//                }
+//            }
+//        }
+//    }
 
     if (upcomingUiState.showSheet) {
         UpcomingTransactionSheet(
@@ -129,7 +130,7 @@ fun CalendarScreen(
             viewModel = upcomingViewModel,
             allCategories = allCategories,
             categoryViewModel = categoryViewModel,
-            onDismiss = { upcomingViewModel.closeSheet() }
+            onDismiss = upcomingViewModel::closeSheet
         )
     }
 
@@ -145,43 +146,46 @@ fun CalendarScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
-                FinancialOverviewCards(state.allTransactions, selectedDate, selectedFilter) {
-                    selectedFilter = it
-                }
+                FinancialOverviewCards(
+                    state.allTransactions, calendarState.selectedDate, calendarState.selectedFilter,
+                    calendarViewModel::setFilter
+                )
             }
             item {
                 FullMonthCalendar(
                     allTransactions = state.allTransactions,
-                    selectedDate = selectedDate,
-                    upcomingTransactions = upcomingAll
-                ) { clickedDate ->
-                    filterByDay =
-                        !(clickedDate.month != selectedDate.month || clickedDate.year != selectedDate.year)
-                    selectedDate = clickedDate
-                }
+                    selectedDate = calendarState.selectedDate,
+                    upcomingTransactions = upcomingAll,
+                    calendarViewModel::handleDayClick
+                )
             }
             item {
                 ListHeader(
-                    selectedFilter = selectedFilter,
-                    filterByDay = filterByDay,
-                    selectedDate = selectedDate,
-                    onClearDayFilter = { filterByDay = false }
+                    selectedFilter = calendarState.selectedFilter,
+                    filterByDay = calendarState.filterByDay,
+                    selectedDate = calendarState.selectedDate,
+                    calendarViewModel::clearDayFilter
                 )
             }
-            if (filteredTransctions.isEmpty() && (!filterByDay || upcomingForDay.isEmpty())) {
+
+            val noTransactions = calendarState.filteredTransactions.isEmpty()
+            val noUpcoming = calendarState.upcomingForDay.isEmpty()
+
+            if (noTransactions && (!calendarState.filterByDay || noUpcoming)) {
                 item { EmptyStateMessage("No Transactions Found") }
             } else {
-                if (filterByDay && upcomingForDay.isNotEmpty()) {
+                if (calendarState.filterByDay && !noUpcoming) {
                     items(
-                        upcomingForDay,
-                        key = { "upcoming-${it.dueDate}-${filteredTransctions.size}" }) { upcomingTx ->
+                        items = calendarState.upcomingForDay,
+                        key = { "upcoming-${it.dueDate}-${calendarState.filteredTransactions.size}" }
+                    ) { upcomingTx ->
                         CalendarUpcomingItem(
                             title = "Scheduled Commitment",
                             dateStr = upcomingTx.dueDate
                         )
                     }
                 }
-                items(filteredTransctions, key = { it.id }) { tx ->
+                items(calendarState.filteredTransactions, key = { it.id }) { tx ->
                     TransactionItem(
                         tx,
                         allCategories,
@@ -194,9 +198,9 @@ fun CalendarScreen(
             }
         }
 
-        // FAB — floats above island nav, no Scaffold needed
+        val showFab = calendarState.selectedDate != today || !calendarState.filterByDay
         AnimatedVisibility(
-            visible = selectedDate != today || !filterByDay,
+            visible = showFab,
             enter = fadeIn(tween(200)),
             exit = fadeOut(tween(150)),
             modifier = Modifier
@@ -204,7 +208,7 @@ fun CalendarScreen(
                 .padding(bottom = 150.dp)
         ) {
             ExtendedFloatingActionButton(
-                onClick = { selectedDate = today; filterByDay = true },
+                onClick = calendarViewModel::resetToToday,
                 icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
                 text = { Text("Today", fontWeight = FontWeight.SemiBold) },
                 containerColor = Color.Transparent,

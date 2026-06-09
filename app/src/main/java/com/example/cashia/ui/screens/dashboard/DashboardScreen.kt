@@ -12,7 +12,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -43,13 +42,12 @@ fun DashboardScreen(
     val selectedDate by dashboardViewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedScope by dashboardViewModel.scope.collectAsStateWithLifecycle()
     val isListExpanded by dashboardViewModel.isListExpanded.collectAsStateWithLifecycle()
-
+    val dashboardState by dashboardViewModel.dashboardState.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
-    val state by viewModel.state.collectAsState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val periodLabel by viewModel.dashboardPeriodLabel.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -63,10 +61,6 @@ fun DashboardScreen(
 
     LaunchedEffect(allCategories) {
         viewModel.updateCategories(allCategories)
-    }
-
-    LaunchedEffect(selectedDate, selectedScope) {
-        viewModel.setDashboardScope(selectedDate, selectedScope)
     }
 
     Box(
@@ -93,10 +87,10 @@ fun DashboardScreen(
             item {
                 PeriodSummaryCard(
                     selectedScope,
-                    { dashboardViewModel.setScope(it) },
-                    periodLabel,
-                    state.totalIncome,
-                    state.totalExpenses,
+                    dashboardViewModel::setScope,
+                    dashboardState.periodLabel,
+                    dashboardState.totalIncome,
+                    dashboardState.totalExpenses,
                     hapticFeedback
                 )
             }
@@ -104,16 +98,15 @@ fun DashboardScreen(
                 WeeklyCalendar(
                     hapticFeedback,
                     state.allTransactions,
-                    selectedDate
-                ) {
-                    dashboardViewModel.setDate(it)
-                }
+                    selectedDate,
+                    dashboardViewModel::setDate
+                )
             }
 
             item {
                 TransactionListHeader(
-                    periodLabel,
-                    state.filteredTransactions.size,
+                    dashboardState.periodLabel,
+                    dashboardState.filteredTransactions.size,
                     isListExpanded,
                     {
                         PesaActions.playClick(hapticFeedback)
@@ -122,8 +115,8 @@ fun DashboardScreen(
                 )
             }
 
-            if (state.filteredTransactions.isNotEmpty() && isListExpanded) {
-                items(state.filteredTransactions, key = { it.id }) { tx ->
+            if (dashboardState.filteredTransactions.isNotEmpty() && isListExpanded) {
+                items(dashboardState.filteredTransactions, key = { it.id }) { tx ->
                     TransactionItem(
                         tx,
                         allCategories,
@@ -133,7 +126,7 @@ fun DashboardScreen(
                         reversalIndex,
                     )
                 }
-            } else if (state.filteredTransactions.isEmpty() && isListExpanded) {
+            } else if (dashboardState.filteredTransactions.isEmpty() && isListExpanded) {
                 item { EmptyStateMessage("No transactions in this period") }
             }
         }
@@ -144,7 +137,7 @@ fun DashboardScreen(
             viewModel = upcomingViewModel,
             allCategories = allCategories,
             categoryViewModel = categoryViewModel,
-            onDismiss = { upcomingViewModel.closeSheet() }
+            onDismiss = upcomingViewModel::closeSheet
         )
     }
 }

@@ -42,7 +42,7 @@ fun BalanceHeroCard(
                 .padding(horizontal = 24.dp, vertical = 20.dp)
         ) {
             SectionLabel("current Balance")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -70,11 +70,12 @@ fun BalanceHeroCard(
                     Icon(
                         imageVector = if (isVisible) Icons.Default.Visibility
                         else Icons.Default.VisibilityOff,
-                        contentDescription = "Toggle balance visibility"
+                        contentDescription = "Toggle balance visibility",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Subtitles("Latest Updated: $latestBalanceDate")
         }
     }

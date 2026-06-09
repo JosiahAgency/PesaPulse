@@ -10,8 +10,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
 import com.example.cashia.utility.ParsedTx
-import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.partialFieldsFromJson
 import com.example.cashia.utility.syncTransactions
 import com.example.cashia.utility.weekBucket
@@ -37,7 +35,6 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 data class TransactionState(
@@ -54,6 +51,8 @@ data class TransactionState(
     val selectedCategory: String? = null,
     val searchQuery: String = "",
     val fulizaLimit: Double = 0.0,
+    val dateRangeStart: LocalDate? = null,
+    val dateRangeEnd: LocalDate? = null,
 )
 
 data class ReversalIndex(
@@ -66,11 +65,6 @@ private data class Totals(
     val expenses: Double,
     val transactionCost: Double,
 )
-
-private val dayFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")
-private val weekFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
-private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
-private val yearFormatter = DateTimeFormatter.ofPattern("yyyy")
 
 @OptIn(FlowPreview::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
@@ -86,25 +80,18 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     private val _dateRangeEnd = MutableStateFlow<LocalDate?>(null)
     private val _categoryLabelsMap = MutableStateFlow<Map<String, String>>(emptyMap())
 
-    // ── Dashboard label ────────────────────────────────────────────────────────
-    private val _dashboardPeriodLabel = MutableStateFlow("")
-    val dashboardPeriodLabel: StateFlow<String> = _dashboardPeriodLabel.asStateFlow()
-
     // ── Sync state ─────────────────────────────────────────────────────────────
     private val syncMutex = Mutex()
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     // ── New-transactions event (replaces raw nullable callback) ────────────────
-    // Collectors receive the freshly-synced list once per sync cycle.
     private val _newTransactionsSynced =
         MutableSharedFlow<List<MpesaTransactions>>(extraBufferCapacity = 1)
     val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
         _newTransactionsSynced.asSharedFlow()
 
     // ── Single shared DB upstream ──────────────────────────────────────────────
-    // Shared so that `state` and `reversalIndex` both consume one DB subscription
-    // instead of each opening their own observer.
     private val allTransactionsShared = dao
         .getAllTransactions()
         .shareIn(
@@ -113,9 +100,22 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             replay = 1
         )
 
+    val allTransactionsFlow: StateFlow<List<MpesaTransactions>> = allTransactionsShared
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val parsedTransactionsFlow = allTransactionsShared
+        .map { txs ->
+            val today = LocalDate.now()
+            txs.map { tx ->
+                val date = parseDateOrWarn(tx.date, tx.id, today)
+                ParsedTx(tx, date, weekBucket(date))
+            }
+        }
+        .flowOn(Dispatchers.Default)
+
     // ── Main state ─────────────────────────────────────────────────────────────
     val state: StateFlow<TransactionState> = combine(
-        allTransactionsShared,             // DB changes propagate immediately
+        parsedTransactionsFlow,             // DB changes propagate immediately
         _searchQuery.debounce(300),        // Only search input benefits from debouncing
         _selectedCategoryFilter,
         _dateRangeStart,
@@ -123,7 +123,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         _categoryLabelsMap
     ) { args ->
         @Suppress("UNCHECKED_CAST")
-        val transactions = args[0] as List<MpesaTransactions>
+        val transactions = args[0] as List<ParsedTx>
         val query = args[1] as String
         val catFilter = args[2] as String?
         val start = args[3] as LocalDate?
@@ -234,20 +234,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { silentSync() }
     }
 
-    fun updateFilters(
-        query: String,
-        categoryFilter: String?,
-        start: LocalDate?,
-        end: LocalDate?,
-        categoryMap: Map<String, String>
-    ) {
-        _searchQuery.value = query
-        _selectedCategoryFilter.value = categoryFilter
-        _dateRangeStart.value = start
-        _dateRangeEnd.value = end
-        _categoryLabelsMap.value = categoryMap
-    }
-
     fun updateCategories(categories: List<ResolvedCategory>) {
         _categoryLabelsMap.value = categories.associate { it.id to it.label }
     }
@@ -263,43 +249,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     fun setDateRange(start: LocalDate?, end: LocalDate?) {
         _dateRangeStart.value = start
         _dateRangeEnd.value = end
-    }
-
-    fun setDashboardScope(date: LocalDate, scope: TimeScope) {
-        viewModelScope.launch(Dispatchers.Default) {
-            val firstDay = PesaTimeConfiguration.firstDayOfWeek
-            val (start, end) = when (scope) {
-                TimeScope.DAY -> date to date
-                TimeScope.WEEK -> {
-                    val s = date.with(TemporalAdjusters.previousOrSame(firstDay))
-                    s to s.plusDays(6)
-                }
-
-                TimeScope.MONTH -> date.with(TemporalAdjusters.firstDayOfMonth()) to
-                        date.with(TemporalAdjusters.lastDayOfMonth())
-
-                TimeScope.YEAR -> date.with(TemporalAdjusters.firstDayOfYear()) to
-                        date.with(TemporalAdjusters.lastDayOfYear())
-
-                TimeScope.CUSTOM -> date to date
-            }
-
-            _dashboardPeriodLabel.value = when (scope) {
-                TimeScope.DAY -> date.format(dayFormatter)
-                TimeScope.WEEK -> "${start.format(weekFormatter)} – ${end.format(weekFormatter)}"
-                TimeScope.MONTH -> date.format(monthFormatter)
-                TimeScope.YEAR -> date.format(yearFormatter)
-                else -> ""
-            }
-
-            updateFilters(
-                query = state.value.searchQuery,
-                categoryFilter = state.value.selectedCategory,
-                start = start,
-                end = end,
-                categoryMap = _categoryLabelsMap.value
-            )
-        }
     }
 
     suspend fun getTransactionById(id: String): MpesaTransactions? =
@@ -353,58 +302,55 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     // ── Pure computation helpers ───────────────────────────────────────────────
 
     private fun computeFilteredState(
-        allTxs: List<MpesaTransactions>,
+        allParsed: List<ParsedTx>,
         query: String,
         catFilter: String?,
         start: LocalDate?,
         end: LocalDate?,
         catMap: Map<String, String>
     ): TransactionState {
-        // Single capture of "now" used throughout this computation.
         val today = LocalDate.now()
         val amountQuery = query.trim().toDoubleOrNull()
         val isQueryBlank = query.isBlank()
 
-        val latestFulizaLimit = allTxs.firstOrNull {
-            it.category == TransactionCategory.FULIZA.name &&
-                    it.type == "neutral" &&
-                    it.recipient == "Fuliza Limit Update"
-        }?.amount ?: 0.0
+        val latestTx = allParsed.firstOrNull()?.tx
+        val latestBalanceDate = latestTx?.date ?: ""
+        val latestBalanceDateParsed = allParsed.firstOrNull()?.date ?: today
 
-        val filteredList = allTxs.filter { tx ->
+        val latestFulizaLimit = allParsed.firstOrNull {
+            it.tx.category == TransactionCategory.FULIZA.name &&
+                    it.tx.type == "neutral" &&
+                    it.tx.recipient == "Fuliza Limit Update"
+        }?.tx?.amount ?: 0.0
+
+        val filteredList = allParsed.filter { tx ->
             // Always exclude Fuliza limit-update pseudo-transactions from the list.
-            val isLimitUpdate = tx.category == TransactionCategory.FULIZA.name &&
-                    tx.type == "neutral" &&
-                    tx.recipient == "Fuliza Limit Update"
+            val isLimitUpdate = tx.tx.category == TransactionCategory.FULIZA.name &&
+                    tx.tx.type == "neutral" &&
+                    tx.tx.recipient == "Fuliza Limit Update"
             if (isLimitUpdate) return@filter false
 
             val textMatch = isQueryBlank ||
-                    tx.recipient.contains(query, ignoreCase = true) ||
-                    tx.id.contains(query, ignoreCase = true) ||
-                    (amountQuery != null && tx.amount == amountQuery) ||
-                    catMap[tx.category]?.contains(query, ignoreCase = true) == true
+                    tx.tx.recipient.contains(query, ignoreCase = true) ||
+                    tx.tx.id.contains(query, ignoreCase = true) ||
+                    (amountQuery != null && tx.tx.amount == amountQuery) ||
+                    catMap[tx.tx.category]?.contains(query, ignoreCase = true) == true
 
-            val catMatch = catFilter == null || tx.category == catFilter
+            val catMatch = catFilter == null || tx.tx.category == catFilter
 
-            val txDate = parseDateOrWarn(tx.date, tx.id, today)
-            val dateMatch = (start == null || !txDate.isBefore(start)) &&
-                    (end == null || !txDate.isAfter(end))
+            val dateMatch = (start == null || !tx.date.isBefore(start)) &&
+                    (end == null || !tx.date.isAfter(end))
 
             textMatch && catMatch && dateMatch
         }
 
-        val totals = computeTotals(filteredList)
-        val groupedTxs = buildGroupedTransactions(filteredList, today)
-        val latestTx = allTxs.firstOrNull()
-        val latestBalanceDate = latestTx?.date ?: ""
-        val latestBalanceDateParsed = latestBalanceDate
-            .takeIf { it.isNotBlank() }
-            ?.let { parseDateOrWarn(it, "latestTx", today) }
-            ?: today
+        val filteredTxs = filteredList.map { it.tx }
+        val totals = computeTotals(filteredTxs)
+        val groupedTxs = buildGroupedTransactions(filteredList)
 
         return TransactionState(
-            allTransactions = allTxs,
-            filteredTransactions = filteredList,
+            allTransactions = allParsed.map { it.tx },
+            filteredTransactions = filteredTxs,
             groupedTransactions = groupedTxs,
             latestBalance = latestTx?.balance ?: 0.0,
             latestBalanceDate = latestBalanceDate,
@@ -416,6 +362,8 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             selectedCategory = catFilter,
             searchQuery = query,
             fulizaLimit = latestFulizaLimit,
+            dateRangeStart = start,
+            dateRangeEnd = end,
         )
     }
 
@@ -441,14 +389,9 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
      * sorted newest-first at both levels.
      */
     private fun buildGroupedTransactions(
-        txs: List<MpesaTransactions>,
-        today: LocalDate
+        parsedTxs: List<ParsedTx>
     ): List<WeekGroup> =
-        txs
-            .map { tx ->
-                val date = parseDateOrWarn(tx.date, tx.id, today)
-                ParsedTx(tx, date, weekBucket(date))
-            }
+        parsedTxs
             .groupBy { it.bucket }
             .entries
             .sortedByDescending { entry -> entry.value.maxOf { it.date } }

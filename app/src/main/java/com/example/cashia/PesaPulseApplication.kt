@@ -16,14 +16,15 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,19 +53,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +77,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.cashia.models.AnalyticsViewModel
+import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
 import com.example.cashia.models.SettingsViewModel
@@ -115,11 +116,11 @@ fun PesaPulseApp() {
     }
 
     val haptic = LocalHapticFeedback.current
-    val dashboardViewModel: DashboardViewModel = viewModel(
-        factory = DashboardViewModel.provideFactory(context)
-    )
     val sharedViewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.provideFactory(context)
+    )
+    val dashboardViewModel: DashboardViewModel = viewModel(
+        factory = DashboardViewModel.provideFactory(context, sharedViewModel.allTransactionsFlow)
     )
     val categoryViewModel: CategoryViewModel = viewModel(
         factory = CategoryViewModel.provideFactory(context)
@@ -174,13 +175,31 @@ fun PesaPulseApp() {
                 TransactionScreen(sharedViewModel, categoryViewModel, upcomingViewModel)
             }
             composable(AppDestinations.Calendar.route) {
-                CalendarScreen(sharedViewModel, categoryViewModel, upcomingViewModel)
+                val calendarViewModel: CalendarViewModel = viewModel(
+                    factory = CalendarViewModel.provideFactory(
+                        sharedViewModel.allTransactionsFlow,
+                        upcomingViewModel.upcoming
+                    )
+                )
+                CalendarScreen(
+                    sharedViewModel,
+                    categoryViewModel,
+                    upcomingViewModel,
+                    calendarViewModel
+                )
             }
             composable(AppDestinations.Analytics.route) {
-                AnalyticsScreen(categoryViewModel, sharedViewModel)
-            }
-            composable(AppDestinations.Projections.route) {
-                ProjectionScreen(sharedViewModel, upcomingViewModel, categoryViewModel)
+                val analyticsViewModel: AnalyticsViewModel = viewModel(
+                    factory = AnalyticsViewModel.provideFactory(
+                        sharedViewModel.allTransactionsFlow,
+                    )
+                )
+                AnalyticsScreen(categoryViewModel, sharedViewModel, analyticsViewModel)
+                ProjectionScreen(
+                    sharedViewModel,
+                    upcomingViewModel,
+                    categoryViewModel,
+                )
             }
             composable(AppDestinations.Settings.route) {
                 SettingsScreen(
@@ -203,8 +222,7 @@ fun PesaPulseApp() {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
                             0f to bgColor,
@@ -244,7 +262,6 @@ fun PesaPulseApp() {
                         }
                     }
                 },
-                windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
@@ -276,8 +293,7 @@ fun PesaPulseApp() {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
                             0f to bgColor.copy(alpha = 0f),
@@ -288,10 +304,11 @@ fun PesaPulseApp() {
             )
 
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // FAB sits just above the island, fades in/out cleanly
                 AnimatedVisibility(
                     visible = showBackToTodayFab,
                     enter = fadeIn(tween(200)),
@@ -300,7 +317,7 @@ fun PesaPulseApp() {
                     ExtendedFloatingActionButton(
                         onClick = { dashboardViewModel.setDate(today) },
                         icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
-                        text = { Text("Back to Today", fontWeight = FontWeight.SemiBold) },
+                        text = { Text("Today", fontWeight = FontWeight.SemiBold) },
                         containerColor = Color.Transparent,
                         elevation = FloatingActionButtonDefaults.elevation(0.dp),
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -330,10 +347,9 @@ fun IslandNavigationBar(
     Surface(
         modifier = Modifier
             .padding(24.dp, 16.dp)
-            .navigationBarsPadding()
             .fillMaxWidth()
-            .height(64.dp),
-        shape = RoundedCornerShape(32.dp),
+            .height(70.dp),
+        shape = RoundedCornerShape(36.dp),
         color = colorScheme.surface,
     ) {
         Row(
@@ -372,10 +388,11 @@ private fun RowScope.IslandNavItem(
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
-    // Press feedback
-    var pressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.82f else 1f,
+        targetValue = if (pressed) 0.85f else 1f,
         animationSpec = spring(
             stiffness = Spring.StiffnessHigh,       // snappy down
             dampingRatio = Spring.DampingRatioNoBouncy
@@ -405,22 +422,17 @@ private fun RowScope.IslandNavItem(
             .weight(1f)
             .fillMaxHeight()
             .scale(scale)
-            .pointerInput(onClick) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        tryAwaitRelease()
-                        pressed = false
-                    },
-                    onTap = { onClick() }
-                )
-            },
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null, // Disables standard ripple since we use scale
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(vertical = 6.dp)
+            modifier = Modifier.padding(vertical = 4.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -429,28 +441,25 @@ private fun RowScope.IslandNavItem(
                     .clip(RoundedCornerShape(2.dp))
                     .background(brush = primaryGradient())
             )
-
             Spacer(Modifier.height(4.dp))
-
             Icon(
                 imageVector = screen.icon,
                 contentDescription = screen.label,
                 modifier = Modifier.size(22.dp),
-                // Animate tint alpha directly — no recompose, no layout change
                 tint = if (selected) colorScheme.primary
                 else colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
             )
 
             Spacer(Modifier.height(2.dp))
-
+            val textBrush = if (selected) primaryGradient() else SolidColor(
+                colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
             Text(
                 text = screen.label,
                 fontSize = 10.sp,
                 maxLines = 1,
                 fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    brush = primaryGradient()
-                ),
+                style = MaterialTheme.typography.labelSmall.copy(brush = textBrush),
                 modifier = Modifier.graphicsLayer { alpha = contentAlpha }
             )
         }

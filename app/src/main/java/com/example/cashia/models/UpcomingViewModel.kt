@@ -43,14 +43,13 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UpcomingUiState())
     val uiState: StateFlow<UpcomingUiState> = _uiState.asStateFlow()
-    var currentState = _uiState.value
 
     fun openCreate() {
-        currentState = UpcomingUiState(showSheet = true)
+        _uiState.value = UpcomingUiState(showSheet = true)
     }
 
     fun openEdit(tx: UpcomingTransaction) {
-        currentState = UpcomingUiState(
+        _uiState.value = UpcomingUiState(
             showSheet = true,
             editing = tx,
             draftTitle = tx.title,
@@ -64,7 +63,7 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     }
 
     fun closeSheet() {
-        currentState = UpcomingUiState()
+        _uiState.value = UpcomingUiState()
     }
 
     fun onTitleChange(v: String) {
@@ -111,8 +110,8 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
 
     // ── Save ──────────────────────────────────────────────────────────────
     fun save() {
-        val title = currentState.draftTitle.trim()
-        val amount = currentState.draftAmount.toDouble()
+        val title = _uiState.value.draftTitle.trim()
+        val amount = _uiState.value.draftAmount.toDouble()
 
         if (title.isBlank()) {
             _uiState.update {
@@ -126,22 +125,22 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         }
 
         val txToSave = UpcomingTransaction(
-            id = currentState.editing?.id ?: java.util.UUID.randomUUID().toString(),
+            id = _uiState.value.editing?.id ?: java.util.UUID.randomUUID().toString(),
             title = title,
             amount = amount,
-            categoryId = currentState.draftCategory,
-            dueDate = currentState.draftDueDate.toString(),
-            type = currentState.draftType,
-            recurrence = currentState.draftRecurrence,
-            notes = currentState.draftNotes.trim(),
-            status = currentState.editing?.status ?: UpcomingStatus.PENDING,
-            createdAt = currentState.editing?.createdAt ?: System.currentTimeMillis()
+            categoryId = _uiState.value.draftCategory,
+            dueDate = _uiState.value.draftDueDate.toString(),
+            type = _uiState.value.draftType,
+            recurrence = _uiState.value.draftRecurrence,
+            notes = _uiState.value.draftNotes.trim(),
+            status = _uiState.value.editing?.status ?: UpcomingStatus.PENDING,
+            createdAt = _uiState.value.editing?.createdAt ?: System.currentTimeMillis()
         )
 
         viewModelScope.launch(Dispatchers.IO) {
             dao.upsert(txToSave)
             kotlinx.coroutines.withContext(Dispatchers.Main) {
-                currentState = UpcomingUiState()
+                _uiState.value = UpcomingUiState()
             }
         }
     }
@@ -219,19 +218,18 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         category: String,
         type: String
     ) {
-        val scheduledType = if (type.equals("income", ignoreCase = true)) {
-            UpcomingType.INCOME
-        } else {
-            UpcomingType.EXPENSE
-        }
-        val nextDate = LocalDate.now().plusMonths(1)
+        val scheduledType = if (type.equals(
+                "income",
+                ignoreCase = true
+            )
+        ) UpcomingType.INCOME else UpcomingType.EXPENSE
 
-        currentState = UpcomingUiState(
+        _uiState.value = UpcomingUiState(
             showSheet = true,
             draftTitle = recipient,
             draftAmount = amount.toString(),
             draftCategory = category,
-            draftDueDate = nextDate,
+            draftDueDate = LocalDate.now().plusMonths(1),
             draftType = scheduledType,
             draftRecurrence = RecurrenceType.MONTHLY,
             draftNotes = "Created automatically from transaction reference: $txId"

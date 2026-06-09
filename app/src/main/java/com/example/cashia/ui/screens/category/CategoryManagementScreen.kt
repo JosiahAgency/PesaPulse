@@ -89,7 +89,6 @@ fun CategoryManagementScreen(viewModel: CategoryViewModel) {
             add(CatListItem.Header("Built-in Categories"))
             val topLevel = viewModel.topLevelCategories(allCategories).filter { it.isSystem }
             topLevel.forEach { parent ->
-                TransactionCategory.entries.find { it.name == parent.id }
                 add(CatListItem.SystemParent(parent, systemOverrides[parent.id]))
                 val children =
                     viewModel.childCategories(allCategories, parent.id).filter { it.isSystem }

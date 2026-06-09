@@ -32,7 +32,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +59,6 @@ import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionShe
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -70,60 +68,51 @@ fun TransactionScreen(
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+    val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val nextPending by viewModel.nextPending.collectAsStateWithLifecycle()
+    val allUnmatched by viewModel.allUnmatched.collectAsStateWithLifecycle()
+
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
-
-//    val searchQuery = state.searchQuery
-    var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
-    var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
-    var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
 
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
-    LaunchedEffect(
-        state.searchQuery,
-        selectedCategoryFilter,
-        dateRangeStart,
-        dateRangeEnd,
-    ) {
-        viewModel.updateFilters(
-            query = state.searchQuery,
-            categoryFilter = selectedCategoryFilter,
-            start = dateRangeStart,
-            end = dateRangeEnd,
-            categoryMap = allCategories.associate { it.id to it.label }
-        )
-    }
+    var localQuery by remember { mutableStateOf(state.searchQuery) }
+    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val hasFilters by remember {
         derivedStateOf {
-            state.selectedCategory != null || state.searchQuery.isNotBlank()
+            state.selectedCategory != null || localQuery.isNotBlank() || state.dateRangeStart != null
         }
     }
-
-    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
-
-    val pendingCount by viewModel.pendingReviewCount.collectAsState()
-    val nextPending by viewModel.nextPending.collectAsState()
-    val allUnmatched by viewModel.allUnmatched.collectAsState()
 
     var showUnmatchedModal by remember { mutableStateOf(false) }
     var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
     var hasAutoOpened by remember { mutableStateOf(false) }
+
+    LaunchedEffect(localQuery) {
+        viewModel.setQuery(localQuery)
+    }
+
+    LaunchedEffect(state.searchQuery) {
+        if (state.searchQuery != localQuery) {
+            localQuery = state.searchQuery
+        }
+    }
 
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
@@ -196,16 +185,17 @@ fun TransactionScreen(
 
                 item(key = "search") {
                     EnhancedSearchBar(
-                        query = state.searchQuery,
+                        query = localQuery,
                         expanded = searchExpanded,
                         recentSearches = recentSearches,
                         allCategories = allCategories,
                         selectedCategory = state.selectedCategory,
-                        dateRangeStart = null,
-                        dateRangeEnd = null,
-                        onQueryChange = viewModel::setQuery,
+                        dateRangeStart = state.dateRangeStart,
+                        dateRangeEnd = state.dateRangeEnd,
+                        onQueryChange = { localQuery = it },
                         onExpandChange = { searchExpanded = it },
                         onRecentPick = {
+                            localQuery = it
                             viewModel.setQuery(it)
                             searchExpanded = false
                         },
@@ -261,19 +251,16 @@ fun TransactionScreen(
                     item(key = "filter_pills") {
                         ActiveFilterPills(
                             searchQuery = state.searchQuery,
-                            selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
-                            dateRangeStart = dateRangeStart,
-                            dateRangeEnd = dateRangeEnd,
+                            selectedCategory = state.selectedCategory?.let { categoryMap[it] },
+                            dateRangeStart = state.dateRangeStart,
+                            dateRangeEnd = state.dateRangeEnd,
                             onClearSearch = {
                                 viewModel.setQuery("")
                             },
                             onClearCategory = {
-                                selectedCategoryFilter = null
                                 viewModel.setCategory(null)
                             },
                             onClearDate = {
-                                dateRangeStart = null
-                                dateRangeEnd = null
                                 viewModel.setDateRange(null, null)
                             }
                         )
