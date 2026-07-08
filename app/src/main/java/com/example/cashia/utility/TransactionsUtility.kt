@@ -2,7 +2,9 @@ package com.example.cashia.utility
 
 import com.example.cashia.models.MpesaTransactions
 import java.text.NumberFormat
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 
 fun weekBucket(date: LocalDate): String {
@@ -25,6 +27,18 @@ data class ParsedTx(
     val date: LocalDate,
     val bucket: String
 )
+
+/**
+ * Derives the transaction's LocalDate from its epoch-millis [MpesaTransactions.timestamp]
+ * instead of parsing the `date` string — far cheaper and always populated.
+ */
+fun MpesaTransactions.localDate(): LocalDate =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+
+fun MpesaTransactions.toParsedTx(): ParsedTx {
+    val d = localDate()
+    return ParsedTx(this, d, weekBucket(d))
+}
 
 private val amountFormatter = NumberFormat.getNumberInstance(Locale("en", "KE")).apply {
     minimumFractionDigits = 2; maximumFractionDigits = 2

@@ -81,6 +81,7 @@ import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
+import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -120,7 +121,7 @@ fun PesaPulseApp() {
         factory = TransactionsViewModel.provideFactory(context)
     )
     val dashboardViewModel: DashboardViewModel = viewModel(
-        factory = DashboardViewModel.provideFactory(context, sharedViewModel.allTransactionsFlow)
+        factory = DashboardViewModel.provideFactory(context)
     )
     val categoryViewModel: CategoryViewModel = viewModel(
         factory = CategoryViewModel.provideFactory(context)
@@ -177,7 +178,7 @@ fun PesaPulseApp() {
             composable(AppDestinations.Calendar.route) {
                 val calendarViewModel: CalendarViewModel = viewModel(
                     factory = CalendarViewModel.provideFactory(
-                        sharedViewModel.allTransactionsFlow,
+                        sharedViewModel.parsedTransactionsFlow,
                         upcomingViewModel.upcoming
                     )
                 )
@@ -191,14 +192,24 @@ fun PesaPulseApp() {
             composable(AppDestinations.Analytics.route) {
                 val analyticsViewModel: AnalyticsViewModel = viewModel(
                     factory = AnalyticsViewModel.provideFactory(
-                        sharedViewModel.allTransactionsFlow,
+                        AppDatabase.getDatabase(context).transactionDao(),
                     )
                 )
                 AnalyticsScreen(categoryViewModel, sharedViewModel, analyticsViewModel)
+            }
+            composable(AppDestinations.Projections.route) {
+                val projectionViewModel: ProjectionViewModel = viewModel(
+                    factory = ProjectionViewModel.provideFactory(
+                        sharedViewModel.state,
+                        sharedViewModel.parsedTransactionsFlow,
+                        upcomingViewModel.upcoming
+                    )
+                )
                 ProjectionScreen(
                     sharedViewModel,
                     upcomingViewModel,
                     categoryViewModel,
+                    projectionViewModel
                 )
             }
             composable(AppDestinations.Settings.route) {

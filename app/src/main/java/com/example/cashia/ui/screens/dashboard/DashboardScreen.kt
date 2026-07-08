@@ -46,6 +46,7 @@ fun DashboardScreen(
 
     val hapticFeedback = LocalHapticFeedback.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val allTransactions by viewModel.allTransactionsFlow.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
@@ -97,7 +98,7 @@ fun DashboardScreen(
             item {
                 WeeklyCalendar(
                     hapticFeedback,
-                    state.allTransactions,
+                    allTransactions,
                     selectedDate,
                     dashboardViewModel::setDate
                 )

@@ -36,11 +36,11 @@ fun AnalyticsScreen(
     analyticsViewModel: AnalyticsViewModel
 ) {
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
-    val state by transactionsViewModel.state.collectAsStateWithLifecycle()
+    val allTransactions by transactionsViewModel.allTransactionsFlow.collectAsStateWithLifecycle()
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
-//    val transactions = state.allTransactions
+//    val transactions = allTransactions
 //    var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
 //    var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
 //    val today = remember { LocalDate.now() }
@@ -127,13 +127,13 @@ fun AnalyticsScreen(
                 hapticFeedback,
                 uiState.selectedType,
                 analyticsViewModel::setType,
-                transactions = state.allTransactions,
+                transactions = allTransactions,
                 uiState.startTs,
                 uiState.endTs
             )
         }
 
-        item { CashFlowTrendChart(state.allTransactions, uiState.startDate, uiState.endDate) }
+        item { CashFlowTrendChart(allTransactions, uiState.startDate, uiState.endDate) }
 
         if (uiState.filteredTransactions.isNotEmpty()) {
             item {
@@ -148,7 +148,7 @@ fun AnalyticsScreen(
             if (uiState.selectedType == TransactionType.EXPENSE) {
                 item {
                     BurnRateCard(
-                        transactions = state.allTransactions,
+                        transactions = allTransactions,
                         startDate = uiState.startDate,
                         endDate = uiState.endDate
                     )
@@ -157,13 +157,13 @@ fun AnalyticsScreen(
             val typeStr = uiState.selectedType.name.lowercase()
             item {
                 WeekdaySpendCard(
-                    transactions = state.allTransactions,   // full history for richer pattern
+                    transactions = allTransactions,   // full history for richer pattern
                     type = typeStr
                 )
             }
             item {
                 RecurringMerchantsCard(
-                    transactions = state.allTransactions,
+                    transactions = allTransactions,
                     type = typeStr
                 )
             }

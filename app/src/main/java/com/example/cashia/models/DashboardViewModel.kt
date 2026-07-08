@@ -4,14 +4,17 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.AppDatabase
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -34,15 +37,12 @@ data class DashboardState(
     val dateRangeEnd: LocalDate? = null,
 )
 
-private data class ParsedTransaction(
-    val tx: MpesaTransactions,
-    val parsedDate: LocalDate
-)
-
+@OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModel(
-    private val context: Context,
-    allTransactionsFlow: StateFlow<List<MpesaTransactions>>
+    context: Context,
 ) : ViewModel() {
+
+    private val dao = AppDatabase.getDatabase(context).transactionDao()
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate = _selectedDate.asStateFlow()
@@ -53,56 +53,44 @@ class DashboardViewModel(
     private val _isListExpanded = MutableStateFlow(true)
     val isListExpanded = _isListExpanded.asStateFlow()
 
-    private val parsedTransactionsFlow = allTransactionsFlow.map { txList ->
-        txList.map { tx ->
-            val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { LocalDate.MIN }
-            ParsedTransaction(tx, date)
-        }
-    }.flowOn(Dispatchers.Default)
-
+    // The date-range filter runs in SQL: only the rows inside the visible period
+    // are ever loaded, and Room re-emits automatically on any table change.
     val dashboardState: StateFlow<DashboardState> = combine(
-        parsedTransactionsFlow,
         _selectedDate,
         _scope,
-    ) { parsedTxs, date, scope ->
-        val firstDay = PesaTimeConfiguration.firstDayOfWeek
-        val (start, end) = computeRange(date, scope, firstDay)
+    ) { date, scope -> date to scope }
+        .flatMapLatest { (date, scope) ->
+            val firstDay = PesaTimeConfiguration.firstDayOfWeek
+            val (start, end) = computeRange(date, scope, firstDay)
 
-        val label = when (scope) {
-            TimeScope.DAY -> date.format(dayFormatter)
-            TimeScope.WEEK -> "${start.format(weekFormatter)} – ${end.format(weekFormatter)}"
-            TimeScope.MONTH -> date.format(monthFormatter)
-            TimeScope.YEAR -> date.format(yearFormatter)
-            else -> "Invalid Time Scope Range = No Label"
-        }
+            val label = when (scope) {
+                TimeScope.DAY -> date.format(dayFormatter)
+                TimeScope.WEEK -> "${start.format(weekFormatter)} – ${end.format(weekFormatter)}"
+                TimeScope.MONTH -> date.format(monthFormatter)
+                TimeScope.YEAR -> date.format(yearFormatter)
+                else -> "Invalid Time Scope Range = No Label"
+            }
 
-        var income = 0.0
-        var expenses = 0.0
-        val filteredList = ArrayList<MpesaTransactions>()
-
-
-        for ((tx, txDate) in parsedTxs) {
-            val isLimitUpdate = tx.category == TransactionCategory.FULIZA.name &&
-                    tx.type == "neutral" && tx.recipient == "Fuliza Limit Update"
-
-            if (!isLimitUpdate && !txDate.isBefore(start) && !txDate.isAfter(end)) {
-                filteredList.add(tx)
-                when (tx.type) {
-                    "income" -> income += tx.amount
-                    "expense" -> expenses += (tx.amount + tx.transactionCost)
+            dao.getTransactionsInRange(start.toString(), end.toString()).map { txs ->
+                var income = 0.0
+                var expenses = 0.0
+                for (tx in txs) {
+                    when (tx.type) {
+                        "income" -> income += tx.amount
+                        "expense" -> expenses += (tx.amount + tx.transactionCost)
+                    }
                 }
+
+                DashboardState(
+                    filteredTransactions = txs,
+                    totalIncome = income,
+                    totalExpenses = expenses,
+                    periodLabel = label,
+                    dateRangeStart = start,
+                    dateRangeEnd = end,
+                )
             }
         }
-
-        DashboardState(
-            filteredTransactions = filteredList,
-            totalIncome = income,
-            totalExpenses = expenses,
-            periodLabel = label,
-            dateRangeStart = start,
-            dateRangeEnd = end,
-        )
-    }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardState())
 
@@ -145,13 +133,12 @@ class DashboardViewModel(
     companion object {
         fun provideFactory(
             context: Context,
-            allTransactionsFlow: StateFlow<List<MpesaTransactions>>,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(DashboardViewModel::class.java))
-                        return DashboardViewModel(context, allTransactionsFlow) as T
+                        return DashboardViewModel(context) as T
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }

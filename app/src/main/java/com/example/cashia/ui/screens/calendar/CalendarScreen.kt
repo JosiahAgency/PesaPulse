@@ -75,7 +75,7 @@ fun CalendarScreen(
     calendarViewModel: CalendarViewModel
 ) {
     val today = remember { LocalDate.now() }
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allTransactions by viewModel.allTransactionsFlow.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
@@ -147,13 +147,13 @@ fun CalendarScreen(
         ) {
             item {
                 FinancialOverviewCards(
-                    state.allTransactions, calendarState.selectedDate, calendarState.selectedFilter,
+                    allTransactions, calendarState.selectedDate, calendarState.selectedFilter,
                     calendarViewModel::setFilter
                 )
             }
             item {
                 FullMonthCalendar(
-                    allTransactions = state.allTransactions,
+                    allTransactions = allTransactions,
                     selectedDate = calendarState.selectedDate,
                     upcomingTransactions = upcomingAll,
                     calendarViewModel::handleDayClick

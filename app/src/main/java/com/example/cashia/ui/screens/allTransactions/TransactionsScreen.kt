@@ -108,6 +108,18 @@ fun TransactionScreen(
         viewModel.setQuery(localQuery)
     }
 
+    // Grow the DB window when the user scrolls near the end of the loaded rows.
+    val nearListEnd by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 15
+        }
+    }
+    LaunchedEffect(nearListEnd, state.hasMore) {
+        if (nearListEnd && state.hasMore) viewModel.loadMore()
+    }
+
     LaunchedEffect(state.searchQuery) {
         if (state.searchQuery != localQuery) {
             localQuery = state.searchQuery

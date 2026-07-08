@@ -43,32 +43,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val isDailyDigestEnabled = snapshotFlow { PesaTimeConfiguration.isDailyDigestEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isDailyDigestEnabled)
 
-    val isWeeklySummaryEnabled = snapshotFlow { PesaTimeConfiguration.isWeeklySummaryEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isWeeklySummaryEnabled
-        )
-
     val isMonthlySummaryEnabled = snapshotFlow { PesaTimeConfiguration.isMonthlySummaryEnabled }
         .stateIn(
             viewModelScope,
             SharingStarted.Eagerly,
             PesaTimeConfiguration.isMonthlySummaryEnabled
-        )
-
-    val isQuarterlySummaryEnabled = snapshotFlow { PesaTimeConfiguration.isQuarterlySummaryEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isQuarterlySummaryEnabled
-        )
-
-    val isYearlySummaryEnabled = snapshotFlow { PesaTimeConfiguration.isYearlySummaryEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isYearlySummaryEnabled
         )
 
     val isUpcomingReminderEnabled = snapshotFlow { PesaTimeConfiguration.isUpcomingReminderEnabled }
@@ -123,28 +102,16 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setWeeklySummaryEnabled(enabled: Boolean) {
-        PesaTimeConfiguration.saveWeeklySummary(enabled)
-        if (enabled) NotificationScheduler.scheduleWeeklySummary(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(WeeklySummaryWorker.WORK_NAME)
+    fun setDailyDigestEnabled(enabled: Boolean) {
+        PesaTimeConfiguration.saveDailyDigest(enabled)
+        if (enabled) NotificationScheduler.scheduleDailyDigest(context)
+        else WorkManager.getInstance(context).cancelUniqueWork(DailyDigestWorker.WORK_NAME)
     }
 
     fun setMonthlySummaryEnabled(enabled: Boolean) {
         PesaTimeConfiguration.saveMonthlySummary(enabled)
         if (enabled) NotificationScheduler.scheduleMonthly(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(PeriodSummaryWorker.WORK_MONTHLY)
-    }
-
-    fun setQuarterlySummaryEnabled(enabled: Boolean) {
-        PesaTimeConfiguration.saveQuarterlySummary(enabled)
-        if (enabled) NotificationScheduler.scheduleQuarterly(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(PeriodSummaryWorker.WORK_QUARTERLY)
-    }
-
-    fun setYearlySummaryEnabled(enabled: Boolean) {
-        PesaTimeConfiguration.saveYearlySummary(enabled)
-        if (enabled) NotificationScheduler.scheduleYearly(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(PeriodSummaryWorker.WORK_YEARLY)
+        else WorkManager.getInstance(context).cancelUniqueWork(MonthlySummaryWorker.WORK_NAME)
     }
 
     fun setUpcomingReminderEnabled(enabled: Boolean) {

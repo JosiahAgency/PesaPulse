@@ -3,14 +3,18 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.daos.TransactionDao
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.TransactionType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -30,8 +34,9 @@ data class AnalyticsUiState(
     val filteredTransactions: List<MpesaTransactions> = emptyList()
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModel(
-    allTransactionsFlow: StateFlow<List<MpesaTransactions>>
+    private val dao: TransactionDao
 ) : ViewModel() {
 
     private val today = LocalDate.now()
@@ -41,23 +46,34 @@ class AnalyticsViewModel(
     private val _startDate = MutableStateFlow(today.withDayOfMonth(1))
     private val _endDate = MutableStateFlow(today)
 
+    // Type + time-range filtering runs in SQL: only the matching rows are loaded,
+    // and Room re-emits automatically whenever the table changes.
     val uiState: StateFlow<AnalyticsUiState> = combine(
-        allTransactionsFlow,
         _selectedType,
         _selectedScope,
         _startDate,
         _endDate
-    ) { transactions, type, scope, start, end ->
+    ) { type, scope, start, end ->
+        AnalyticsUiState(
+            selectedType = type,
+            selectedScope = scope,
+            startDate = start,
+            endDate = end,
+            periodLabel = periodLabel(scope, start, end),
+            startTs = start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            endTs = end.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant()
+                .toEpochMilli(),
+        )
+    }
+        .flatMapLatest { base ->
+            dao.getByTypeInRange(base.selectedType.name.lowercase(), base.startTs, base.endTs)
+                .map { filtered -> base.copy(filteredTransactions = filtered) }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
-        val startTs = start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val endTs =
-            end.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val typeStr = type.name.lowercase()
-
-        // Background thread filtering
-        val filtered = transactions.filter { it.timestamp in startTs..endTs && it.type == typeStr }
-
-        val periodLabel = when (scope) {
+    private fun periodLabel(scope: TimeScope, start: LocalDate, end: LocalDate): String =
+        when (scope) {
             TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
             TimeScope.WEEK -> "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
                 end.format(
@@ -74,20 +90,6 @@ class AnalyticsViewModel(
 
             else -> ""
         }
-
-        AnalyticsUiState(
-            selectedType = type,
-            selectedScope = scope,
-            startDate = start,
-            endDate = end,
-            periodLabel = periodLabel,
-            startTs = startTs,
-            endTs = endTs,
-            filteredTransactions = filtered
-        )
-    }
-        .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -127,11 +129,11 @@ class AnalyticsViewModel(
 
     companion object {
         fun provideFactory(
-            allTransactionsFlow: StateFlow<List<MpesaTransactions>>
+            dao: TransactionDao
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return AnalyticsViewModel(allTransactionsFlow) as T
+                return AnalyticsViewModel(dao) as T
             }
         }
     }

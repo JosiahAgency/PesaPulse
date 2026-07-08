@@ -3,6 +3,7 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.TransactionType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,26 +23,16 @@ data class CalendarUiState(
     val upcomingForDay: List<UpcomingTransaction> = emptyList() // Adjust type based on your Upcoming model
 )
 
-private data class ParsedCalTx(val tx: MpesaTransactions, val date: LocalDate)
-
 class CalendarViewModel(
-    allTransactionsFlow: StateFlow<List<MpesaTransactions>>,
+    parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
     upcomingFlow: StateFlow<List<UpcomingTransaction>>
 ) : ViewModel() {
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _filterByDay = MutableStateFlow(false)
     private val _selectedFilter = MutableStateFlow(TransactionType.ALL)
 
-    // 1. Pre-parse transaction dates ONCE in the background
-    private val parsedTxsFlow = allTransactionsFlow.map { txList ->
-        txList.map { tx ->
-            val date = runCatching { LocalDate.parse(tx.date) }.getOrElse { LocalDate.MIN }
-            ParsedCalTx(tx, date)
-        }
-    }.flowOn(Dispatchers.Default)
-
     val uiState: StateFlow<CalendarUiState> = combine(
-        parsedTxsFlow,
+        parsedTransactionsFlow,   // dates already derived once, upstream
         upcomingFlow,
         _selectedDate,
         _filterByDay,
@@ -103,12 +94,12 @@ class CalendarViewModel(
     // ── Factory ──────────────────────────────────────────────────────────────
     companion object {
         fun provideFactory(
-            allTransactionsFlow: StateFlow<List<MpesaTransactions>>,
+            parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
             upcomingFlow: StateFlow<List<UpcomingTransaction>> // Adjust type
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return CalendarViewModel(allTransactionsFlow, upcomingFlow) as T
+                return CalendarViewModel(parsedTransactionsFlow, upcomingFlow) as T
             }
         }
     }

@@ -23,7 +23,7 @@ import com.example.cashia.models.UserCorrection
 
 @Database(
     entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -235,6 +235,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // The UpcomingTransaction entity declares indexes on dueDate/status/type/categoryId,
+        // but no earlier migration created them, so every upgrade from <=11 failed Room's
+        // schema validation. IF NOT EXISTS also repairs fresh installs that already have them.
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_UpcomingTransactions_dueDate ON UpcomingTransactions(dueDate)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_UpcomingTransactions_status ON UpcomingTransactions(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_UpcomingTransactions_type ON UpcomingTransactions(type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_UpcomingTransactions_categoryId ON UpcomingTransactions(categoryId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -253,6 +265,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_9_10,
                     MIGRATION_10_11,
                     MIGRATION_11_12,
+                    MIGRATION_12_13,
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

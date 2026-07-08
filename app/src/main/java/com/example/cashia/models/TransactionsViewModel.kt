@@ -9,11 +9,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
+import com.example.cashia.daos.FilteredTotals
 import com.example.cashia.utility.ParsedTx
+import com.example.cashia.utility.localDate
 import com.example.cashia.utility.partialFieldsFromJson
 import com.example.cashia.utility.syncTransactions
-import com.example.cashia.utility.weekBucket
+import com.example.cashia.utility.toParsedTx
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
@@ -38,9 +42,13 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 data class TransactionState(
-    val allTransactions: List<MpesaTransactions> = emptyList(),
+    /** The currently loaded window of the filtered set (newest first). */
     val filteredTransactions: List<MpesaTransactions> = emptyList(),
     val groupedTransactions: List<WeekGroup> = emptyList(),
+    /** Total number of rows matching the filters (whole DB, not just the window). */
+    val filteredCount: Int = 0,
+    /** True when more matching rows exist beyond the loaded window. */
+    val hasMore: Boolean = false,
     val latestBalance: Double = 0.0,
     val latestBalanceDate: String = "",
     val latestBalanceDateParsed: LocalDate = LocalDate.now(),
@@ -60,13 +68,18 @@ data class ReversalIndex(
     val byReversal: Map<String, MpesaTransactions> = emptyMap(),
 )
 
-private data class Totals(
-    val income: Double,
-    val expenses: Double,
-    val transactionCost: Double,
+/** Resolved SQL parameters for the History screen's filters. */
+private data class HistoryFilters(
+    val rawQuery: String = "",
+    val sqlQuery: String = "",
+    val amountQuery: Double? = null,
+    val queryCategoryIds: List<String> = emptyList(),
+    val category: String? = null,
+    val start: LocalDate? = null,
+    val end: LocalDate? = null,
 )
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     private val database = AppDatabase.getDatabase(context)
@@ -91,7 +104,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
         _newTransactionsSynced.asSharedFlow()
 
-    // ── Single shared DB upstream ──────────────────────────────────────────────
+    // ── Single shared DB upstream (full table, for screens that need history) ──
     private val allTransactionsShared = dao
         .getAllTransactions()
         .shareIn(
@@ -103,33 +116,73 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     val allTransactionsFlow: StateFlow<List<MpesaTransactions>> = allTransactionsShared
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val parsedTransactionsFlow = allTransactionsShared
-        .map { txs ->
-            val today = LocalDate.now()
-            txs.map { tx ->
-                val date = parseDateOrWarn(tx.date, tx.id, today)
-                ParsedTx(tx, date, weekBucket(date))
-            }
-        }
+    /**
+     * Full history with dates pre-derived from the epoch timestamp — parsed ONCE
+     * here and shared by every consumer (Calendar, Projections, …).
+     */
+    val parsedTransactionsFlow: StateFlow<List<ParsedTx>> = allTransactionsShared
+        .map { txs -> txs.map { it.toParsedTx() } }
         .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // ── Main state ─────────────────────────────────────────────────────────────
-    val state: StateFlow<TransactionState> = combine(
-        parsedTransactionsFlow,             // DB changes propagate immediately
+    // ── History pipeline: filters resolved once, applied in SQL ────────────────
+
+    private val filtersFlow = combine(
         _searchQuery.debounce(300),        // Only search input benefits from debouncing
         _selectedCategoryFilter,
         _dateRangeStart,
         _dateRangeEnd,
         _categoryLabelsMap
-    ) { args ->
-        @Suppress("UNCHECKED_CAST")
-        val transactions = args[0] as List<ParsedTx>
-        val query = args[1] as String
-        val catFilter = args[2] as String?
-        val start = args[3] as LocalDate?
-        val end = args[4] as LocalDate?
-        val catMap = args[5] as Map<String, String>
-        computeFilteredState(transactions, query, catFilter, start, end, catMap)
+    ) { query, cat, start, end, catMap ->
+        val trimmed = query.trim()
+        HistoryFilters(
+            rawQuery = query,
+            sqlQuery = if (trimmed.isEmpty()) "" else trimmed,
+            amountQuery = trimmed.toDoubleOrNull(),
+            queryCategoryIds = if (trimmed.isEmpty()) emptyList()
+            else catMap.filterValues { it.contains(trimmed, ignoreCase = true) }.keys.toList(),
+            category = cat,
+            start = start,
+            end = end,
+        )
+    }.distinctUntilChanged()
+
+    /** How many rows of the filtered set are materialized for the list. */
+    private val _windowLimit = MutableStateFlow(WINDOW_PAGE)
+
+    private val windowFlow = combine(filtersFlow, _windowLimit) { f, limit -> f to limit }
+        .flatMapLatest { (f, limit) ->
+            dao.getFilteredWindow(
+                query = f.sqlQuery,
+                amountQuery = f.amountQuery,
+                queryCategoryIds = f.queryCategoryIds,
+                category = f.category,
+                startDate = f.start?.toString(),
+                endDate = f.end?.toString(),
+                limit = limit,
+            )
+        }
+
+    private val totalsFlow = filtersFlow.flatMapLatest { f ->
+        dao.getFilteredTotals(
+            query = f.sqlQuery,
+            amountQuery = f.amountQuery,
+            queryCategoryIds = f.queryCategoryIds,
+            category = f.category,
+            startDate = f.start?.toString(),
+            endDate = f.end?.toString(),
+        )
+    }
+
+    // ── Main state ─────────────────────────────────────────────────────────────
+    val state: StateFlow<TransactionState> = combine(
+        windowFlow,
+        totalsFlow,
+        dao.latestTransactionFlow(),
+        dao.latestFulizaLimitFlow(),
+        filtersFlow,
+    ) { window, totals, latestTx, fulizaLimit, f ->
+        buildState(window, totals, latestTx, fulizaLimit, f)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(
@@ -199,10 +252,9 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         if (!syncMutex.tryLock()) return
         _isSyncing.value = true
         try {
-            syncTransactions(context, database)
-            val fresh = withContext(Dispatchers.IO) { dao.getAllTransactionsOnce() }
-            if (fresh.isNotEmpty()) {
-                _newTransactionsSynced.tryEmit(fresh)
+            val newTxs = syncTransactions(context, database)
+            if (newTxs.isNotEmpty()) {
+                _newTransactionsSynced.tryEmit(newTxs)
             }
         } catch (e: Exception) {
             Log.e("TransactionsViewModel", "Background sync failure", e)
@@ -213,6 +265,11 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     }
 
     // ── Public actions ─────────────────────────────────────────────────────────
+
+    /** Grows the History window by one page when the user nears the end of the list. */
+    fun loadMore() {
+        if (state.value.hasMore) _windowLimit.value += WINDOW_PAGE
+    }
 
     fun showRecurringSheet(tx: MpesaTransactions) {
         recurringSheetTransaction = tx
@@ -301,87 +358,34 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
 
     // ── Pure computation helpers ───────────────────────────────────────────────
 
-    private fun computeFilteredState(
-        allParsed: List<ParsedTx>,
-        query: String,
-        catFilter: String?,
-        start: LocalDate?,
-        end: LocalDate?,
-        catMap: Map<String, String>
+    private fun buildState(
+        window: List<MpesaTransactions>,
+        totals: FilteredTotals,
+        latestTx: MpesaTransactions?,
+        fulizaLimit: Double?,
+        f: HistoryFilters,
     ): TransactionState {
         val today = LocalDate.now()
-        val amountQuery = query.trim().toDoubleOrNull()
-        val isQueryBlank = query.isBlank()
-
-        val latestTx = allParsed.firstOrNull()?.tx
-        val latestBalanceDate = latestTx?.date ?: ""
-        val latestBalanceDateParsed = allParsed.firstOrNull()?.date ?: today
-
-        val latestFulizaLimit = allParsed.firstOrNull {
-            it.tx.category == TransactionCategory.FULIZA.name &&
-                    it.tx.type == "neutral" &&
-                    it.tx.recipient == "Fuliza Limit Update"
-        }?.tx?.amount ?: 0.0
-
-        val filteredList = allParsed.filter { tx ->
-            // Always exclude Fuliza limit-update pseudo-transactions from the list.
-            val isLimitUpdate = tx.tx.category == TransactionCategory.FULIZA.name &&
-                    tx.tx.type == "neutral" &&
-                    tx.tx.recipient == "Fuliza Limit Update"
-            if (isLimitUpdate) return@filter false
-
-            val textMatch = isQueryBlank ||
-                    tx.tx.recipient.contains(query, ignoreCase = true) ||
-                    tx.tx.id.contains(query, ignoreCase = true) ||
-                    (amountQuery != null && tx.tx.amount == amountQuery) ||
-                    catMap[tx.tx.category]?.contains(query, ignoreCase = true) == true
-
-            val catMatch = catFilter == null || tx.tx.category == catFilter
-
-            val dateMatch = (start == null || !tx.date.isBefore(start)) &&
-                    (end == null || !tx.date.isAfter(end))
-
-            textMatch && catMatch && dateMatch
-        }
-
-        val filteredTxs = filteredList.map { it.tx }
-        val totals = computeTotals(filteredTxs)
-        val groupedTxs = buildGroupedTransactions(filteredList)
+        val parsedWindow = window.map { it.toParsedTx() }
 
         return TransactionState(
-            allTransactions = allParsed.map { it.tx },
-            filteredTransactions = filteredTxs,
-            groupedTransactions = groupedTxs,
+            filteredTransactions = window,
+            groupedTransactions = buildGroupedTransactions(parsedWindow),
+            filteredCount = totals.count,
+            hasMore = window.size < totals.count,
             latestBalance = latestTx?.balance ?: 0.0,
-            latestBalanceDate = latestBalanceDate,
-            latestBalanceDateParsed = latestBalanceDateParsed,
+            latestBalanceDate = latestTx?.date ?: "",
+            latestBalanceDateParsed = latestTx?.localDate() ?: today,
             totalIncome = totals.income,
             totalExpenses = totals.expenses,
             totalTransactionCost = totals.transactionCost,
             currentMonth = "${today.month.getDisplayName(TextStyle.FULL, Locale.US)} ${today.year}",
-            selectedCategory = catFilter,
-            searchQuery = query,
-            fulizaLimit = latestFulizaLimit,
-            dateRangeStart = start,
-            dateRangeEnd = end,
+            selectedCategory = f.category,
+            searchQuery = f.rawQuery,
+            fulizaLimit = fulizaLimit ?: 0.0,
+            dateRangeStart = f.start,
+            dateRangeEnd = f.end,
         )
-    }
-
-    /**
-     * Accumulates income, expense, and transaction-cost totals for a filtered list.
-     */
-    private fun computeTotals(txs: List<MpesaTransactions>): Totals {
-        var income = 0.0
-        var expenses = 0.0
-        var cost = 0.0
-        for (tx in txs) {
-            cost += tx.transactionCost
-            when (tx.type) {
-                "income" -> income += tx.amount
-                "expense" -> expenses += tx.amount + tx.transactionCost
-            }
-        }
-        return Totals(income, expenses, cost)
     }
 
     /**
@@ -421,22 +425,12 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 WeekGroup(bucket, days)
             }
 
-    /**
-     * Parses a date string, falling back to [fallback] and emitting a warning log
-     * so that malformed dates aren't silently swallowed.
-     */
-    private fun parseDateOrWarn(raw: String, txId: String, fallback: LocalDate): LocalDate =
-        runCatching { LocalDate.parse(raw) }.getOrElse {
-            Log.w(
-                "TransactionsViewModel",
-                "Malformed date '$raw' on tx '$txId', falling back to $fallback"
-            )
-            fallback
-        }
-
     // ── Factory ────────────────────────────────────────────────────────────────
 
     companion object {
+        /** Rows loaded per page of the History window. */
+        private const val WINDOW_PAGE = 200
+
         fun provideFactory(context: Context): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
