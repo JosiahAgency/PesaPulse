@@ -120,12 +120,6 @@ fun TransactionScreen(
         if (nearListEnd && state.hasMore) viewModel.loadMore()
     }
 
-    LaunchedEffect(state.searchQuery) {
-        if (state.searchQuery != localQuery) {
-            localQuery = state.searchQuery
-        }
-    }
-
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
             hasAutoOpened = true
@@ -208,7 +202,6 @@ fun TransactionScreen(
                         onExpandChange = { searchExpanded = it },
                         onRecentPick = {
                             localQuery = it
-                            viewModel.setQuery(it)
                             searchExpanded = false
                         },
                         onCategoryPick = viewModel::setCategory,
@@ -267,7 +260,7 @@ fun TransactionScreen(
                             dateRangeStart = state.dateRangeStart,
                             dateRangeEnd = state.dateRangeEnd,
                             onClearSearch = {
-                                viewModel.setQuery("")
+                                localQuery = ""
                             },
                             onClearCategory = {
                                 viewModel.setCategory(null)
