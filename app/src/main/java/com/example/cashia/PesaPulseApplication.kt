@@ -40,8 +40,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +84,7 @@ import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.navigation.AppDestinations
+import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.screens.allTransactions.TransactionScreen
@@ -325,17 +324,13 @@ fun PesaPulseApp() {
                     enter = fadeIn(tween(200)),
                     exit = fadeOut(tween(150))
                 ) {
-                    ExtendedFloatingActionButton(
+                    HarmonizedActionFab(
                         onClick = { dashboardViewModel.setDate(today) },
-                        icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
-                        text = { Text("Today", fontWeight = FontWeight.SemiBold) },
-                        containerColor = Color.Transparent,
-                        elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        icon = Icons.Default.Today,
+                        text = "Today",
+                        contentDescription = "Today",
                         modifier = Modifier
                             .padding(bottom = 8.dp)
-                            .clip(CircleShape)
-                            .background(brush = primaryGradient())
                     )
                 }
 

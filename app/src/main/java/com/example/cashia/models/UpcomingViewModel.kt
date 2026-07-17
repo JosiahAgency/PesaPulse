@@ -216,7 +216,8 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
         recipient: String,
         amount: Double,
         category: String,
-        type: String
+        type: String,
+        txDate: String
     ) {
         val scheduledType = if (type.equals(
                 "income",
@@ -224,12 +225,28 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
             )
         ) UpcomingType.INCOME else UpcomingType.EXPENSE
 
+        val transactionDate = runCatching { LocalDate.parse(txDate) }
+            .getOrDefault(LocalDate.now())
+
+        // Next occurrence of the transaction's day-of-month that isn't in the
+        // past: this month if the day is still ahead (or today), else next month.
+        val today = LocalDate.now()
+        var dueDate = today.withDayOfMonth(
+            transactionDate.dayOfMonth.coerceAtMost(today.lengthOfMonth())
+        )
+        if (dueDate.isBefore(today)) {
+            val nextMonth = today.plusMonths(1)
+            dueDate = nextMonth.withDayOfMonth(
+                transactionDate.dayOfMonth.coerceAtMost(nextMonth.lengthOfMonth())
+            )
+        }
+
         _uiState.value = UpcomingUiState(
             showSheet = true,
             draftTitle = recipient,
             draftAmount = amount.toString(),
             draftCategory = category,
-            draftDueDate = LocalDate.now().plusMonths(1),
+            draftDueDate = dueDate,
             draftType = scheduledType,
             draftRecurrence = RecurrenceType.MONTHLY,
             draftNotes = "Created automatically from transaction reference: $txId"

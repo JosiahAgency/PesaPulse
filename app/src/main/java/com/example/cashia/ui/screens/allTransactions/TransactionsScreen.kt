@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens.allTransactions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -53,11 +51,11 @@ import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
+import com.example.cashia.ui.reusedElements.HarmonizedIconFab
 import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
-import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -416,27 +414,14 @@ fun TransactionScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 180.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clickable {
-                        coroutineScope.launch { listState.scrollToItem(0) }
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.background(brush = primaryGradient())
-                ) {
-                    Icon(
-                        Icons.Rounded.KeyboardArrowUp,
-                        contentDescription = "Back to top",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
+            HarmonizedIconFab(
+                icon = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = "Back to top",
+                onClick = {
+                    coroutineScope.launch { listState.scrollToItem(0) }
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
-            }
+            )
         }
     }
 }

@@ -26,8 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,6 +53,7 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
@@ -207,16 +206,11 @@ fun CalendarScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 150.dp)
         ) {
-            ExtendedFloatingActionButton(
+            HarmonizedActionFab(
                 onClick = calendarViewModel::resetToToday,
-                icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
-                text = { Text("Today", fontWeight = FontWeight.SemiBold) },
-                containerColor = Color.Transparent,
-                elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(brush = primaryGradient())
+                icon = Icons.Default.Today,
+                text = "Today",
+                contentDescription = "Today"
             )
         }
     }

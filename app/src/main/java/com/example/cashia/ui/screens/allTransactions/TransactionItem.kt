@@ -628,7 +628,8 @@ private fun NormalTransactionItem(
                                         recipient = tx.recipientName.ifBlank { tx.recipient },
                                         amount = tx.amount,
                                         category = tx.category,
-                                        type = tx.type
+                                        type = tx.type,
+                                        txDate = tx.date
                                     )
                                 },
                             shape = RoundedCornerShape(10.dp),

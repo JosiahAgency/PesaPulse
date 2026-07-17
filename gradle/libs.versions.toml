@@ -1,5 +1,5 @@
 [versions]
-agp = "9.2.1"
+agp = "9.3.0"
 biometric = "1.2.0-alpha05"
 datastorePreferences = "1.2.1"
 credentials = "1.6.0"
