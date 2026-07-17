@@ -30,16 +30,9 @@ android {
             )
         }
     }
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-            freeCompilerArgs.add("-opt-in=androidx.compose.foundation.ExperimentalFoundationApi")
-        }
-    }
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(17))
-        }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     lint {
         checkReleaseBuilds = false
@@ -48,6 +41,13 @@ android {
 
     buildFeatures {
         compose = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.add("-opt-in=androidx.compose.foundation.ExperimentalFoundationApi")
     }
 }
 

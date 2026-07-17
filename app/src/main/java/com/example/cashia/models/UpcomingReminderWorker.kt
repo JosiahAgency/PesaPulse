@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,7 +21,14 @@ class UpcomingReminderWorker(
 ) : CoroutineWorker(context, params) {
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = try {
+        run()
+    } finally {
+        // Queue tomorrow's run so the one-time chain never dies.
+        NotificationScheduler.scheduleUpcomingReminders(context, fromWorker = true)
+    }
+
+    private suspend fun run(): Result {
         if (!PesaTimeConfiguration.isUpcomingReminderEnabled) return Result.success()
 
         val db = AppDatabase.getDatabase(context)

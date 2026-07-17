@@ -48,7 +48,7 @@ class MainActivity : FragmentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            val unlocked by remember { isUnlocked }
+            val unlocked by isUnlocked
             PesaPulseTheme(darkTheme = PesaTimeConfiguration.isDarkTheme) {
                 if (unlocked) {
                     PesaPulseApp()

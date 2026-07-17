@@ -83,7 +83,7 @@ fun UpcomingSection(
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
     val total = overdue.size + dueSoon.size + later.size
-    val state by viewModel.state.collectAsState()
+    val allTransactions by viewModel.allTransactionsFlow.collectAsState()
 
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -98,7 +98,7 @@ fun UpcomingSection(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 var matchRunning by remember { mutableStateOf(false) }
-                val allTx = state.allTransactions
+                val allTx = allTransactions
 
 
                 Surface(

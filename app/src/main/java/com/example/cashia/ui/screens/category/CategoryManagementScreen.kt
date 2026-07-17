@@ -3,6 +3,7 @@ package com.example.cashia.ui.screens.category
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,7 +31,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,9 +70,7 @@ private sealed class CatListItem {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoryManagementScreen(
-    viewModel: CategoryViewModel
-) {
+fun CategoryManagementScreen(viewModel: CategoryViewModel) {
     val customCategories by viewModel.customCategories.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
     val uiState = viewModel.uiState
@@ -92,7 +89,6 @@ fun CategoryManagementScreen(
             add(CatListItem.Header("Built-in Categories"))
             val topLevel = viewModel.topLevelCategories(allCategories).filter { it.isSystem }
             topLevel.forEach { parent ->
-                TransactionCategory.entries.find { it.name == parent.id }
                 add(CatListItem.SystemParent(parent, systemOverrides[parent.id]))
                 val children =
                     viewModel.childCategories(allCategories, parent.id).filter { it.isSystem }
@@ -104,27 +100,15 @@ fun CategoryManagementScreen(
         }
     }
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    PesaActions.playClick(haptic)
-                    viewModel.openCreateSheet()
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Rounded.Add, "Add category")
-            }
-        }
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 115.dp,
+                bottom = 120.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(listItems, key = { item ->
@@ -140,30 +124,17 @@ fun CategoryManagementScreen(
                 when (item) {
                     CatListItem.ReclassifyButton -> {
                         Column {
-                            ReclassifyBanner(
-                                {
-                                    PesaActions.playSuccess(haptic)
-                                    viewModel.reclassifyAll()
-                                }
-                            )
+                            ReclassifyBanner({ PesaActions.playSuccess(haptic); viewModel.reclassifyAll() })
                             Spacer(Modifier.height(8.dp))
                         }
                     }
 
                     is CatListItem.Header -> SectionHeader(item.title)
-                    is CatListItem.CustomRow -> {
-                        CustomCategoryRow(
-                            item.cat,
-                            {
-                                PesaActions.playClick(haptic)
-                                viewModel.openEditSheet(item.cat)
-                            },
-                            {
-                                PesaActions.playClick(haptic)
-                                deleteTarget = item.cat
-                            }
-                        )
-                    }
+                    is CatListItem.CustomRow -> CustomCategoryRow(
+                        item.cat,
+                        { PesaActions.playClick(haptic); viewModel.openEditSheet(item.cat) },
+                        { PesaActions.playClick(haptic); deleteTarget = item.cat }
+                    )
 
                     is CatListItem.SystemParent -> {
                         val ov = item.override
@@ -179,15 +150,13 @@ fun CategoryManagementScreen(
                                         ?: return@SystemCategoryRow
                                 viewModel.openEditSystemSheet(enumCat)
                             },
-                            if (ov != null) {
-                                {
-                                    PesaActions.playClick(haptic)
-                                    val enumCat =
-                                        TransactionCategory.entries.find { it.name == item.cat.id }
-                                            ?: return@SystemCategoryRow
-                                    viewModel.resetSystemCategory(enumCat)
-                                }
-                            } else null
+                            if (ov != null) ({
+                                PesaActions.playClick(haptic)
+                                val enumCat =
+                                    TransactionCategory.entries.find { it.name == item.cat.id }
+                                        ?: return@SystemCategoryRow
+                                viewModel.resetSystemCategory(enumCat)
+                            }) else null
                         )
                     }
 
@@ -205,15 +174,13 @@ fun CategoryManagementScreen(
                                         ?: return@SystemCategoryRow
                                 viewModel.openEditSystemSheet(enumCat)
                             },
-                            if (ov != null) {
-                                {
-                                    PesaActions.playClick(haptic)
-                                    val enumCat =
-                                        TransactionCategory.entries.find { it.name == item.cat.id }
-                                            ?: return@SystemCategoryRow
-                                    viewModel.resetSystemCategory(enumCat)
-                                }
-                            } else null
+                            if (ov != null) ({
+                                PesaActions.playClick(haptic)
+                                val enumCat =
+                                    TransactionCategory.entries.find { it.name == item.cat.id }
+                                        ?: return@SystemCategoryRow
+                                viewModel.resetSystemCategory(enumCat)
+                            }) else null
                         )
                     }
 
@@ -222,62 +189,66 @@ fun CategoryManagementScreen(
             }
         }
 
-        // ── Bottom sheet: create / edit ────────────────────────────────
-        val freshSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        if (uiState.showCreateSheet) {
-            ModalBottomSheet(
-                onDismissRequest = viewModel::closeSheet,
-                sheetState = freshSheetState,
-                containerColor = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .navigationBarsPadding()
-                ) {
+        // FAB as overlay — no Scaffold needed
+        FloatingActionButton(
+            onClick = { PesaActions.playClick(haptic); viewModel.openCreateSheet() },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = CircleShape,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 110.dp) // clears island nav
+        ) {
+            Icon(Icons.Rounded.Add, "Add category")
+        }
+    }
 
-                    CategoryEditorSheet(
-                        uiState,
-                        viewModel::onLabelChange,
-                        viewModel::onEmojiChange,
-                        viewModel::onKeywordsChange,
-                        viewModel::saveCategory,
-                        viewModel::closeSheet,
-                        haptic
-                    )
-                }
+    // Sheets and dialogs — outside the Box, rendered above everything
+    val freshSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (uiState.showCreateSheet) {
+        ModalBottomSheet(
+            onDismissRequest = viewModel::closeSheet,
+            sheetState = freshSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
+            ) {
+                CategoryEditorSheet(
+                    uiState,
+                    viewModel::onLabelChange,
+                    viewModel::onEmojiChange,
+                    viewModel::onKeywordsChange,
+                    viewModel::saveCategory,
+                    viewModel::closeSheet,
+                    haptic
+                )
             }
         }
+    }
 
-        // ── Delete confirmation ────────────────────────────────────────
-        deleteTarget?.let { cat ->
-            AlertDialog(
-                onDismissRequest = { deleteTarget = null },
-                title = { Text("Delete \"${cat.label}\"?") },
-                text = {
-                    Text(
-                        "All transactions in this category will be moved to \"Other\". This cannot be undone.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            viewModel.deleteCategory(cat)
-                            deleteTarget = null
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) { Text("Delete") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
-                }
-            )
-        }
+    deleteTarget?.let { cat ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Delete \"${cat.label}\"?") },
+            text = {
+                Text(
+                    "All transactions in this category will be moved to \"Other\". This cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.deleteCategory(cat); deleteTarget = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -325,7 +296,7 @@ private fun ReclassifyBanner(onClick: () -> Unit) {
 }
 
 @Composable
-fun CategoryNameLabel(label: String){
+fun CategoryNameLabel(label: String) {
     Text(
         label,
         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),

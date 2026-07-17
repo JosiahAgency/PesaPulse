@@ -21,4 +21,15 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
     )
     object Settings : AppDestinations("settings", "Settings", Icons.Default.Settings)
     object Categories : AppDestinations("categories", "categories", Icons.Default.Category)
+
+    /** Detail view for a daily/monthly summary. Not in the bottom nav. */
+    object SummaryReport : AppDestinations(
+        "summary_report/{period}/{date}", "Summary", Icons.Default.BarChart
+    ) {
+        const val ARG_PERIOD = "period"
+        const val ARG_DATE = "date"
+
+        /** [period] is "day" or "month"; [isoDate] an ISO yyyy-MM-dd anchor date. */
+        fun buildRoute(period: String, isoDate: String) = "summary_report/$period/$isoDate"
+    }
 }

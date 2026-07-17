@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-commit quality checks..."
+./gradlew :app:testDebugUnitTest --tests "com.example.cashia.utility.ParserQualityTest" --no-daemon --quiet
+echo "Pre-commit checks passed."

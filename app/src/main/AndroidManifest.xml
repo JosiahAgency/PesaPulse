@@ -40,6 +40,14 @@
                 android:resource="@xml/cashia_widget_info" />
         </receiver>
         <receiver
+            android:name="com.example.cashia.widget.WidgetPrivacyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_OFF" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name="com.example.cashia.utility.SmsMessageReceiver"
             android:enabled="true"
             android:exported="true"

@@ -2,37 +2,19 @@ package com.example.cashia.ui.screens.dashboard
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -46,10 +28,7 @@ import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
-import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
-import com.example.cashia.utility.TimeScope
-import java.time.LocalDate
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,18 +39,16 @@ fun DashboardScreen(
     upcomingViewModel: UpcomingViewModel,
     dashboardViewModel: DashboardViewModel
 ) {
-    val today = remember { LocalDate.now() }
-
     val selectedDate by dashboardViewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedScope by dashboardViewModel.scope.collectAsStateWithLifecycle()
     val isListExpanded by dashboardViewModel.isListExpanded.collectAsStateWithLifecycle()
-
+    val dashboardState by dashboardViewModel.dashboardState.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
-    val state by viewModel.state.collectAsState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val periodLabel by viewModel.dashboardPeriodLabel.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allTransactions by viewModel.allTransactionsFlow.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -87,101 +64,81 @@ fun DashboardScreen(
         viewModel.updateCategories(allCategories)
     }
 
-    LaunchedEffect(selectedDate, selectedScope) {
-        viewModel.setDashboardScope(selectedDate, selectedScope)
-    }
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            if (selectedDate != today) {
-                ExtendedFloatingActionButton(
-                    onClick = { dashboardViewModel.setDate(today) },
-                    icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
-                    text = { Text("Back to Today", fontWeight = FontWeight.SemiBold) },
-                    containerColor = Color.Transparent,
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(brush = primaryGradient())
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        LazyColumn(
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 115.dp,
+                bottom = 120.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item {
+                BalanceHeroCard(
+                    state.latestBalance,
+                    state.latestBalanceDate,
+                    isVisible = viewModel.isBalanceVisible,
+                    onToggleVisibility = viewModel::toggleBalanceVisibility
                 )
             }
-        }
-    ) { _ ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding()
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    BalanceHeroCard(
-                        state.latestBalance,
-                        state.latestBalanceDate,
-                        isVisible = viewModel.isBalanceVisible,
-                        onToggleVisibility = viewModel::toggleBalanceVisibility
-                    )
-                }
-                item {
-                    PeriodSummaryCard(
-                        selectedScope,
-                        { dashboardViewModel.setScope(it) },
-                        periodLabel,
-                        state.totalIncome,
-                        state.totalExpenses,
-                        hapticFeedback
-                    )
-                }
-                item {
-                    WeeklyCalendar(
+            item {
+                PeriodSummaryCard(
+                    selectedScope,
+                    dashboardViewModel::setScope,
+                    dashboardState.periodLabel,
+                    dashboardState.totalIncome,
+                    dashboardState.totalExpenses,
+                    hapticFeedback
+                )
+            }
+            item {
+                WeeklyCalendar(
+                    hapticFeedback,
+                    allTransactions,
+                    selectedDate,
+                    dashboardViewModel::setDate
+                )
+            }
+
+            item {
+                TransactionListHeader(
+                    dashboardState.periodLabel,
+                    dashboardState.filteredTransactions.size,
+                    isListExpanded,
+                    {
+                        PesaActions.playClick(hapticFeedback)
+                        dashboardViewModel.toggleListExpanded()
+                    }
+                )
+            }
+
+            if (dashboardState.filteredTransactions.isNotEmpty() && isListExpanded) {
+                items(dashboardState.filteredTransactions, key = { it.id }) { tx ->
+                    TransactionItem(
+                        tx,
+                        allCategories,
+                        categoryViewModel,
+                        upcomingViewModel,
                         hapticFeedback,
-                        state.allTransactions,
-                        selectedDate
-                    ) {
-                        dashboardViewModel.setDate(it)
-                    }
-                }
-
-                item {
-                    TransactionListHeader(
-                        periodLabel,
-                        state.filteredTransactions.size,
-                        isListExpanded,
-                        {
-                            PesaActions.playClick(hapticFeedback)
-                            dashboardViewModel.toggleListExpanded()
-                        }
+                        reversalIndex,
                     )
                 }
-
-                if (state.filteredTransactions.isNotEmpty() && isListExpanded) {
-                    items(state.filteredTransactions, key = { it.id }) { tx ->
-                        TransactionItem(
-                            tx,
-                            allCategories,
-                            categoryViewModel,
-                            upcomingViewModel,
-                            hapticFeedback,
-                            reversalIndex,
-                        )
-                    }
-                } else if (state.filteredTransactions.isEmpty() && isListExpanded) {
-                    item { EmptyStateMessage("No transactions in this period") }
-                }
+            } else if (dashboardState.filteredTransactions.isEmpty() && isListExpanded) {
+                item { EmptyStateMessage("No transactions in this period") }
             }
         }
-        if (upcomingUiState.showSheet) {
-            UpcomingTransactionSheet(
-                uiState = upcomingUiState,
-                viewModel = upcomingViewModel,
-                allCategories = allCategories,
-                categoryViewModel = categoryViewModel,
-                onDismiss = { upcomingViewModel.closeSheet() }
-            )
-        }
+    }
+    if (upcomingUiState.showSheet) {
+        UpcomingTransactionSheet(
+            uiState = upcomingUiState,
+            viewModel = upcomingViewModel,
+            allCategories = allCategories,
+            categoryViewModel = categoryViewModel,
+            onDismiss = upcomingViewModel::closeSheet
+        )
     }
 }

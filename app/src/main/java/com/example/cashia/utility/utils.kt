@@ -78,16 +78,6 @@ object PesaTimeConfiguration {
         isDailyDigestEnabled = enabled
     }
 
-    var isWeeklySummaryEnabled: Boolean
-        get() = prefs.getBoolean("weekly_summary_enabled", true)
-        set(v) {
-            prefs.edit().putBoolean("weekly_summary_enabled", v).apply()
-        }
-
-    fun saveWeeklySummary(enabled: Boolean) {
-        isWeeklySummaryEnabled = enabled
-    }
-
     var isMonthlySummaryEnabled: Boolean
         get() = prefs.getBoolean("monthly_summary_enabled", true)
         set(v) {
@@ -96,26 +86,6 @@ object PesaTimeConfiguration {
 
     fun saveMonthlySummary(enabled: Boolean) {
         isMonthlySummaryEnabled = enabled
-    }
-
-    var isQuarterlySummaryEnabled: Boolean
-        get() = prefs.getBoolean("quarterly_summary_enabled", true)
-        set(v) {
-            prefs.edit().putBoolean("quarterly_summary_enabled", v).apply()
-        }
-
-    fun saveQuarterlySummary(enabled: Boolean) {
-        isQuarterlySummaryEnabled = enabled
-    }
-
-    var isYearlySummaryEnabled: Boolean
-        get() = prefs.getBoolean("yearly_summary_enabled", true)
-        set(v) {
-            prefs.edit().putBoolean("yearly_summary_enabled", v).apply()
-        }
-
-    fun saveYearlySummary(enabled: Boolean) {
-        isYearlySummaryEnabled = enabled
     }
 
     var isUpcomingReminderEnabled: Boolean
@@ -162,9 +132,23 @@ object PesaTimeConfiguration {
         isDarkTheme = prefs.getBoolean("dark_theme", true)
         val dayName = prefs.getString("start_day", DayOfWeek.SUNDAY.name)
         firstDayOfWeek = DayOfWeek.valueOf(dayName ?: DayOfWeek.SUNDAY.name)
-        isDailyDigestEnabled = prefs.getBoolean("daily_digest_on", false)
-        reminderHour = prefs.getInt("reminder_hour", 8)
-        reminderMinute = prefs.getInt("reminder_minute", 0)
+        // Notification prefs (daily digest, reminder time) are read lazily by their
+        // getters — do NOT write them back here: an earlier version round-tripped
+        // them through setters with mismatched keys, force-disabling the digest and
+        // resetting the time to 08:00 on every launch. Clear those bug-written
+        // values once so the intended defaults (enabled, evening) apply again.
+        if (!prefs.getBoolean("notif_prefs_migrated", false)) {
+            prefs.edit {
+                remove("daily_digest_enabled")
+                if (prefs.getInt("reminder_hour", -1) == 8 &&
+                    prefs.getInt("reminder_minute", -1) == 0
+                ) {
+                    remove("reminder_hour")
+                    remove("reminder_minute")
+                }
+                putBoolean("notif_prefs_migrated", true)
+            }
+        }
     }
 
     var linkedGoogleEmail: String?
@@ -204,6 +188,7 @@ object PesaTimeConfiguration {
         AppDestinations.Calendar.route -> "Activity across the month"
         AppDestinations.Analytics.route -> "Breakdown by period & category"
         AppDestinations.Projections.route -> "30-day balance forecast"
+        AppDestinations.SummaryReport.route -> "Daily & monthly reports"
         else -> ""
     }
 
@@ -215,6 +200,7 @@ object PesaTimeConfiguration {
         AppDestinations.Projections.route -> "Forecast"
         AppDestinations.Settings.route -> "Settings"
         AppDestinations.Categories.route -> "Categories"
+        AppDestinations.SummaryReport.route -> "Summary"
         else -> "PesaPulse"
     }
 

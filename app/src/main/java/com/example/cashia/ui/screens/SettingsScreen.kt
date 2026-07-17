@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -107,7 +108,7 @@ fun SettingsScreen(
 
     // Day picker dialog
     if (showDayPicker) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showDayPicker = false }) {
+        Dialog(onDismissRequest = { showDayPicker = false }) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -261,10 +262,14 @@ fun SettingsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 115.dp,
+            bottom = 120.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-
         // Categories
         item {
             SettingsSection(title = "Categories") {

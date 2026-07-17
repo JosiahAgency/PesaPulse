@@ -1,0 +1,75 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  test-and-build:
+    name: Tests and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x ./gradlew
+
+      - name: Run unit tests and build checks
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+
+  performance-evaluator:
+    name: Performance Evaluator
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test-and-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x ./gradlew
+
+      - name: Run parser performance evaluator
+        run: ./gradlew :app:testDebugUnitTest --tests "com.example.cashia.utility.ParserPerformanceEvaluatorTest" --no-daemon --stacktrace
+
+      - name: Upload performance evaluator reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-evaluator-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/

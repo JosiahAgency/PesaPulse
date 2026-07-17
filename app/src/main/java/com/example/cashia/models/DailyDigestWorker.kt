@@ -1,54 +1,71 @@
 package com.example.cashia.models
 
-import android.Manifest
 import android.content.Context
-import androidx.annotation.RequiresPermission
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
+import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
+/**
+ * Evening recap of the current day, fired at the user's reminder time
+ * (default 20:00). Tapping it deep-links to the in-app report for that day.
+ */
 class DailyDigestWorker(
     private val context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        if (!PesaTimeConfiguration.isDailyDigestEnabled) return Result.success()
+        try {
+            if (!PesaTimeConfiguration.isDailyDigestEnabled) return Result.success()
 
-        val today = LocalDate.now().toString()
-        val db = AppDatabase.getDatabase(context)
-        val txs = withContext(Dispatchers.IO) {
-            db.transactionDao().getTransactionsForDateRange(today, today)
-        }
-        val balance = withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() } ?: 0.0
-
-        var income = 0.0
-        var expense = 0.0
-        txs.forEach {
-            when (it.type) {
-                "income" -> income += it.amount
-                "expense" -> expense += it.amount + it.transactionCost
+            val today = LocalDate.now().toString()
+            val db = AppDatabase.getDatabase(context)
+            val txs = withContext(Dispatchers.IO) {
+                db.transactionDao().getTransactionsForDateRange(today, today)
             }
-        }
-        val net = income - expense
+            val balance =
+                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() } ?: 0.0
 
-        val body = buildString {
-            append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
-            append("💸 Spent:    ${NotificationHelper.ksh(expense)}\n")
-            append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
-            append("🏦 Balance:  ${NotificationHelper.ksh(balance)}")
-            if (txs.isNotEmpty()) append("\n📋 ${txs.size} transaction(s) today")
-            if (txs.isEmpty()) append("\n🌿 No M-Pesa activity today")
-        }
+            var income = 0.0
+            var expense = 0.0
+            txs.forEach {
+                when (it.type) {
+                    "income" -> income += it.amount
+                    "expense" -> expense += it.amount + it.transactionCost
+                }
+            }
+            val net = income - expense
 
-        NotificationHelper.post(context, ID, NotificationHelper.CH_DAILY, "📅 Daily Digest", body)
-        return Result.success()
+            val body = buildString {
+                append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
+                append("💸 Spent:    ${NotificationHelper.ksh(expense)}\n")
+                append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
+                append("🏦 Balance:  ${NotificationHelper.ksh(balance)}")
+                if (txs.isNotEmpty()) append("\n📋 ${txs.size} transaction(s) today · tap for details")
+                else append("\n🌿 No M-Pesa activity today")
+            }
+
+            NotificationHelper.post(
+                context,
+                id = ID,
+                channelId = NotificationHelper.CH_DAILY,
+                title = "📅 Today's Recap",
+                body = body,
+                deepLinkRoute = AppDestinations.SummaryReport.buildRoute("day", today)
+            )
+            return Result.success()
+        } finally {
+            // Queue tomorrow's run even when disabled or on failure, so the chain
+            // never dies. APPEND keeps this running instance from cancelling itself.
+            NotificationScheduler.scheduleDailyDigest(context, fromWorker = true)
+        }
     }
 
     companion object {

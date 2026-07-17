@@ -154,6 +154,33 @@ git clone https://github.com/yourusername/pesapulse.git
 
 ---
 
+## Commit/Push Quality Gates
+
+This project now includes automated **test + performance evaluators** to catch regressions before and after code is pushed.
+
+### 1. Local Git hooks (pre-commit and pre-push)
+
+Hooks are stored in `.githooks/`:
+- `pre-commit`: runs parser quality tests
+- `pre-push`: runs unit tests, parser performance evaluator, and debug assemble
+
+Enable them once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+### 2. GitHub Actions on push/PR
+
+Workflow: `.github/workflows/quality-gates.yml`
+
+Runs on every push and pull request:
+- `:app:testDebugUnitTest`
+- `:app:assembleDebug`
+- Performance evaluator test (`ParserPerformanceEvaluatorTest`)
+
+---
+
 ## Disclaimer
 
 PesaPulse is not affiliated with Safaricom or M-PESA.

@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens.allTransactions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -32,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,13 +51,12 @@ import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
+import com.example.cashia.ui.reusedElements.HarmonizedIconFab
 import com.example.cashia.ui.reusedElements.PendingReviewBadge
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
-import com.example.cashia.ui.theme.primaryGradient
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -70,60 +66,57 @@ fun TransactionScreen(
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
+    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+    val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val nextPending by viewModel.nextPending.collectAsStateWithLifecycle()
+    val allUnmatched by viewModel.allUnmatched.collectAsStateWithLifecycle()
+
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    val allCategories by categoryViewModel.allCategories.collectAsState()
-    val reversalIndex by viewModel.reversalIndex.collectAsState()
-    val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
 
     var searchExpanded by remember { mutableStateOf(false) }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
-
-//    val searchQuery = state.searchQuery
-    var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
-    var dateRangeStart by remember { mutableStateOf<LocalDate?>(null) }
-    var dateRangeEnd by remember { mutableStateOf<LocalDate?>(null) }
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
 
     val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
-    LaunchedEffect(
-        state.searchQuery,
-        selectedCategoryFilter,
-        dateRangeStart,
-        dateRangeEnd,
-    ) {
-        viewModel.updateFilters(
-            query = state.searchQuery,
-            categoryFilter = selectedCategoryFilter,
-            start = dateRangeStart,
-            end = dateRangeEnd,
-            categoryMap = allCategories.associate { it.id to it.label }
-        )
-    }
+    var localQuery by remember { mutableStateOf(state.searchQuery) }
+    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val hasFilters by remember {
         derivedStateOf {
-            state.selectedCategory != null || state.searchQuery.isNotBlank()
+            state.selectedCategory != null || localQuery.isNotBlank() || state.dateRangeStart != null
         }
     }
-
-    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
-
-    val pendingCount by viewModel.pendingReviewCount.collectAsState()
-    val nextPending by viewModel.nextPending.collectAsState()
-    val allUnmatched by viewModel.allUnmatched.collectAsState()
 
     var showUnmatchedModal by remember { mutableStateOf(false) }
     var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
     var unmatchedExpanded by remember { mutableStateOf(false) }
 
     var hasAutoOpened by remember { mutableStateOf(false) }
+
+    LaunchedEffect(localQuery) {
+        viewModel.setQuery(localQuery)
+    }
+
+    // Grow the DB window when the user scrolls near the end of the loaded rows.
+    val nearListEnd by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 15
+        }
+    }
+    LaunchedEffect(nearListEnd, state.hasMore) {
+        if (nearListEnd && state.hasMore) viewModel.loadMore()
+    }
 
     LaunchedEffect(pendingCount) {
         if (pendingCount > 0 && !hasAutoOpened) {
@@ -189,24 +182,24 @@ fun TransactionScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp
+                    start = 16.dp, end = 16.dp, top = 115.dp, bottom = 100.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
 
                 item(key = "search") {
                     EnhancedSearchBar(
-                        query = state.searchQuery,
+                        query = localQuery,
                         expanded = searchExpanded,
                         recentSearches = recentSearches,
                         allCategories = allCategories,
                         selectedCategory = state.selectedCategory,
-                        dateRangeStart = null,
-                        dateRangeEnd = null,
-                        onQueryChange = viewModel::setQuery,
+                        dateRangeStart = state.dateRangeStart,
+                        dateRangeEnd = state.dateRangeEnd,
+                        onQueryChange = { localQuery = it },
                         onExpandChange = { searchExpanded = it },
                         onRecentPick = {
-                            viewModel.setQuery(it)
+                            localQuery = it
                             searchExpanded = false
                         },
                         onCategoryPick = viewModel::setCategory,
@@ -261,19 +254,16 @@ fun TransactionScreen(
                     item(key = "filter_pills") {
                         ActiveFilterPills(
                             searchQuery = state.searchQuery,
-                            selectedCategory = selectedCategoryFilter?.let { categoryMap[it] },
-                            dateRangeStart = dateRangeStart,
-                            dateRangeEnd = dateRangeEnd,
+                            selectedCategory = state.selectedCategory?.let { categoryMap[it] },
+                            dateRangeStart = state.dateRangeStart,
+                            dateRangeEnd = state.dateRangeEnd,
                             onClearSearch = {
-                                viewModel.setQuery("")
+                                localQuery = ""
                             },
                             onClearCategory = {
-                                selectedCategoryFilter = null
                                 viewModel.setCategory(null)
                             },
                             onClearDate = {
-                                dateRangeStart = null
-                                dateRangeEnd = null
                                 viewModel.setDateRange(null, null)
                             }
                         )
@@ -422,30 +412,16 @@ fun TransactionScreen(
             visible = showBackToTop,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 90.dp)
+                .padding(bottom = 180.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                shadowElevation = 8.dp,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clickable {
-                        coroutineScope.launch { listState.scrollToItem(0) }
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.background(brush = primaryGradient())
-                ) {
-                    Icon(
-                        Icons.Rounded.KeyboardArrowUp,
-                        contentDescription = "Back to top",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
+            HarmonizedIconFab(
+                icon = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = "Back to top",
+                onClick = {
+                    coroutineScope.launch { listState.scrollToItem(0) }
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
-            }
+            )
         }
     }
 }
