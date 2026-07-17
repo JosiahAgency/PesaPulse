@@ -122,6 +122,9 @@ interface TransactionDao {
     @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<MpesaTransactions>>
 
+    @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestTransactionOnce(): MpesaTransactions?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransactions(transactions: List<MpesaTransactions>)
 

@@ -11,6 +11,7 @@ import com.example.cashia.models.SyncState
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.guessCategory
 import com.example.cashia.models.parseMpesaMessage
+import com.example.cashia.widget.WidgetUpdateManager
 import com.example.cashia.utility.SmsRepository.fetchMpesaMessages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -145,7 +146,7 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
     val dbEnd = System.currentTimeMillis()
 
     Log.d("SyncPerf", "Database transaction finished in ${dbEnd - dbStart}ms")
+    WidgetUpdateManager.refreshCashiaWidgets(context)
     Log.d("SyncPerf", "Total sync cycle completed in ${dbEnd - startTime}ms")
     return parsed
 }
-

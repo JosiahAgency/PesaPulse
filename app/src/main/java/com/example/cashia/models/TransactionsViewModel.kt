@@ -15,6 +15,7 @@ import com.example.cashia.utility.localDate
 import com.example.cashia.utility.partialFieldsFromJson
 import com.example.cashia.utility.syncTransactions
 import com.example.cashia.utility.toParsedTx
+import com.example.cashia.widget.WidgetUpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -353,6 +354,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             }
             dao.insertTransactions(listOf(transaction))
             unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
+            WidgetUpdateManager.refreshCashiaWidgets(context)
         }
     }
 
