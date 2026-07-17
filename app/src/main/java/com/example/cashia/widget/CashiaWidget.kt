@@ -33,7 +33,6 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.example.cashia.AppDatabase
 import com.example.cashia.MainActivity
 import com.example.cashia.ui.theme.WidgetBackground
@@ -185,7 +184,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = "Balance Snapshot",
                 style = TextStyle(
-                    color = ColorProvider(WidgetPrimary),
                     fontWeight = FontWeight.Bold,
                     fontSize = TextUnit(12f, TextUnitType.Sp)
                 )
@@ -206,7 +204,6 @@ class CashiaWidget : GlanceAppWidget() {
                 Text(
                     text = badgeText,
                     style = TextStyle(
-                        color = ColorProvider(WidgetSubtle),
                         fontSize = TextUnit(8f, TextUnitType.Sp),
                         fontWeight = FontWeight.Medium
                     )
@@ -228,7 +225,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = "CURRENT BALANCE",
                 style = TextStyle(
-                    color = ColorProvider(WidgetSubtle),
                     fontSize = TextUnit(9f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -237,7 +233,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = if (showBalance) ksh(balance) else "••••••",
                 style = TextStyle(
-                    color = ColorProvider(WidgetText),
                     fontWeight = FontWeight.Bold,
                     fontSize = TextUnit(22f, TextUnitType.Sp)
                 )
@@ -249,7 +244,6 @@ class CashiaWidget : GlanceAppWidget() {
                     else -> "Tap Reveal to view balance"
                 },
                 style = TextStyle(
-                    color = ColorProvider(WidgetSubtle),
                     fontSize = TextUnit(9f, TextUnitType.Sp)
                 )
             )
@@ -286,7 +280,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = title.uppercase(),
                 style = TextStyle(
-                    color = ColorProvider(WidgetSubtle),
                     fontSize = TextUnit(8f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -310,7 +303,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = label.uppercase(),
                 style = TextStyle(
-                    color = ColorProvider(WidgetSubtle),
                     fontSize = TextUnit(8f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -319,7 +311,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = "$sign${ksh(amount).removePrefix("Ksh ")}",
                 style = TextStyle(
-                    color = ColorProvider(tint),
                     fontSize = TextUnit(10f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -329,7 +320,6 @@ class CashiaWidget : GlanceAppWidget() {
 
     @Composable
     private fun TodayNetCard(today: Metrics) {
-        val netColor = if (today.net >= 0) WidgetIncome else WidgetExpense
         Box(
             modifier = GlanceModifier
                 .fillMaxWidth()
@@ -342,7 +332,6 @@ class CashiaWidget : GlanceAppWidget() {
             Text(
                 text = "Today net: ${if (today.net >= 0) "+" else "−"}${ksh(kotlin.math.abs(today.net)).removePrefix("Ksh ")}",
                 style = TextStyle(
-                    color = ColorProvider(netColor),
                     fontSize = TextUnit(10f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -355,7 +344,6 @@ class CashiaWidget : GlanceAppWidget() {
         Text(
             text = updatedAt,
             style = TextStyle(
-                color = ColorProvider(WidgetSubtle),
                 fontSize = TextUnit(9f, TextUnitType.Sp)
             )
         )
@@ -380,7 +368,6 @@ class CashiaWidget : GlanceAppWidget() {
                         else -> "Reveal"
                     },
                     style = TextStyle(
-                        color = ColorProvider(WidgetPrimary),
                         fontSize = TextUnit(10f, TextUnitType.Sp),
                         fontWeight = FontWeight.Bold
                     )
@@ -399,7 +386,6 @@ class CashiaWidget : GlanceAppWidget() {
                 Text(
                     text = "Open",
                     style = TextStyle(
-                        color = ColorProvider(WidgetPrimary),
                         fontSize = TextUnit(10f, TextUnitType.Sp),
                         fontWeight = FontWeight.Bold
                     )
