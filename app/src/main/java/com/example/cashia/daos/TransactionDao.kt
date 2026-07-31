@@ -15,6 +15,23 @@ data class FilteredTotals(
     val transactionCost: Double = 0.0,
 )
 
+/** SQL-side weekday spend aggregate. `dow` is SQLite's `strftime('%w')`: 0=Sunday..6=Saturday. */
+data class WeekdaySpendRow(
+    val dow: Int,
+    val totalAmount: Double,
+    val activeDays: Int,
+    val txCount: Int,
+)
+
+/** SQL-side recurring-merchant aggregate (recipients seen in >= minMonths distinct calendar months). */
+data class RecurringMerchantRow(
+    val recipient: String,
+    val totalAmount: Double,
+    val occurrences: Int,
+    val lastDate: String,
+    val lastTimestamp: Long,
+)
+
 @Dao
 interface TransactionDao {
 
@@ -103,6 +120,10 @@ interface TransactionDao {
     )
     fun getTransactionsInRange(startDate: String, endDate: String): Flow<List<MpesaTransactions>>
 
+    /** Earliest transaction date in the whole table — used to size the Projection lookback window without loading all rows. */
+    @Query("SELECT MIN(date) FROM MpesaTransactions")
+    fun getEarliestTransactionDateFlow(): Flow<String?>
+
     /** Analytics: type + timestamp-range filter pushed into SQL. */
     @Query(
         """
@@ -118,9 +139,6 @@ interface TransactionDao {
 
     @Query("SELECT * FROM MpesaTransactions WHERE id IN (:ids)")
     suspend fun getTransactionsByIds(ids: List<String>): List<MpesaTransactions>
-
-    @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC")
-    fun getAllTransactions(): Flow<List<MpesaTransactions>>
 
     @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestTransactionOnce(): MpesaTransactions?
@@ -164,6 +182,49 @@ interface TransactionDao {
     suspend fun getLatestBalance(): Double?
     @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId = :txId LIMIT 1")
     suspend fun getReversalFor(txId: String): MpesaTransactions?
+
+    /** All transactions that reverse another transaction (bounded — used to rebuild ReversalIndex without the full table). */
+    @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId IS NOT NULL")
+    fun getReversalsFlow(): Flow<List<MpesaTransactions>>
+
+    /** Per-weekday spend/income aggregate, pushed into SQL so raw rows never materialize client-side. */
+    @Query(
+        """
+        SELECT CAST(strftime('%w', date) AS INTEGER) AS dow,
+               SUM(amount) AS totalAmount,
+               COUNT(DISTINCT date) AS activeDays,
+               COUNT(*) AS txCount
+        FROM MpesaTransactions
+        WHERE type = :type AND reversedTxId IS NULL
+        GROUP BY dow
+        """
+    )
+    fun getWeekdaySpendPattern(type: String): Flow<List<WeekdaySpendRow>>
+
+    /**
+     * Recipients seen in >= minMonths distinct calendar months, pushed into SQL.
+     * `recipient` and `lastDate` are bare (non-aggregate) columns alongside a single
+     * MAX(timestamp) — SQLite's documented "bare column in an aggregate query" behavior
+     * guarantees both are read from the same row as that MAX(), i.e. the most recent
+     * transaction in the group, matching the original in-memory `txs.first()` (the source
+     * list was timestamp-DESC ordered).
+     */
+    @Query(
+        """
+        SELECT recipient,
+               date AS lastDate,
+               SUM(amount) AS totalAmount,
+               COUNT(*) AS occurrences,
+               MAX(timestamp) AS lastTimestamp
+        FROM MpesaTransactions
+        WHERE type = :type AND reversedTxId IS NULL
+        GROUP BY LOWER(TRIM(recipient))
+        HAVING COUNT(DISTINCT substr(date, 1, 7)) >= :minMonths
+        ORDER BY occurrences DESC
+        LIMIT :limit
+        """
+    )
+    fun getRecurringMerchants(type: String, minMonths: Int = 2, limit: Int = 8): Flow<List<RecurringMerchantRow>>
 
     /**
      * Re-classify every transaction from the same recipient when the user

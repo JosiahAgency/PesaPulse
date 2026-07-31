@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,7 +21,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cashia.models.MonthPaceState
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
@@ -40,6 +47,8 @@ fun WeeklyCalendar(
     allTransactions: List<MpesaTransactions>,
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
+    onWeekVisible: (LocalDate) -> Unit = {},
+    pace: MonthPaceState = MonthPaceState(),
 ) {
     val today = remember { LocalDate.now() }
     val initialPage = 500
@@ -51,13 +60,28 @@ fun WeeklyCalendar(
     val anchorWeekStart = remember(today, firstDayOfWeek) {
         today.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
     }
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
+
     LaunchedEffect(selectedDate, firstDayOfWeek) {
         val targetWeekStart = selectedDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
         val weeksDiff = java.time.temporal.ChronoUnit.WEEKS
             .between(anchorWeekStart, targetWeekStart).toInt()
         val targetPage = initialPage + weeksDiff
         if (pagerState.currentPage != targetPage) {
+            isProgrammaticScroll = true
             pagerState.animateScrollToPage(targetPage)
+            isProgrammaticScroll = false
+        }
+    }
+
+    // Reports the week actually on screen back to the caller so a bounded query can stay
+    // centered on it — without this, free-swiping away from `selectedDate`'s week (which
+    // doesn't itself change on a swipe, only on a day tap) would show stale/missing dots
+    // once the caller stops handing in the full transaction table.
+    LaunchedEffect(Unit) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            if (isProgrammaticScroll) return@collect
+            onWeekVisible(anchorWeekStart.plusWeeks((page - initialPage).toLong()))
         }
     }
 
@@ -108,6 +132,59 @@ fun WeeklyCalendar(
                     }
                 }
             }
+            MonthPaceRow(
+                pace = pace,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+    }
+}
+
+/** "Pace this month" row — see [MonthPaceState] for what this reuses/represents. */
+@Composable
+private fun MonthPaceRow(pace: MonthPaceState, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Pace this month",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Text(
+                "${pace.percentLabel}%",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "Left ${PesaTimeConfiguration.formatCurrency(pace.remainingLabel)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(pace.progress)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(primaryGradient())
+            )
         }
     }
 }

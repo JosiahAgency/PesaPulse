@@ -74,7 +74,7 @@ fun CalendarScreen(
     calendarViewModel: CalendarViewModel
 ) {
     val today = remember { LocalDate.now() }
-    val allTransactions by viewModel.allTransactionsFlow.collectAsStateWithLifecycle()
+    val windowedTransactions by calendarViewModel.windowedTransactionsFlow.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
@@ -146,13 +146,13 @@ fun CalendarScreen(
         ) {
             item {
                 FinancialOverviewCards(
-                    allTransactions, calendarState.selectedDate, calendarState.selectedFilter,
+                    windowedTransactions, calendarState.selectedDate, calendarState.selectedFilter,
                     calendarViewModel::setFilter
                 )
             }
             item {
                 FullMonthCalendar(
-                    allTransactions = allTransactions,
+                    allTransactions = windowedTransactions,
                     selectedDate = calendarState.selectedDate,
                     upcomingTransactions = upcomingAll,
                     calendarViewModel::handleDayClick
@@ -171,7 +171,13 @@ fun CalendarScreen(
             val noUpcoming = calendarState.upcomingForDay.isEmpty()
 
             if (noTransactions && (!calendarState.filterByDay || noUpcoming)) {
-                item { EmptyStateMessage("No Transactions Found") }
+                item {
+                    EmptyStateMessage(
+                        title = "No transactions found",
+                        message = "Try a different day or month.",
+                        emoji = "📅"
+                    )
+                }
             } else {
                 if (calendarState.filterByDay && !noUpcoming) {
                     items(

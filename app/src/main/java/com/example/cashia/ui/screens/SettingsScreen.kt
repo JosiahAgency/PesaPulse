@@ -66,11 +66,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
+import com.example.cashia.ui.reusedElements.PesaDialog
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
 import com.example.cashia.utility.GoogleAuthHelper
@@ -108,110 +108,97 @@ fun SettingsScreen(
 
     // Day picker dialog
     if (showDayPicker) {
-        Dialog(onDismissRequest = { showDayPicker = false }) {
-            Surface(
+        PesaDialog(
+            onDismissRequest = { showDayPicker = false },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                border = BorderStroke(
-                    0.5.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
+                    .size(48.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
+                Icon(
+                    Icons.Rounded.CalendarViewWeek,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "Week Starts On",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                "Transactions will be grouped starting from this day.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            val sortedDays = remember(PesaTimeConfiguration.firstDayOfWeek) {
+                val allDays = DayOfWeek.entries.toMutableList()
+                val selected = PesaTimeConfiguration.firstDayOfWeek
+                allDays.remove(selected)
+                allDays.add(0, selected)
+                allDays
+            }
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(sortedDays) { day ->
+                    val isSelected = PesaTimeConfiguration.firstDayOfWeek == day
+                    val backgroundColor = if (isSelected)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                    else
+                        Color.Transparent
+
+                    Row(
                         modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.CalendarViewWeek,
-                            null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        "Week Starts On",
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        "Transactions will be grouped starting from this day.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    val sortedDays = remember(PesaTimeConfiguration.firstDayOfWeek) {
-                        val allDays = DayOfWeek.entries.toMutableList()
-                        val selected = PesaTimeConfiguration.firstDayOfWeek
-                        allDays.remove(selected)
-                        allDays.add(0, selected)
-                        allDays
-                    }
-
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(sortedDays) { day ->
-                            val isSelected = PesaTimeConfiguration.firstDayOfWeek == day
-                            val backgroundColor = if (isSelected)
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                            else
-                                Color.Transparent
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(backgroundColor)
-                                    .clickable {
-                                        PesaActions.playClick(haptic)
-                                        onFirstDayOfWeekChange(day)
-                                        showDayPicker = false
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = day.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                        brush = if (isSelected) primaryGradient() else null,
-                                    ),
-                                    color = if (!isSelected) MaterialTheme.colorScheme.onSurface else Color.Unspecified
-                                )
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CheckCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(backgroundColor)
+                            .clickable {
+                                PesaActions.playClick(haptic)
+                                onFirstDayOfWeekChange(day)
+                                showDayPicker = false
                             }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = day.name.lowercase().replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                brush = if (isSelected) primaryGradient() else null,
+                            ),
+                            color = if (!isSelected) MaterialTheme.colorScheme.onSurface else Color.Unspecified
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
-
-                    Spacer(Modifier.height(16.dp))
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -222,29 +209,22 @@ fun SettingsScreen(
             initialMinute = PesaTimeConfiguration.reminderMinute,
             is24Hour = is24Hour  // Respect the user's time format preference
         )
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showTimePicker = false }) {
-            Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface) {
-                Column(
-                    modifier = Modifier.padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    TimePicker(state = timePickerState)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
-                        TextButton(
-                            onClick = {
-                                settingsViewModel.updateReminderTime(
-                                    timePickerState.hour,
-                                    timePickerState.minute
-                                )
-                                showTimePicker = false
-                            }
-                        ) { Text("Confirm") }
+        PesaDialog(onDismissRequest = { showTimePicker = false }) {
+            TimePicker(state = timePickerState)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                TextButton(
+                    onClick = {
+                        settingsViewModel.updateReminderTime(
+                            timePickerState.hour,
+                            timePickerState.minute
+                        )
+                        showTimePicker = false
                     }
-                }
+                ) { Text("Confirm") }
             }
         }
     }

@@ -3,17 +3,23 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.daos.TransactionDao
 import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.TransactionType
+import com.example.cashia.utility.toParsedTx
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
+import java.time.YearMonth
 
 data class CalendarUiState(
     val selectedDate: LocalDate = LocalDate.now(),
@@ -23,16 +29,38 @@ data class CalendarUiState(
     val upcomingForDay: List<UpcomingTransaction> = emptyList() // Adjust type based on your Upcoming model
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModel(
-    parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
+    dao: TransactionDao,
     upcomingFlow: StateFlow<List<UpcomingTransaction>>
 ) : ViewModel() {
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     private val _filterByDay = MutableStateFlow(false)
     private val _selectedFilter = MutableStateFlow(TransactionType.ALL)
 
+    /**
+     * Bounded to the selected month plus its immediate neighbors instead of the full table.
+     * FullMonthCalendar's HorizontalPager reports the visible month back through
+     * [handleDayClick]'s month-change path as the user swipes, so this window stays centered
+     * on whatever month is actually on screen. Exposed for FinancialOverviewCards /
+     * FullMonthCalendar, which previously read the full transaction table directly.
+     */
+    val windowedTransactionsFlow: StateFlow<List<MpesaTransactions>> = _selectedDate
+        .map { date ->
+            val month = YearMonth.from(date)
+            month.minusMonths(1).atDay(1).toString() to month.plusMonths(1).atEndOfMonth().toString()
+        }
+        .distinctUntilChanged()
+        .flatMapLatest { (start, end) -> dao.getTransactionsInRange(start, end) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val parsedWindowFlow: StateFlow<List<ParsedTx>> = windowedTransactionsFlow
+        .map { txs -> txs.map { it.toParsedTx() } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val uiState: StateFlow<CalendarUiState> = combine(
-        parsedTransactionsFlow,   // dates already derived once, upstream
+        parsedWindowFlow,   // dates already derived once, upstream
         upcomingFlow,
         _selectedDate,
         _filterByDay,
@@ -94,12 +122,12 @@ class CalendarViewModel(
     // ── Factory ──────────────────────────────────────────────────────────────
     companion object {
         fun provideFactory(
-            parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
+            dao: TransactionDao,
             upcomingFlow: StateFlow<List<UpcomingTransaction>> // Adjust type
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return CalendarViewModel(parsedTransactionsFlow, upcomingFlow) as T
+                return CalendarViewModel(dao, upcomingFlow) as T
             }
         }
     }

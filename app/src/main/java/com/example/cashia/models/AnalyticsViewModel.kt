@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.daos.TransactionDao
+import com.example.cashia.utility.RecurringMerchant
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.TransactionType
+import com.example.cashia.utility.WeekdayPattern
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,61 @@ class AnalyticsViewModel(
     private val _selectedScope = MutableStateFlow(TimeScope.MONTH)
     private val _startDate = MutableStateFlow(today.withDayOfMonth(1))
     private val _endDate = MutableStateFlow(today)
+
+    /**
+     * Bounded to the selected period (both transaction types) instead of the full table —
+     * serves the cards that filter by date range only, not by type: TypeSelectorCard,
+     * CashFlowTrendChart, BurnRateCard.
+     */
+    val periodTransactions: StateFlow<List<MpesaTransactions>> = combine(
+        _startDate,
+        _endDate
+    ) { start, end -> start to end }
+        .flatMapLatest { (start, end) -> dao.getTransactionsInRange(start.toString(), end.toString()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Weekday spend/income pattern computed in SQL (see [TransactionDao.getWeekdaySpendPattern])
+     * instead of scanning the full transaction table client-side. SQLite's `strftime('%w')` is
+     * 0=Sunday..6=Saturday, which does not line up 1:1 with [DayOfWeek] (MONDAY=1..SUNDAY=7), so
+     * the mapping below translates explicitly rather than casting.
+     */
+    val weekdayPatternFlow: StateFlow<List<WeekdayPattern>> = _selectedType
+        .flatMapLatest { type -> dao.getWeekdaySpendPattern(type.name.lowercase()) }
+        .map { rows ->
+            val byDow = rows.associateBy { it.dow }
+            DayOfWeek.entries.map { dow ->
+                val row = byDow[dow.value % 7] // MONDAY(1)->1 ... SATURDAY(6)->6, SUNDAY(7)->0
+                WeekdayPattern(
+                    day = dow,
+                    avgAmount = if (row == null || row.activeDays == 0) 0.0
+                    else row.totalAmount / row.activeDays,
+                    txCount = row?.txCount ?: 0
+                )
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Recurring-merchant detection computed in SQL (see [TransactionDao.getRecurringMerchants])
+     * instead of grouping the full transaction table client-side.
+     */
+    val recurringMerchantsFlow: StateFlow<List<RecurringMerchant>> = _selectedType
+        .flatMapLatest { type -> dao.getRecurringMerchants(type.name.lowercase(), minMonths = 2, limit = 8) }
+        .map { rows ->
+            rows.map { row ->
+                RecurringMerchant(
+                    recipient = row.recipient.trim(),
+                    avgAmount = row.totalAmount / row.occurrences,
+                    occurrences = row.occurrences,
+                    lastDate = LocalDate.parse(row.lastDate),
+                    totalAmount = row.totalAmount
+                )
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // Type + time-range filtering runs in SQL: only the matching rows are loaded,
     // and Room re-emits automatically whenever the table changes.

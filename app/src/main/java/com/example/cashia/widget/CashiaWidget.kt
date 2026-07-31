@@ -39,9 +39,6 @@ import com.example.cashia.ui.theme.WidgetBackground
 import com.example.cashia.ui.theme.WidgetCard
 import com.example.cashia.ui.theme.WidgetExpense
 import com.example.cashia.ui.theme.WidgetIncome
-import com.example.cashia.ui.theme.WidgetPrimary
-import com.example.cashia.ui.theme.WidgetSubtle
-import com.example.cashia.ui.theme.WidgetText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -83,8 +80,9 @@ class CashiaWidget : GlanceAppWidget() {
                 val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1L).toString()
                 val weekTxs = dao.getTransactionsForDateRange(weekStart, todayStr)
                 val latestTx = dao.getLatestTransactionOnce()
-                val isLocked = (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
-                    ?.isKeyguardLocked == true
+                val isLocked =
+                    (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
+                        ?.isKeyguardLocked == true
                 val revealRequested = context
                     .getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
                     .getBoolean(SHOW_BALANCE_KEY, false)
@@ -298,7 +296,8 @@ class CashiaWidget : GlanceAppWidget() {
         sign: String = ""
     ) {
         Column(
-            modifier = modifier.background(WidgetCard).cornerRadius(10.dp).padding(horizontal = 8.dp, vertical = 6.dp)
+            modifier = modifier.background(WidgetCard).cornerRadius(10.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Text(
                 text = label.uppercase(),
@@ -330,7 +329,11 @@ class CashiaWidget : GlanceAppWidget() {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Today net: ${if (today.net >= 0) "+" else "−"}${ksh(kotlin.math.abs(today.net)).removePrefix("Ksh ")}",
+                text = "Today net: ${if (today.net >= 0) "+" else "−"}${
+                    ksh(kotlin.math.abs(today.net)).removePrefix(
+                        "Ksh "
+                    )
+                }",
                 style = TextStyle(
                     fontSize = TextUnit(10f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold

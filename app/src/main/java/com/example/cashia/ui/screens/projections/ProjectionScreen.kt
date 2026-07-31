@@ -31,7 +31,7 @@ fun ProjectionScreen(
     // ProjectionViewModel on Dispatchers.Default — this screen only renders state.
     val uiState by projectionViewModel.uiState.collectAsState()
     val state by transactionsViewModel.state.collectAsState()
-    val allTransactions by transactionsViewModel.allTransactionsFlow.collectAsState()
+    val recentTransactions by projectionViewModel.recentTransactionsFlow.collectAsState()
     val allCategories by categoryViewModel.allCategories.collectAsState()
 
     val projection = uiState.projection
@@ -83,7 +83,6 @@ fun ProjectionScreen(
 
         item(key = "upcoming_section") {
             UpcomingSection(
-                transactionsViewModel,
                 uiState.overdue,
                 uiState.dueSoon,
                 uiState.later,
@@ -102,7 +101,7 @@ fun ProjectionScreen(
                     period = uiState.period,
                     selectedPeriodIndex = uiState.selectedPeriodIndex,
                     onPeriodChange = projectionViewModel::setPeriod,
-                    allTransactions,
+                    recentTransactions,
                     allCategories
                 )
             }

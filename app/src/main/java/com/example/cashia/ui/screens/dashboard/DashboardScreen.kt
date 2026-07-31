@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -25,10 +26,15 @@ import com.example.cashia.models.DashboardViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.models.UpcomingStatus
 import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.dashboardDayBucket
+import com.example.cashia.utility.localDate
+import java.time.LocalDate
 
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,7 +43,8 @@ fun DashboardScreen(
     viewModel: TransactionsViewModel,
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel,
-    dashboardViewModel: DashboardViewModel
+    dashboardViewModel: DashboardViewModel,
+    onNavigateToForecast: () -> Unit = {},
 ) {
     val selectedDate by dashboardViewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedScope by dashboardViewModel.scope.collectAsStateWithLifecycle()
@@ -46,10 +53,30 @@ fun DashboardScreen(
 
     val hapticFeedback = LocalHapticFeedback.current
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val allTransactions by viewModel.allTransactionsFlow.collectAsStateWithLifecycle()
+    val weeklyCalendarTransactions by dashboardViewModel.weeklyCalendarTransactionsFlow.collectAsStateWithLifecycle()
+    val monthPace by dashboardViewModel.monthPace.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
+    val upcoming by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
+
+    val groupedByDay = remember(dashboardState.filteredTransactions) {
+        dashboardState.filteredTransactions
+            .groupBy { it.localDate() }
+            .toSortedMap(compareByDescending { it })
+    }
+
+    // Mirrors ProjectionViewModel's dueSoon bucketing (pending, due within 8 days, not overdue).
+    val dueSoon = remember(upcoming) {
+        val today = LocalDate.now()
+        val cutoff = today.plusDays(8)
+        upcoming
+            .filter { it.status == UpcomingStatus.PENDING }
+            .mapNotNull { tx -> tx.dueDateParsed?.let { d -> tx to d } }
+            .filter { (_, d) -> !d.isBefore(today) && d.isBefore(cutoff) }
+            .sortedBy { it.second }
+            .map { it.first }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -82,7 +109,9 @@ fun DashboardScreen(
                     state.latestBalance,
                     state.latestBalanceDate,
                     isVisible = viewModel.isBalanceVisible,
-                    onToggleVisibility = viewModel::toggleBalanceVisibility
+                    onToggleVisibility = viewModel::toggleBalanceVisibility,
+                    income = dashboardState.totalIncome,
+                    expenses = dashboardState.totalExpenses,
                 )
             }
             item {
@@ -90,17 +119,17 @@ fun DashboardScreen(
                     selectedScope,
                     dashboardViewModel::setScope,
                     dashboardState.periodLabel,
-                    dashboardState.totalIncome,
-                    dashboardState.totalExpenses,
                     hapticFeedback
                 )
             }
             item {
                 WeeklyCalendar(
                     hapticFeedback,
-                    allTransactions,
+                    weeklyCalendarTransactions,
                     selectedDate,
-                    dashboardViewModel::setDate
+                    dashboardViewModel::setDate,
+                    dashboardViewModel::setVisibleWeek,
+                    monthPace
                 )
             }
 
@@ -117,18 +146,35 @@ fun DashboardScreen(
             }
 
             if (dashboardState.filteredTransactions.isNotEmpty() && isListExpanded) {
-                items(dashboardState.filteredTransactions, key = { it.id }) { tx ->
-                    TransactionItem(
-                        tx,
-                        allCategories,
-                        categoryViewModel,
-                        upcomingViewModel,
-                        hapticFeedback,
-                        reversalIndex,
-                    )
+                groupedByDay.forEach { (date, txs) ->
+                    item(key = "day-header-$date") {
+                        SectionLabel(dashboardDayBucket(date))
+                    }
+                    items(txs, key = { it.id }) { tx ->
+                        TransactionItem(
+                            tx,
+                            allCategories,
+                            categoryViewModel,
+                            upcomingViewModel,
+                            hapticFeedback,
+                            reversalIndex,
+                        )
+                    }
                 }
             } else if (dashboardState.filteredTransactions.isEmpty() && isListExpanded) {
-                item { EmptyStateMessage("No transactions in this period") }
+                item {
+                    EmptyStateMessage(
+                        title = "No transactions",
+                        message = "Nothing recorded for this period yet.",
+                        emoji = "🧾"
+                    )
+                }
+            }
+
+            if (dueSoon.isNotEmpty()) {
+                item {
+                    DueSoonBanner(dueSoon = dueSoon, onClick = onNavigateToForecast)
+                }
             }
         }
     }

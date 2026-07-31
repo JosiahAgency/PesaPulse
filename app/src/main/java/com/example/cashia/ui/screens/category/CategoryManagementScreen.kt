@@ -23,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +52,7 @@ import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.TransactionCategory
+import com.example.cashia.ui.reusedElements.PesaDialog
 import com.example.cashia.utility.PesaActions
 
 private sealed class CatListItem {
@@ -232,23 +232,31 @@ fun CategoryManagementScreen(viewModel: CategoryViewModel) {
     }
 
     deleteTarget?.let { cat ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete \"${cat.label}\"?") },
-            text = {
-                Text(
-                    "All transactions in this category will be moved to \"Other\". This cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
+        PesaDialog(onDismissRequest = { deleteTarget = null }) {
+            Text(
+                "Delete \"${cat.label}\"?",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "All transactions in this category will be moved to \"Other\". This cannot be undone.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
                 Button(
                     onClick = { viewModel.deleteCategory(cat); deleteTarget = null },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } }
-        )
+            }
+        }
     }
 }
 

@@ -16,9 +16,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,8 +37,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +65,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -168,7 +170,14 @@ fun PesaPulseApp() {
                     sharedViewModel,
                     categoryViewModel,
                     upcomingViewModel,
-                    dashboardViewModel
+                    dashboardViewModel,
+                    onNavigateToForecast = {
+                        navController.navigate(AppDestinations.Projections.route) {
+                            launchSingleTop = true
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            restoreState = true
+                        }
+                    }
                 )
             }
             composable(AppDestinations.Transactions.route) {
@@ -177,7 +186,7 @@ fun PesaPulseApp() {
             composable(AppDestinations.Calendar.route) {
                 val calendarViewModel: CalendarViewModel = viewModel(
                     factory = CalendarViewModel.provideFactory(
-                        sharedViewModel.parsedTransactionsFlow,
+                        AppDatabase.getDatabase(context).transactionDao(),
                         upcomingViewModel.upcoming
                     )
                 )
@@ -194,13 +203,13 @@ fun PesaPulseApp() {
                         AppDatabase.getDatabase(context).transactionDao(),
                     )
                 )
-                AnalyticsScreen(categoryViewModel, sharedViewModel, analyticsViewModel)
+                AnalyticsScreen(categoryViewModel, analyticsViewModel)
             }
             composable(AppDestinations.Projections.route) {
                 val projectionViewModel: ProjectionViewModel = viewModel(
                     factory = ProjectionViewModel.provideFactory(
                         sharedViewModel.state,
-                        sharedViewModel.parsedTransactionsFlow,
+                        AppDatabase.getDatabase(context).transactionDao(),
                         upcomingViewModel.upcoming
                     )
                 )
@@ -277,19 +286,43 @@ fun PesaPulseApp() {
                     scrolledContainerColor = Color.Transparent
                 ),
                 actions = {
-                    IconButton(onClick = {
-                        PesaActions.playClick(haptic)
+                    val goToSettings = {
                         navController.navigate(AppDestinations.Settings.route) {
                             launchSingleTop = true
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                             restoreState = true
                         }
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                    ) {
+                        IconButton(onClick = {
+                            PesaActions.playClick(haptic)
+                            goToSettings()
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Notifications,
+                                contentDescription = "Notifications",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                    ) {
+                        IconButton(onClick = {
+                            PesaActions.playClick(haptic)
+                            goToSettings()
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = "Settings",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             )
@@ -428,9 +461,11 @@ private fun RowScope.IslandNavItem(
             .weight(1f)
             .fillMaxHeight()
             .scale(scale)
-            .clickable(
+            .selectable(
+                selected = selected,
                 interactionSource = interactionSource,
                 indication = null, // Disables standard ripple since we use scale
+                role = Role.Tab,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -450,7 +485,7 @@ private fun RowScope.IslandNavItem(
             Spacer(Modifier.height(4.dp))
             Icon(
                 imageVector = screen.icon,
-                contentDescription = screen.label,
+                contentDescription = null, // the visible label Text below carries this tab's accessible name
                 modifier = Modifier.size(22.dp),
                 tint = if (selected) colorScheme.primary
                 else colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),

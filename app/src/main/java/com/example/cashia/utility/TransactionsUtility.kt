@@ -5,7 +5,23 @@ import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+private val dashboardDayFormatter = DateTimeFormatter.ofPattern("EEEE, d MMM")
+
+/**
+ * Dashboard-local day-section header — a sibling to [weekBucket] rather than a shared
+ * change to it, so History's existing "THIS WEEK"/"LAST WEEK" bucketing is untouched.
+ */
+fun dashboardDayBucket(date: LocalDate): String {
+    val today = LocalDate.now()
+    return when (date) {
+        today -> "TODAY"
+        today.minusDays(1) -> "YESTERDAY"
+        else -> date.format(dashboardDayFormatter)
+    }
+}
 
 fun weekBucket(date: LocalDate): String {
     val today = LocalDate.now()

@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens.allTransactions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -353,9 +352,19 @@ fun TransactionScreen(
 
                 if (state.filteredTransactions.isEmpty()) {
                     item(key = "empty") {
-                        EmptyStateMessage(
-                            if (hasFilters) "No matching transactions" else "No History Found"
-                        )
+                        if (hasFilters) {
+                            EmptyStateMessage(
+                                title = "No matching transactions",
+                                message = "Try adjusting your search or filters.",
+                                emoji = "🔍"
+                            )
+                        } else {
+                            EmptyStateMessage(
+                                title = "No history found",
+                                message = "Your transactions will show up here once synced.",
+                                emoji = "🧾"
+                            )
+                        }
                     }
                 }
 

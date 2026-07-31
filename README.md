@@ -158,6 +158,13 @@ git clone https://github.com/yourusername/pesapulse.git
 
 This project now includes automated **test + performance evaluators** to catch regressions before and after code is pushed.
 
+### Running tests locally
+
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebugAndroidTest
+```
+
 ### 1. Local Git hooks (pre-commit and pre-push)
 
 Hooks are stored in `.githooks/`:

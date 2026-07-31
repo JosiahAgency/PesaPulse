@@ -54,7 +54,7 @@ fun ProjectionInsightsCard(
     period: ProjectionPeriod,
     selectedPeriodIndex: Int,
     onPeriodChange: (Int) -> Unit,
-    allTransactions: List<MpesaTransactions>,
+    recentTransactions: List<MpesaTransactions>,
     allCategories: List<ResolvedCategory>
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -84,8 +84,8 @@ fun ProjectionInsightsCard(
     // [FIX] Added periodCutoff to the remember key. The lambda captures it, so it
     // was already an implicit dependency — making it explicit prevents confusion if
     // the key list is ever refactored.
-    val periodTransactions = remember(allTransactions, periodCutoff) {
-        allTransactions.filter {
+    val periodTransactions = remember(recentTransactions, periodCutoff) {
+        recentTransactions.filter {
             runCatching { LocalDate.parse(it.date) >= periodCutoff }.getOrDefault(false)
         }
     }

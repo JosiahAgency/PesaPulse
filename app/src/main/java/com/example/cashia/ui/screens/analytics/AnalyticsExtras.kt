@@ -50,10 +50,10 @@ import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
-import com.example.cashia.utility.detectRecurringMerchants
+import com.example.cashia.utility.RecurringMerchant
+import com.example.cashia.utility.WeekdayPattern
 import com.example.cashia.utility.formatCompactAmount
 import com.example.cashia.utility.hourlyPattern
-import com.example.cashia.utility.weekdaySpendPattern
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -63,10 +63,8 @@ import java.time.temporal.ChronoUnit
 
 @Composable
 fun WeekdaySpendCard(
-    transactions: List<MpesaTransactions>,
-    type: String
+    pattern: List<WeekdayPattern>
 ) {
-    val pattern = remember(transactions, type) { weekdaySpendPattern(transactions, type) }
     val max = remember(pattern) { pattern.maxOfOrNull { it.avgAmount }?.coerceAtLeast(1.0) ?: 1.0 }
     var expanded by remember { mutableStateOf(true) }
 
@@ -210,12 +208,9 @@ fun WeekdaySpendCard(
 
 @Composable
 fun RecurringMerchantsCard(
-    transactions: List<MpesaTransactions>,
+    merchants: List<RecurringMerchant>,
     type: String
 ) {
-    val merchants = remember(transactions, type) {
-        detectRecurringMerchants(transactions, type).take(8)
-    }
     if (merchants.isEmpty()) return
 
     var expanded by remember { mutableStateOf(true) }
@@ -654,118 +649,118 @@ private fun BurnStatChip(label: String, value: String, color: Color, modifier: M
 }
 
 // ── 5. Balance trend card ─────────────────────────────────────────────────
-
-@Composable
-fun BalanceTrendCard(
-    transactions: List<MpesaTransactions>,
-    startDate: LocalDate,
-    endDate: LocalDate
-) {
-    val balancePoints = remember(transactions, startDate, endDate) {
-        transactions
-            .filter {
-                it.balance > 0 &&
-                        !LocalDate.parse(it.date).isBefore(startDate) &&
-                        !LocalDate.parse(it.date).isAfter(endDate)
-            }
-            .sortedBy { it.timestamp }
-    }
-    if (balancePoints.size < 2) return
-
-    val minBal = balancePoints.minOf { it.balance }
-    val maxBal = balancePoints.maxOf { it.balance }
-    val latestBal = balancePoints.last().balance
-    val earliestBal = balancePoints.first().balance
-    val change = latestBal - earliestBal
-    val changePercent = if (earliestBal > 0) (change / earliestBal * 100) else 0.0
-
-    val colorScheme = MaterialTheme.colorScheme
-    val lineColor = if (change >= 0) colorScheme.tertiary else colorScheme.error
-    var expanded by remember { mutableStateOf(true) }
-
-    GlassySurface(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                SectionLabel("M-PESA BALANCE TREND")
-                Icon(
-                    if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                    null, modifier = Modifier.size(16.dp),
-                    tint = colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(tween(200)) + fadeIn(),
-                exit = shrinkVertically(tween(180)) + fadeOut()
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Subtitles("Current balance")
-                            Text(
-                                PesaTimeConfiguration.formatCurrency(latestBal),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = lineColor
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = lineColor.copy(alpha = 0.1f)
-                        ) {
-                            Text(
-                                "${if (change >= 0) "+" else ""}${
-                                    PesaTimeConfiguration.formatCurrency(change)
-                                } (${
-                                    "%.1f".format(changePercent)
-                                }%)",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = lineColor
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        BurnStatChip(
-                            "Lowest",
-                            PesaTimeConfiguration.formatCurrency(minBal),
-                            colorScheme.error,
-                            Modifier.weight(1f)
-                        )
-                        BurnStatChip(
-                            "Highest",
-                            PesaTimeConfiguration.formatCurrency(maxBal),
-                            colorScheme.tertiary,
-                            Modifier.weight(1f)
-                        )
-                        BurnStatChip(
-                            "Data points",
-                            "${balancePoints.size}",
-                            colorScheme.onSurfaceVariant,
-                            Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+//
+//@Composable
+//fun BalanceTrendCard(
+//    transactions: List<MpesaTransactions>,
+//    startDate: LocalDate,
+//    endDate: LocalDate
+//) {
+//    val balancePoints = remember(transactions, startDate, endDate) {
+//        transactions
+//            .filter {
+//                it.balance > 0 &&
+//                        !LocalDate.parse(it.date).isBefore(startDate) &&
+//                        !LocalDate.parse(it.date).isAfter(endDate)
+//            }
+//            .sortedBy { it.timestamp }
+//    }
+//    if (balancePoints.size < 2) return
+//
+//    val minBal = balancePoints.minOf { it.balance }
+//    val maxBal = balancePoints.maxOf { it.balance }
+//    val latestBal = balancePoints.last().balance
+//    val earliestBal = balancePoints.first().balance
+//    val change = latestBal - earliestBal
+//    val changePercent = if (earliestBal > 0) (change / earliestBal * 100) else 0.0
+//
+//    val colorScheme = MaterialTheme.colorScheme
+//    val lineColor = if (change >= 0) colorScheme.tertiary else colorScheme.error
+//    var expanded by remember { mutableStateOf(true) }
+//
+//    GlassySurface(modifier = Modifier.fillMaxWidth()) {
+//        Column(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(20.dp),
+//            verticalArrangement = Arrangement.spacedBy(16.dp)
+//        ) {
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .clickable { expanded = !expanded },
+//                verticalAlignment = Alignment.CenterVertically,
+//                horizontalArrangement = Arrangement.SpaceBetween
+//            ) {
+//                SectionLabel("M-PESA BALANCE TREND")
+//                Icon(
+//                    if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+//                    null, modifier = Modifier.size(16.dp),
+//                    tint = colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+//                )
+//            }
+//            AnimatedVisibility(
+//                visible = expanded,
+//                enter = expandVertically(tween(200)) + fadeIn(),
+//                exit = shrinkVertically(tween(180)) + fadeOut()
+//            ) {
+//                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+//                    Row(
+//                        modifier = Modifier.fillMaxWidth(),
+//                        horizontalArrangement = Arrangement.SpaceBetween,
+//                        verticalAlignment = Alignment.CenterVertically
+//                    ) {
+//                        Column {
+//                            Subtitles("Current balance")
+//                            Text(
+//                                PesaTimeConfiguration.formatCurrency(latestBal),
+//                                style = MaterialTheme.typography.titleMedium,
+//                                fontWeight = FontWeight.Black,
+//                                color = lineColor
+//                            )
+//                        }
+//                        Surface(
+//                            shape = RoundedCornerShape(10.dp),
+//                            color = lineColor.copy(alpha = 0.1f)
+//                        ) {
+//                            Text(
+//                                "${if (change >= 0) "+" else ""}${
+//                                    PesaTimeConfiguration.formatCurrency(change)
+//                                } (${
+//                                    "%.1f".format(changePercent)
+//                                }%)",
+//                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+//                                style = MaterialTheme.typography.labelMedium,
+//                                fontWeight = FontWeight.Bold,
+//                                color = lineColor
+//                            )
+//                        }
+//                    }
+//                    Row(
+//                        modifier = Modifier.fillMaxWidth(),
+//                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+//                    ) {
+//                        BurnStatChip(
+//                            "Lowest",
+//                            PesaTimeConfiguration.formatCurrency(minBal),
+//                            colorScheme.error,
+//                            Modifier.weight(1f)
+//                        )
+//                        BurnStatChip(
+//                            "Highest",
+//                            PesaTimeConfiguration.formatCurrency(maxBal),
+//                            colorScheme.tertiary,
+//                            Modifier.weight(1f)
+//                        )
+//                        BurnStatChip(
+//                            "Data points",
+//                            "${balancePoints.size}",
+//                            colorScheme.onSurfaceVariant,
+//                            Modifier.weight(1f)
+//                        )
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}

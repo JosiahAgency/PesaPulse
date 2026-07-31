@@ -120,7 +120,7 @@ fun EnhancedSearchBar(
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Rounded.Close, null, modifier = Modifier.size(16.dp),
+                            Icons.Rounded.Close, "Clear search", modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
@@ -132,7 +132,7 @@ fun EnhancedSearchBar(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Rounded.FilterList, null, modifier = Modifier.size(18.dp),
+                        Icons.Rounded.FilterList, "Filter by category", modifier = Modifier.size(18.dp),
                         tint = if (selectedCategory != null) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
@@ -162,7 +162,7 @@ fun EnhancedSearchBar(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Rounded.CalendarMonth, null, modifier = Modifier.size(18.dp),
+                        Icons.Rounded.CalendarMonth, "Filter by date range", modifier = Modifier.size(18.dp),
                         tint = if (dateRangeStart != null) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )

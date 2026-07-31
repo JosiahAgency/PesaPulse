@@ -31,6 +31,7 @@ data class UpcomingUiState(
 class UpcomingViewModel(private val context: Context) : ViewModel() {
 
     private val dao = AppDatabase.getDatabase(context).upcomingTransactionDao()
+    private val transactionDao = AppDatabase.getDatabase(context).transactionDao()
 
     val upcoming: StateFlow<List<UpcomingTransaction>> = dao.getPending()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -199,14 +200,15 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     }
 
     /**
-     * Manual trigger — scans ALL recent M-Pesa transactions against
+     * Manual trigger — scans recent M-Pesa transactions against
      * ALL pending upcoming items. Useful after adding a new upcoming item.
      */
-    fun matchAllPending(allMpesaTx: List<MpesaTransactions>) {
+    fun matchAllPending() {
         viewModelScope.launch(Dispatchers.IO) {
             // Only look at transactions from the last 14 days to avoid false positives
-            val cutoff = LocalDate.now().minusDays(14).toString()
-            val recent = allMpesaTx.filter { it.date >= cutoff }
+            val today = LocalDate.now()
+            val cutoff = today.minusDays(14).toString()
+            val recent = transactionDao.getTransactionsForDateRange(cutoff, today.toString())
             recent.forEach { matchTransaction(it) }
         }
     }

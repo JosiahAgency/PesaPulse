@@ -15,3 +15,13 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+/**
+ * Reserved for currency amounts (balances, totals, predicted figures) — tabular figures so
+ * digits align across rows/cards, merged onto each site's existing type style rather than
+ * replacing it (e.g. `MaterialTheme.typography.displaySmall.merge(CurrencyAmountStyle)`).
+ */
+val CurrencyAmountStyle = TextStyle(
+    fontWeight = FontWeight.Black,
+    fontFeatureSettings = "tnum"
+)

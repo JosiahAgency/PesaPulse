@@ -1,10 +1,10 @@
 package com.example.cashia.ui.reusedElements
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -34,7 +34,7 @@ fun SelectableBox(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .then(backgroundModifier)
-            .clickable {
+            .selectable(selected = isSelected) {
                 PesaActions.playClick(hapticFeedback)
                 onClick()
             }
