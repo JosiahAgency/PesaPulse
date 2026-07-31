@@ -49,7 +49,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -130,7 +129,7 @@ fun PesaPulseApp() {
         factory = UpcomingViewModel.provideFactory(context)
     )
     val settingsViewModel: SettingsViewModel = viewModel()
-    val isDark by settingsViewModel.darkTheme.collectAsState()
+    val isDark by settingsViewModel.darkTheme.collectAsStateWithLifecycle()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route

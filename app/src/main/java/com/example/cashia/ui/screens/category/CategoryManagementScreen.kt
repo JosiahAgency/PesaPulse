@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,11 +71,11 @@ private sealed class CatListItem {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryManagementScreen(viewModel: CategoryViewModel) {
-    val customCategories by viewModel.customCategories.collectAsState()
-    val allCategories by viewModel.allCategories.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsStateWithLifecycle()
+    val allCategories by viewModel.allCategories.collectAsStateWithLifecycle()
     val uiState = viewModel.uiState
     val haptic = LocalHapticFeedback.current
-    val systemOverrides by viewModel.systemOverrides.collectAsState()
+    val systemOverrides by viewModel.systemOverrides.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<CustomCategory?>(null) }
 
     val listItems = remember(customCategories, allCategories, systemOverrides) {

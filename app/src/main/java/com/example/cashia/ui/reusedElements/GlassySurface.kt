@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.luminance
@@ -23,13 +24,15 @@ fun GlassySurface(modifier: Modifier = Modifier, glow: Boolean = false, content:
         border = BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)),
     ) {
         if (glow) {
-            val glowBrush = Brush.radialGradient(
-                colors = listOf(
-                    colorScheme.primary.copy(alpha = 0.14f),
-                    colorScheme.tertiary.copy(alpha = 0.05f),
-                    androidx.compose.ui.graphics.Color.Transparent
+            val glowBrush = remember(colorScheme.primary, colorScheme.tertiary) {
+                Brush.radialGradient(
+                    colors = listOf(
+                        colorScheme.primary.copy(alpha = 0.14f),
+                        colorScheme.tertiary.copy(alpha = 0.05f),
+                        androidx.compose.ui.graphics.Color.Transparent
+                    )
                 )
-            )
+            }
             Box(modifier = Modifier.background(glowBrush)) {
                 content()
             }

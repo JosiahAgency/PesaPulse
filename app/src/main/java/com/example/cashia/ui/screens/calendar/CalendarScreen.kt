@@ -149,7 +149,7 @@ fun CalendarScreen(
                 if (calendarState.filterByDay && !noUpcoming) {
                     items(
                         items = calendarState.upcomingForDay,
-                        key = { "upcoming-${it.dueDate}-${calendarState.filteredTransactions.size}" }
+                        key = { it.id }
                     ) { upcomingTx ->
                         CalendarUpcomingItem(
                             title = "Scheduled Commitment",

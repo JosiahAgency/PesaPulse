@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens
 import android.app.Application
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,16 +47,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -67,16 +63,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.reusedElements.PesaDialog
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
-import com.example.cashia.utility.GoogleAuthHelper
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
-import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -100,8 +95,8 @@ fun SettingsScreen(
     )
 
     // Collect all state flows from ViewModel — this is the single source of truth
-    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsState()
-    val is24Hour by settingsViewModel.use24Hour.collectAsState()
+    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsStateWithLifecycle()
+    val is24Hour by settingsViewModel.use24Hour.collectAsStateWithLifecycle()
 
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -557,72 +552,4 @@ fun SettingsIconBox(icon: ImageVector) {
     }
 }
 
-@Composable
-fun LinkedAccountItem(email: String, onUnlink: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Google avatar placeholder with first letter
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.tertiary
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = email.first().uppercaseChar().toString(),
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "Google Account",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                email,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        // Unlink button
-        Surface(
-            onClick = onUnlink,
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-            border = BorderStroke(
-                0.5.dp,
-                MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-            )
-        ) {
-            Text(
-                "Unlink",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
 

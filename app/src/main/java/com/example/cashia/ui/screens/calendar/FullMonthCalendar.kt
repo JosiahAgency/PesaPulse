@@ -69,12 +69,11 @@ fun FullMonthCalendar(
     val today = remember { LocalDate.now() }
     val todayStr = remember { today.toString() }
 
-    val (incomeDates, expenseDates, upcomingDates, overdueDates) = remember(allTransactions, upcomingTransactions, todayStr) {
+    val (incomeDates, expenseDates, upcomingDates) = remember(allTransactions, upcomingTransactions, todayStr) {
         val inc = allTransactions.filter { it.type.equals("income", true) }.map { it.date }.toHashSet()
         val exp = allTransactions.filter { it.type.equals("expense", true) }.map { it.date }.toHashSet()
         val upc = upcomingTransactions.map { it.dueDate }.toHashSet()
-        val ovd = upcomingTransactions.filter { it.dueDate < todayStr }.map { it.dueDate }.toHashSet()
-        Quadruple(inc, exp, upc, ovd)
+        Triple(inc, exp, upc)
     }
 
     val currentMonth = remember(pagerState.currentPage) {
@@ -309,5 +308,3 @@ fun generateMonthGrid(month: YearMonth, firstDayOfWeek: DayOfWeek): List<List<Lo
     }
     return weeks
 }
-
-private data class Quadruple<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
