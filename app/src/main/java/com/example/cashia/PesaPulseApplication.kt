@@ -6,7 +6,6 @@ import androidx.annotation.RequiresExtension
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -18,7 +17,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,7 +58,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -68,7 +66,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -90,11 +87,13 @@ import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.screens.allTransactions.TransactionScreen
+import com.example.cashia.ui.screens.allTransactions.UnmatchedReviewScreen
 import com.example.cashia.ui.screens.analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.calendar.CalendarScreen
 import com.example.cashia.ui.screens.category.CategoryManagementScreen
 import com.example.cashia.ui.screens.dashboard.DashboardScreen
 import com.example.cashia.ui.screens.projections.ProjectionScreen
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
@@ -171,8 +170,8 @@ fun PesaPulseApp() {
                     categoryViewModel,
                     upcomingViewModel,
                     dashboardViewModel,
-                    onNavigateToForecast = {
-                        navController.navigate(AppDestinations.Projections.route) {
+                    onNavigateToUpcoming = {
+                        navController.navigate(AppDestinations.UpcomingPayments.route) {
                             launchSingleTop = true
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                             restoreState = true
@@ -181,7 +180,25 @@ fun PesaPulseApp() {
                 )
             }
             composable(AppDestinations.Transactions.route) {
-                TransactionScreen(sharedViewModel, categoryViewModel, upcomingViewModel)
+                TransactionScreen(
+                    sharedViewModel,
+                    categoryViewModel,
+                    upcomingViewModel,
+                    onNavigateToUpcoming = {
+                        navController.navigate(AppDestinations.UpcomingPayments.route) {
+                            launchSingleTop = true
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            restoreState = true
+                        }
+                    },
+                    onNavigateToUnmatched = {
+                        navController.navigate(AppDestinations.UnmatchedReview.route) {
+                            launchSingleTop = true
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            restoreState = true
+                        }
+                    }
+                )
             }
             composable(AppDestinations.Calendar.route) {
                 val calendarViewModel: CalendarViewModel = viewModel(
@@ -230,6 +247,12 @@ fun PesaPulseApp() {
             }
             composable(AppDestinations.Categories.route) {
                 CategoryManagementScreen(categoryViewModel)
+            }
+            composable(AppDestinations.UpcomingPayments.route) {
+                UpcomingPaymentsScreen(upcomingViewModel, categoryViewModel)
+            }
+            composable(AppDestinations.UnmatchedReview.route) {
+                UnmatchedReviewScreen(sharedViewModel, categoryViewModel)
             }
         }
 
@@ -363,7 +386,9 @@ fun PesaPulseApp() {
                         text = "Today",
                         contentDescription = "Today",
                         modifier = Modifier
-                            .padding(bottom = 8.dp)
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 8.dp),
+                        fullWidth = true
                     )
                 }
 
@@ -439,21 +464,27 @@ private fun RowScope.IslandNavItem(
         label = "scale"
     )
 
-    // Icon + label tint — pure alpha, zero layout impact
+    // Icon tint — pure alpha, zero layout impact
     val contentAlpha by animateFloatAsState(
         targetValue = if (selected) 1f else 0.4f,
         animationSpec = tween(120),
         label = "alpha"
     )
 
-    // Indicator width — spring feels physical
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 18.dp else 0.dp,
+    // Filled gradient pill behind the active icon — matches the Banani export's icon-only
+    // nav bar (no visible labels there; accessible name is carried by contentDescription).
+    val pillScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.6f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "indicator"
+        label = "pillScale"
+    )
+    val pillAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(150),
+        label = "pillAlpha"
     )
 
     Box(
@@ -470,38 +501,29 @@ private fun RowScope.IslandNavItem(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(vertical = 4.dp)
+        Box(
+            modifier = Modifier
+                .size(width = 48.dp, height = 36.dp)
+                .graphicsLayer {
+                    scaleX = pillScale; scaleY = pillScale; alpha = pillAlpha
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(brush = primaryGradient()),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .width(indicatorWidth)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(brush = primaryGradient())
-            )
-            Spacer(Modifier.height(4.dp))
             Icon(
                 imageVector = screen.icon,
-                contentDescription = null, // the visible label Text below carries this tab's accessible name
+                contentDescription = screen.label,
                 modifier = Modifier.size(22.dp),
-                tint = if (selected) colorScheme.primary
-                else colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
+                tint = Color.White,
             )
-
-            Spacer(Modifier.height(2.dp))
-            val textBrush = if (selected) primaryGradient() else SolidColor(
-                colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Text(
-                text = screen.label,
-                fontSize = 10.sp,
-                maxLines = 1,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.labelSmall.copy(brush = textBrush),
-                modifier = Modifier.graphicsLayer { alpha = contentAlpha }
+        }
+        if (!selected) {
+            Icon(
+                imageVector = screen.icon,
+                contentDescription = screen.label,
+                modifier = Modifier.size(22.dp),
+                tint = colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
             )
         }
     }

@@ -94,7 +94,6 @@ import java.util.Calendar
 @Composable
 fun UpcomingTransactionsSection(
     upcomingViewModel: UpcomingViewModel,
-    categoryViewModel: CategoryViewModel,
     allCategories: List<ResolvedCategory>
 ) {
     val haptic = LocalHapticFeedback.current
@@ -374,6 +373,88 @@ fun UpcomingTransactionCard(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Compact preview used on History — soonest 2-3 pending items, no per-item expand/actions,
+ * plus a "View all" row to the dedicated [com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen].
+ * Full CRUD stays on that screen; this is read-only at a glance.
+ */
+@Composable
+fun UpcomingPreviewSection(
+    upcomingViewModel: UpcomingViewModel,
+    allCategories: List<ResolvedCategory>,
+    onViewAll: () -> Unit
+) {
+    val upcoming by upcomingViewModel.upcoming.collectAsState()
+    if (upcoming.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionLabel("upcoming payments")
+            Text(
+                "View all",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onViewAll() }
+            )
+        }
+        upcoming.take(3).forEach { tx ->
+            val resolved = allCategories.find { it.id == tx.categoryId }
+            val emoji = resolved?.emoji ?: "📦"
+            val accentColor = if (tx.type == UpcomingType.INCOME)
+                MaterialTheme.colorScheme.tertiary
+            else
+                MaterialTheme.colorScheme.error
+
+            GlassySurface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onViewAll() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(accentColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) { Text(emoji, fontSize = 18.sp) }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            tx.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            tx.relativeDueLabel.lowercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    Text(
+                        PesaTimeConfiguration.formatCurrency(tx.amount),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = accentColor
+                    )
                 }
             }
         }

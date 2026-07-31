@@ -64,107 +64,113 @@ fun EnhancedSearchBar(
     onDateRange: (LocalDate?, LocalDate?) -> Unit,
 ) {
     val context = LocalContext.current
-    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showFilterPanel by remember { mutableStateOf(false) }
+    val hasActiveFilter = selectedCategory != null || dateRangeStart != null
+
+    fun launchDateRangePicker() {
+        val start = dateRangeStart ?: LocalDate.now().minusMonths(1)
+        val end = dateRangeEnd ?: LocalDate.now()
+        // Show start picker → on pick show end picker
+        DatePickerDialog(
+            context,
+            { _, y, m, d ->
+                val s = LocalDate.of(y, m + 1, d)
+                DatePickerDialog(
+                    context,
+                    { _, y2, m2, d2 ->
+                        onDateRange(s, LocalDate.of(y2, m2 + 1, d2))
+                    },
+                    end.year, end.monthValue - 1, end.dayOfMonth
+                ).show()
+            },
+            start.year, start.monthValue - 1, start.dayOfMonth
+        ).show()
+    }
 
     Column {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-            border = BorderStroke(
-                0.6.dp,
-                if (expanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
+            Surface(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                border = BorderStroke(
+                    0.6.dp,
+                    if (expanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                )
             ) {
-                Icon(
-                    Icons.Rounded.Search, null,
-                    modifier = Modifier.size(18.dp),
-                    tint = if (expanded) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-
-                BasicTextField(
-                    value = query,
-                    onValueChange = { onQueryChange(it); onExpandChange(true) },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    decorationBox = { inner ->
-                        if (query.isEmpty()) {
-                            Text(
-                                "Search by name, amount or category…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                            )
-                        }
-                        inner()
-                    },
-                    cursorBrush = primaryGradient()
-                )
-
-                if (query.isNotBlank()) {
-                    IconButton(
-                        onClick = { onQueryChange(""); onExpandChange(false) },
-                        modifier = Modifier.size(20.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.Close, "Clear search", modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                // Filter icon — toggles category dropdown
-                IconButton(
-                    onClick = { showCategoryDropdown = !showCategoryDropdown },
-                    modifier = Modifier.size(20.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        Icons.Rounded.FilterList, "Filter by category", modifier = Modifier.size(18.dp),
-                        tint = if (selectedCategory != null) MaterialTheme.colorScheme.primary
+                        Icons.Rounded.Search, null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (expanded) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
-                }
 
-                // Date range icon
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { onQueryChange(it); onExpandChange(true) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        decorationBox = { inner ->
+                            if (query.isEmpty()) {
+                                Text(
+                                    "Search by name, amount or category…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                )
+                            }
+                            inner()
+                        },
+                        cursorBrush = primaryGradient()
+                    )
+
+                    if (query.isNotBlank()) {
+                        IconButton(
+                            onClick = { onQueryChange(""); onExpandChange(false) },
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close, "Clear search", modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Single external filter entry point — reveals category + date-range controls below.
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                border = BorderStroke(
+                    0.6.dp,
+                    if (hasActiveFilter) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                )
+            ) {
                 IconButton(
-                    onClick = {
-                        val start = dateRangeStart ?: LocalDate.now().minusMonths(1)
-                        val end = dateRangeEnd ?: LocalDate.now()
-                        // Show start picker → on pick show end picker
-                        DatePickerDialog(
-                            context,
-                            { _, y, m, d ->
-                                val s = LocalDate.of(y, m + 1, d)
-                                DatePickerDialog(
-                                    context,
-                                    { _, y2, m2, d2 ->
-                                        onDateRange(s, LocalDate.of(y2, m2 + 1, d2))
-                                    },
-                                    end.year, end.monthValue - 1, end.dayOfMonth
-                                ).show()
-                            },
-                            start.year, start.monthValue - 1, start.dayOfMonth
-                        ).show()
-                    },
-                    modifier = Modifier.size(20.dp)
+                    onClick = { showFilterPanel = !showFilterPanel },
+                    modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
-                        Icons.Rounded.CalendarMonth, "Filter by date range", modifier = Modifier.size(18.dp),
-                        tint = if (dateRangeStart != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        Icons.Rounded.FilterList, "Filters", modifier = Modifier.size(20.dp),
+                        tint = if (hasActiveFilter) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -210,8 +216,8 @@ fun EnhancedSearchBar(
             }
         }
 
-        // Category filter dropdown
-        AnimatedVisibility(visible = showCategoryDropdown) {
+        // Filter panel — category chips + date-range trigger, both behind the one filter icon
+        AnimatedVisibility(visible = showFilterPanel) {
             GlassySurface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -232,7 +238,7 @@ fun EnhancedSearchBar(
                         item {
                             FilterChip(
                                 selected = selectedCategory == null,
-                                onClick = { onCategoryPick(null); showCategoryDropdown = false },
+                                onClick = { onCategoryPick(null) },
                                 label = {
                                     Text(
                                         "✦ All",
@@ -246,7 +252,6 @@ fun EnhancedSearchBar(
                                 selected = selectedCategory == cat.id,
                                 onClick = {
                                     onCategoryPick(if (selectedCategory == cat.id) null else cat.id)
-                                    showCategoryDropdown = false
                                 },
                                 label = {
                                     Text(
@@ -262,6 +267,49 @@ fun EnhancedSearchBar(
                                     selectedLabelColor = MaterialTheme.colorScheme.primary
                                 )
                             )
+                        }
+                    }
+
+                    Text(
+                        "DATE RANGE",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Black
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { launchDateRangePicker() }
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.CalendarMonth, null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (dateRangeStart != null) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            if (dateRangeStart != null && dateRangeEnd != null)
+                                "$dateRangeStart – $dateRangeEnd"
+                            else "Pick a date range",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (dateRangeStart != null) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        if (dateRangeStart != null) {
+                            IconButton(
+                                onClick = { onDateRange(null, null) },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Close, "Clear date range",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
                 }

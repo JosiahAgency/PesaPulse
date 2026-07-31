@@ -44,7 +44,7 @@ fun DashboardScreen(
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel,
     dashboardViewModel: DashboardViewModel,
-    onNavigateToForecast: () -> Unit = {},
+    onNavigateToUpcoming: () -> Unit = {},
 ) {
     val selectedDate by dashboardViewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedScope by dashboardViewModel.scope.collectAsStateWithLifecycle()
@@ -173,7 +173,7 @@ fun DashboardScreen(
 
             if (dueSoon.isNotEmpty()) {
                 item {
-                    DueSoonBanner(dueSoon = dueSoon, onClick = onNavigateToForecast)
+                    DueSoonBanner(dueSoon = dueSoon, onClick = onNavigateToUpcoming)
                 }
             }
         }

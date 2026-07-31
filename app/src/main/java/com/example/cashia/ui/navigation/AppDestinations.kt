@@ -7,7 +7,9 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class AppDestinations(val route: String, val label: String, val icon: ImageVector) {
@@ -23,12 +25,18 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
     object Settings : AppDestinations("settings", "Settings", Icons.Outlined.Settings)
     object Categories : AppDestinations("categories", "categories", Icons.Outlined.Category)
 
+    /** Full CRUD list of upcoming payments — moved out of History into its own screen. */
+    object UpcomingPayments :
+        AppDestinations("upcoming_payments", "Upcoming Payments", Icons.Outlined.Schedule)
+
+    /** Full list of unmatched SMS for review — moved out of History into its own screen. */
+    object UnmatchedReview :
+        AppDestinations("unmatched_review", "Review Unmatched SMS", Icons.Outlined.Sms)
+
     /** Detail view for a daily/monthly summary. Not in the bottom nav. */
     object SummaryReport : AppDestinations(
         "summary_report/{period}/{date}", "Summary", Icons.Outlined.BarChart
     ) {
-        const val ARG_PERIOD = "period"
-        const val ARG_DATE = "date"
 
         /** [period] is "day" or "month"; [isoDate] an ISO yyyy-MM-dd anchor date. */
         fun buildRoute(period: String, isoDate: String) = "summary_report/$period/$isoDate"

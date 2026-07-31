@@ -57,7 +57,12 @@ class AnalyticsViewModel(
         _startDate,
         _endDate
     ) { start, end -> start to end }
-        .flatMapLatest { (start, end) -> dao.getTransactionsInRange(start.toString(), end.toString()) }
+        .flatMapLatest { (start, end) ->
+            dao.getTransactionsInRange(
+                start.toString(),
+                end.toString()
+            )
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -88,7 +93,13 @@ class AnalyticsViewModel(
      * instead of grouping the full transaction table client-side.
      */
     val recurringMerchantsFlow: StateFlow<List<RecurringMerchant>> = _selectedType
-        .flatMapLatest { type -> dao.getRecurringMerchants(type.name.lowercase(), minMonths = 2, limit = 8) }
+        .flatMapLatest { type ->
+            dao.getRecurringMerchants(
+                type.name.lowercase(),
+                minMonths = 2,
+                limit = 8
+            )
+        }
         .map { rows ->
             rows.map { row ->
                 RecurringMerchant(

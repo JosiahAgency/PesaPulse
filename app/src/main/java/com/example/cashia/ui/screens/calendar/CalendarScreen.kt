@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,9 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,10 +78,7 @@ fun CalendarScreen(
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val upcomingAll by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
-    var selectedDate by remember { mutableStateOf(today) }
-    var filterByDay by remember { mutableStateOf(false) }
     val hapticFeedback = LocalHapticFeedback.current
-    var selectedFilter by remember { mutableStateOf(TransactionType.ALL) }
     val calendarState by calendarViewModel.uiState.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -93,35 +89,6 @@ fun CalendarScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-
-//    val upcomingForDay by remember(upcomingAll, selectedDate) {
-//        derivedStateOf { upcomingAll.filter { it.dueDate == selectedDate.toString() } }
-//    }
-//
-//    val filteredTransctions by remember(
-//        state.allTransactions,
-//        selectedDate,
-//        selectedFilter,
-//        filterByDay
-//    ) {
-//        derivedStateOf {
-//            val monthlyPrefix =
-//                "${selectedDate.year}-${selectedDate.monthValue.toString().padStart(2, '0')}"
-//            val dayString = selectedDate.toString()
-//            state.allTransactions.filter { tx ->
-//                if (filterByDay) {
-//                    if (tx.date != dayString) return@filter false
-//                } else {
-//                    if (!tx.date.startsWith(monthlyPrefix)) return@filter false
-//                }
-//                when (selectedFilter) {
-//                    TransactionType.ALL -> true
-//                    TransactionType.INCOME -> tx.type.equals("income", ignoreCase = true)
-//                    TransactionType.EXPENSE -> tx.type.equals("expense", ignoreCase = true)
-//                }
-//            }
-//        }
-//    }
 
     if (upcomingUiState.showSheet) {
         UpcomingTransactionSheet(
@@ -210,13 +177,17 @@ fun CalendarScreen(
             exit = fadeOut(tween(150)),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 150.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 98.dp)
         ) {
             HarmonizedActionFab(
                 onClick = calendarViewModel::resetToToday,
                 icon = Icons.Default.Today,
                 text = "Today",
-                contentDescription = "Today"
+                contentDescription = "Today",
+                fullWidth = true
             )
         }
     }
