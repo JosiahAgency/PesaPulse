@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens.allTransactions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,18 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -47,15 +44,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.ui.reusedElements.ActionBanner
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
-import com.example.cashia.ui.reusedElements.HarmonizedIconFab
-import com.example.cashia.ui.reusedElements.PendingReviewBadge
+import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
-import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionsSection
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -64,15 +60,15 @@ import java.util.Locale
 fun TransactionScreen(
     viewModel: TransactionsViewModel,
     categoryViewModel: CategoryViewModel,
-    upcomingViewModel: UpcomingViewModel
+    upcomingViewModel: UpcomingViewModel,
+    onNavigateToUpcoming: () -> Unit = {},
+    onNavigateToUnmatched: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
-    val nextPending by viewModel.nextPending.collectAsStateWithLifecycle()
-    val allUnmatched by viewModel.allUnmatched.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -96,12 +92,6 @@ fun TransactionScreen(
         }
     }
 
-    var showUnmatchedModal by remember { mutableStateOf(false) }
-    var modalTargetSms by remember { mutableStateOf<UnmatchedSms?>(null) }
-    var unmatchedExpanded by remember { mutableStateOf(false) }
-
-    var hasAutoOpened by remember { mutableStateOf(false) }
-
     LaunchedEffect(localQuery) {
         viewModel.setQuery(localQuery)
     }
@@ -118,20 +108,6 @@ fun TransactionScreen(
         if (nearListEnd && state.hasMore) viewModel.loadMore()
     }
 
-    LaunchedEffect(pendingCount) {
-        if (pendingCount > 0 && !hasAutoOpened) {
-            hasAutoOpened = true
-            modalTargetSms = nextPending
-        }
-    }
-
-    LaunchedEffect(nextPending) {
-        if (showUnmatchedModal && nextPending == null) {
-            showUnmatchedModal = false
-            modalTargetSms = null
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
             swipeCategoryTarget?.let { tx ->
@@ -145,37 +121,6 @@ fun TransactionScreen(
                     onDismiss = { swipeCategoryTarget = null },
                     categoryViewModel = categoryViewModel
                 )
-            }
-
-            if (showUnmatchedModal) {
-                modalTargetSms?.let { target ->
-                    val advance = { id: Long ->
-                        val next = nextPending?.takeIf { it.id != id }
-                        if (next != null) modalTargetSms = next
-                        else {
-                            showUnmatchedModal = false; modalTargetSms = null
-                        }
-                    }
-                    UnmatchedSmsModal(
-                        sms = target,
-                        pendingCount = pendingCount,
-                        allCategories = allCategories,
-                        categoryViewModel = categoryViewModel,
-                        onSave = { type, category ->
-                            viewModel.saveTransactionFromSms(target, type, category)
-                            advance(target.id)
-                        },
-                        onSkip = {
-                            viewModel.markSkipped(target.id)
-                            advance(target.id)
-                        },
-                        onIgnore = {
-                            viewModel.markIgnored(target)
-                            advance(target.id)
-                        },
-                        onDismiss = { showUnmatchedModal = false }
-                    )
-                }
             }
 
             LazyColumn(
@@ -272,90 +217,45 @@ fun TransactionScreen(
                 }
 
                 if (!hasFilters) {
-                    item(key = "upcoming_section") {
-                        UpcomingTransactionsSection(
+                    item(key = "upcoming_preview") {
+                        UpcomingPreviewSection(
                             upcomingViewModel = upcomingViewModel,
-                            categoryViewModel = categoryViewModel,
-                            allCategories = allCategories
+                            allCategories = allCategories,
+                            onViewAll = onNavigateToUpcoming
                         )
                         Spacer(Modifier.height(4.dp))
                     }
                 }
 
-                item(key = "pending_badge") {
-                    PendingReviewBadge(
-                        count = pendingCount,
-                        onClick = {
-                            modalTargetSms = nextPending
-                            showUnmatchedModal = true
-                        },
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
-
-                if (allUnmatched.isNotEmpty()) {
-                    item(key = "unmatched_header") {
-                        Surface(
-                            onClick = { unmatchedExpanded = !unmatchedExpanded },
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = BorderStroke(
-                                0.5.dp,
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(
-                                    horizontal = 14.dp, vertical = 10.dp
-                                ),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Unrecognised Messages (${allUnmatched.size})",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Icon(
-                                    if (unmatchedExpanded) Icons.Rounded.KeyboardArrowUp
-                                    else Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-                    }
-
-                    if (unmatchedExpanded) {
-                        items(items = allUnmatched, key = { "unmatched_${it.id}" }) { sms ->
-                            UnmatchedSmsItem(
-                                sms,
-                                { clicked ->
-                                    modalTargetSms = clicked
-                                    showUnmatchedModal = true
-                                },
-                                { clicked -> viewModel.markIgnored(clicked) }
-                            )
-                        }
-                        item(key = "unmatched_divider") {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            )
-                        }
+                if (pendingCount > 0) {
+                    item(key = "unmatched_banner") {
+                        ActionBanner(
+                            icon = Icons.Rounded.Sms,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            title = "Review unmatched SMS",
+                            subtitle = "$pendingCount transaction${if (pendingCount == 1) "" else "s"} need review",
+                            badgeCount = pendingCount,
+                            onClick = onNavigateToUnmatched
+                        )
+                        Spacer(Modifier.height(4.dp))
                     }
                 }
 
                 if (state.filteredTransactions.isEmpty()) {
                     item(key = "empty") {
-                        EmptyStateMessage(
-                            if (hasFilters) "No matching transactions" else "No History Found"
-                        )
+                        if (hasFilters) {
+                            EmptyStateMessage(
+                                title = "No matching transactions",
+                                message = "Try adjusting your search or filters.",
+                                emoji = "🔍"
+                            )
+                        } else {
+                            EmptyStateMessage(
+                                title = "No history found",
+                                message = "Your transactions will show up here once synced.",
+                                emoji = "🧾"
+                            )
+                        }
                     }
                 }
 
@@ -412,15 +312,20 @@ fun TransactionScreen(
             visible = showBackToTop,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 180.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 98.dp)
         ) {
-            HarmonizedIconFab(
+            HarmonizedActionFab(
                 icon = Icons.Rounded.KeyboardArrowUp,
+                text = "Back to top",
                 contentDescription = "Back to top",
                 onClick = {
                     coroutineScope.launch { listState.scrollToItem(0) }
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                }
+                },
+                fullWidth = true
             )
         }
     }

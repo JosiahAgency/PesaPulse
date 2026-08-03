@@ -146,7 +146,7 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
     val dbEnd = System.currentTimeMillis()
 
     Log.d("SyncPerf", "Database transaction finished in ${dbEnd - dbStart}ms")
-    WidgetUpdateManager.refreshCashiaWidgets(context)
+    if (parsed.isNotEmpty()) WidgetUpdateManager.refreshCashiaWidgets(context)
     Log.d("SyncPerf", "Total sync cycle completed in ${dbEnd - startTime}ms")
     return parsed
 }

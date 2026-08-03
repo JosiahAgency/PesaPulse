@@ -56,12 +56,12 @@ object PesaTimeConfiguration {
     var reminderHour: Int
         get() = prefs.getInt("reminder_hour", 20)       // 8 PM default
         set(v) {
-            prefs.edit().putInt("reminder_hour", v).apply()
+            prefs.edit { putInt("reminder_hour", v) }
         }
     var reminderMinute: Int
         get() = prefs.getInt("reminder_minute", 0)
         set(v) {
-            prefs.edit().putInt("reminder_minute", v).apply()
+            prefs.edit { putInt("reminder_minute", v) }
         }
 
     fun saveReminderTime(hour: Int, minute: Int) {
@@ -71,7 +71,7 @@ object PesaTimeConfiguration {
     var isDailyDigestEnabled: Boolean
         get() = prefs.getBoolean("daily_digest_enabled", true)
         set(v) {
-            prefs.edit().putBoolean("daily_digest_enabled", v).apply()
+            prefs.edit { putBoolean("daily_digest_enabled", v) }
         }
 
     fun saveDailyDigest(enabled: Boolean) {
@@ -81,7 +81,7 @@ object PesaTimeConfiguration {
     var isMonthlySummaryEnabled: Boolean
         get() = prefs.getBoolean("monthly_summary_enabled", true)
         set(v) {
-            prefs.edit().putBoolean("monthly_summary_enabled", v).apply()
+            prefs.edit { putBoolean("monthly_summary_enabled", v) }
         }
 
     fun saveMonthlySummary(enabled: Boolean) {
@@ -91,7 +91,7 @@ object PesaTimeConfiguration {
     var isUpcomingReminderEnabled: Boolean
         get() = prefs.getBoolean("upcoming_reminder_enabled", true)
         set(v) {
-            prefs.edit().putBoolean("upcoming_reminder_enabled", v).apply()
+            prefs.edit { putBoolean("upcoming_reminder_enabled", v) }
         }
 
     fun saveUpcomingReminder(enabled: Boolean) {
@@ -101,7 +101,7 @@ object PesaTimeConfiguration {
     var upcomingReminderDaysBefore: Int
         get() = prefs.getInt("upcoming_reminder_days", 3)
         set(v) {
-            prefs.edit().putInt("upcoming_reminder_days", v).apply()
+            prefs.edit { putInt("upcoming_reminder_days", v) }
         }
 
     fun saveUpcomingReminderDays(days: Int) {
@@ -189,6 +189,8 @@ object PesaTimeConfiguration {
         AppDestinations.Analytics.route -> "Breakdown by period & category"
         AppDestinations.Projections.route -> "30-day balance forecast"
         AppDestinations.SummaryReport.route -> "Daily & monthly reports"
+        AppDestinations.UpcomingPayments.route -> "Manage your scheduled bills and income"
+        AppDestinations.UnmatchedReview.route -> "Confirm or ignore unrecognised messages"
         else -> ""
     }
 
@@ -201,6 +203,8 @@ object PesaTimeConfiguration {
         AppDestinations.Settings.route -> "Settings"
         AppDestinations.Categories.route -> "Categories"
         AppDestinations.SummaryReport.route -> "Summary"
+        AppDestinations.UpcomingPayments.route -> "Upcoming Payments"
+        AppDestinations.UnmatchedReview.route -> "Review Unmatched SMS"
         else -> "PesaPulse"
     }
 
@@ -217,7 +221,7 @@ object PesaTimeConfiguration {
                     context.packageManager.getPackageInfo(context.packageName, 0)
                 }
             "v${packageInfo.versionName}"
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "v1.0.0"
         }
     }

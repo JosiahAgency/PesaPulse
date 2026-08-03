@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.TransactionsViewModel
@@ -29,10 +29,10 @@ fun ProjectionScreen(
 
     // All projection math (engine run, confidence, upcoming buckets) happens in
     // ProjectionViewModel on Dispatchers.Default — this screen only renders state.
-    val uiState by projectionViewModel.uiState.collectAsState()
-    val state by transactionsViewModel.state.collectAsState()
-    val allTransactions by transactionsViewModel.allTransactionsFlow.collectAsState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
+    val uiState by projectionViewModel.uiState.collectAsStateWithLifecycle()
+    val state by transactionsViewModel.state.collectAsStateWithLifecycle()
+    val recentTransactions by projectionViewModel.recentTransactionsFlow.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
 
     val projection = uiState.projection
 
@@ -83,7 +83,6 @@ fun ProjectionScreen(
 
         item(key = "upcoming_section") {
             UpcomingSection(
-                transactionsViewModel,
                 uiState.overdue,
                 uiState.dueSoon,
                 uiState.later,
@@ -102,7 +101,7 @@ fun ProjectionScreen(
                     period = uiState.period,
                     selectedPeriodIndex = uiState.selectedPeriodIndex,
                     onPeriodChange = projectionViewModel::setPeriod,
-                    allTransactions,
+                    recentTransactions,
                     allCategories
                 )
             }

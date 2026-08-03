@@ -19,13 +19,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -37,7 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.models.FinanceProjection
 import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.StatPill
+import com.example.cashia.ui.reusedElements.StatPillTone
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.ui.theme.CurrencyAmountStyle
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.ProjectionPeriod
 
@@ -86,8 +89,7 @@ fun PredictedBalanceCard(
             Spacer(Modifier.height(12.dp))
             Text(
                 PesaTimeConfiguration.formatCurrency(animatedBalance.value.toDouble()),
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.displayMedium.merge(CurrencyAmountStyle),
                 color = balanceColor
             )
             Spacer(Modifier.height(8.dp))
@@ -136,23 +138,24 @@ fun PredictedBalanceCard(
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                MiniStat(
-                    "Current",
-                    PesaTimeConfiguration.formatCurrency(currentBalance),
-                    colorScheme.primary
+                StatPill(
+                    label = "Current",
+                    amount = PesaTimeConfiguration.formatCurrency(currentBalance),
+                    icon = Icons.Rounded.AccountBalanceWallet,
+                    tone = StatPillTone.NEUTRAL,
+                    modifier = Modifier.weight(1f)
                 )
-                VerticalDivider(
-                    modifier = Modifier.height(36.dp),
-                    color = colorScheme.onSurface.copy(alpha = 0.1f)
-                )
-                MiniStat(
-                    "Net Change",
-                    "${if (projection.predictedNet >= 0) "+" else ""}${
+                StatPill(
+                    label = "Net Change",
+                    amount = "${if (projection.predictedNet >= 0) "+" else ""}${
                         PesaTimeConfiguration.formatCurrency(projection.predictedNet)
                     }",
-                    if (projection.predictedNet >= 0) colorScheme.tertiary else colorScheme.error
+                    icon = if (projection.predictedNet >= 0) Icons.AutoMirrored.Filled.TrendingUp
+                    else Icons.AutoMirrored.Filled.TrendingDown,
+                    tone = if (projection.predictedNet >= 0) StatPillTone.INCOME else StatPillTone.EXPENSE,
+                    modifier = Modifier.weight(1f)
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -160,20 +163,6 @@ fun PredictedBalanceCard(
             Spacer(Modifier.height(12.dp))
             ConfidenceBar(confidence = confidence)
         }
-    }
-}
-
-@Composable
-private fun MiniStat(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Subtitles(label)
-        Spacer(Modifier.height(2.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
     }
 }
 

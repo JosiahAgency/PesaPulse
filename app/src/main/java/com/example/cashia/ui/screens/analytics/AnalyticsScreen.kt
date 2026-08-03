@@ -3,28 +3,19 @@ package com.example.cashia.ui.screens.analytics
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CategoryViewModel
-import com.example.cashia.models.TransactionsViewModel
-import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.utility.TransactionType
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -32,11 +23,12 @@ import com.example.cashia.utility.TransactionType
 @Composable
 fun AnalyticsScreen(
     categoryViewModel: CategoryViewModel,
-    transactionsViewModel: TransactionsViewModel,
     analyticsViewModel: AnalyticsViewModel
 ) {
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
-    val allTransactions by transactionsViewModel.allTransactionsFlow.collectAsStateWithLifecycle()
+    val periodTransactions by analyticsViewModel.periodTransactions.collectAsStateWithLifecycle()
+    val weekdayPattern by analyticsViewModel.weekdayPatternFlow.collectAsStateWithLifecycle()
+    val recurringMerchants by analyticsViewModel.recurringMerchantsFlow.collectAsStateWithLifecycle()
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
@@ -127,13 +119,13 @@ fun AnalyticsScreen(
                 hapticFeedback,
                 uiState.selectedType,
                 analyticsViewModel::setType,
-                transactions = allTransactions,
+                transactions = periodTransactions,
                 uiState.startTs,
                 uiState.endTs
             )
         }
 
-        item { CashFlowTrendChart(allTransactions, uiState.startDate, uiState.endDate) }
+        item { CashFlowTrendChart(periodTransactions, uiState.startDate, uiState.endDate) }
 
         if (uiState.filteredTransactions.isNotEmpty()) {
             item {
@@ -148,22 +140,17 @@ fun AnalyticsScreen(
             if (uiState.selectedType == TransactionType.EXPENSE) {
                 item {
                     BurnRateCard(
-                        transactions = allTransactions,
+                        transactions = periodTransactions,
                         startDate = uiState.startDate,
                         endDate = uiState.endDate
                     )
                 }
             }
             val typeStr = uiState.selectedType.name.lowercase()
-            item {
-                WeekdaySpendCard(
-                    transactions = allTransactions,   // full history for richer pattern
-                    type = typeStr
-                )
-            }
+            item { WeekdaySpendCard(pattern = weekdayPattern) }
             item {
                 RecurringMerchantsCard(
-                    transactions = allTransactions,
+                    merchants = recurringMerchants,
                     type = typeStr
                 )
             }
@@ -181,32 +168,12 @@ fun AnalyticsScreen(
 
 @Composable
 private fun InsightsEmptyState(selectedType: TransactionType, periodLabel: String) {
-    GlassySurface(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = if (selectedType == TransactionType.EXPENSE) "💸" else "💰",
-                style = MaterialTheme.typography.displaySmall
-            )
-            Text(
-                text = "No ${selectedType.name.lowercase()} data",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "No ${selectedType.name.lowercase()} transactions found for $periodLabel. " +
-                        "Try a different period or switch to " +
-                        "${if (selectedType == TransactionType.EXPENSE) "Income" else "Expenses"}.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
+    val typeLabel = selectedType.name.lowercase()
+    val switchTo = if (selectedType == TransactionType.EXPENSE) "Income" else "Expenses"
+    EmptyStateMessage(
+        title = "No $typeLabel data",
+        message = "No $typeLabel transactions found for $periodLabel. " +
+                "Try a different period or switch to $switchTo.",
+        emoji = if (selectedType == TransactionType.EXPENSE) "💸" else "💰"
+    )
 }

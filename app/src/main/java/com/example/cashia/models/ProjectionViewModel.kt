@@ -3,8 +3,8 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.daos.TransactionDao
 import com.example.cashia.utility.FinanceProjectionEngine
-import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.ProjectionPeriod
 import com.example.cashia.utility.computeConfidence
 import com.example.cashia.utility.daysUntilZero
@@ -14,9 +14,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+
+/** How far back Projection ever looks, regardless of how much history exists. */
+private const val PROJECTION_LOOKBACK_DAYS = 365L
 
 data class ProjectionUiState(
     val selectedPeriodIndex: Int = 1,
@@ -36,7 +40,7 @@ data class ProjectionUiState(
 
 class ProjectionViewModel(
     transactionsStateFlow: StateFlow<TransactionState>,
-    parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
+    dao: TransactionDao,
     upcomingFlow: StateFlow<List<UpcomingTransaction>>
 ) : ViewModel() {
 
@@ -44,11 +48,30 @@ class ProjectionViewModel(
     private val _balanceOverride = MutableStateFlow("")
     private val _configExpanded = MutableStateFlow(false)
 
-    // Pair the two transaction inputs so the main combine stays within 5 flows.
+    /**
+     * Bounded to the trailing [PROJECTION_LOOKBACK_DAYS] days instead of the full table: any
+     * history longer than that was always clamped down to it anyway (see maxLookBack below),
+     * and shorter history already fits entirely inside the window, so this is equivalent to the
+     * old full-table computation. Exposed for ProjectionInsightsCard to reuse.
+     */
+    val recentTransactionsFlow: StateFlow<List<MpesaTransactions>> = dao
+        .getTransactionsInRange(
+            LocalDate.now().minusDays(PROJECTION_LOOKBACK_DAYS).toString(),
+            LocalDate.now().toString()
+        )
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val earliestDateFlow: StateFlow<LocalDate?> = dao
+        .getEarliestTransactionDateFlow()
+        .map { it?.let(LocalDate::parse) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // Pair the transaction inputs so the main combine stays within 5 flows.
     private val txDataFlow = combine(
         transactionsStateFlow,
-        parsedTransactionsFlow
-    ) { state, parsed -> state to parsed }
+        recentTransactionsFlow,
+        earliestDateFlow
+    ) { state, recentTx, earliestDate -> Triple(state, recentTx, earliestDate) }
 
     val uiState: StateFlow<ProjectionUiState> = combine(
         txDataFlow,
@@ -56,7 +79,7 @@ class ProjectionViewModel(
         _selectedPeriodIndex,
         _balanceOverride,
         _configExpanded
-    ) { (txState, parsedTxs), upcomingAll, periodIdx, overrideStr, expanded ->
+    ) { (txState, recentTransactions, earliestDate), upcomingAll, periodIdx, overrideStr, expanded ->
 
         val today = LocalDate.now()
         val period = ProjectionPeriod.entries[periodIdx]
@@ -65,14 +88,12 @@ class ProjectionViewModel(
         val effectiveBalance =
             overrideStr.toDoubleOrNull()?.takeIf { it >= 0 } ?: txState.latestBalance
 
-        // 1. Efficient Date Search — dates are pre-derived upstream, no parsing here
-        val earliestDate = parsedTxs.minOfOrNull { it.date } ?: today.minusDays(365)
-
-        val maxLookBack = ChronoUnit.DAYS.between(earliestDate, today).toInt().coerceIn(30, 365)
-        val cutoff = today.minusDays(maxLookBack.toLong())
-
-        // 2. Filter Recent
-        val recentTransactions = parsedTxs.filter { it.date >= cutoff }.map { it.tx }
+        // Lookback span used only for the confidence score; the transaction set itself is
+        // already bounded correctly by recentTransactionsFlow's SQL query above.
+        val maxLookBack = ChronoUnit.DAYS
+            .between(earliestDate ?: today.minusDays(PROJECTION_LOOKBACK_DAYS), today)
+            .toInt()
+            .coerceIn(30, 365)
 
         // 3. Pending Upcoming
         val pendingUpcoming = upcomingAll.filter { it.status == UpcomingStatus.PENDING }
@@ -142,14 +163,14 @@ class ProjectionViewModel(
     companion object {
         fun provideFactory(
             transactionsStateFlow: StateFlow<TransactionState>,
-            parsedTransactionsFlow: StateFlow<List<ParsedTx>>,
+            dao: TransactionDao,
             upcomingFlow: StateFlow<List<UpcomingTransaction>>
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return ProjectionViewModel(
                     transactionsStateFlow,
-                    parsedTransactionsFlow,
+                    dao,
                     upcomingFlow
                 ) as T
             }

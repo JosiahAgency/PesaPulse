@@ -2,11 +2,10 @@ package com.example.cashia.ui.reusedElements
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,13 +20,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.ui.theme.primaryGradient
 
+/**
+ * [fullWidth] matches the Banani export's solid-bar "Back to top"/"Jump to today" buttons —
+ * defaults to false so the compact pill shape stays the default for any other future callers.
+ */
 @Composable
 fun HarmonizedActionFab(
     text: String,
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fullWidth: Boolean = false
 ) {
     Surface(
         onClick = onClick,
@@ -36,12 +40,14 @@ fun HarmonizedActionFab(
         tonalElevation = 0.dp,
         shadowElevation = 8.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f)),
-        modifier = modifier
+        modifier = if (fullWidth) modifier.fillMaxWidth() else modifier
     ) {
         Row(
             modifier = Modifier
                 .background(brush = primaryGradient())
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            horizontalArrangement = if (fullWidth) Arrangement.Center else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -54,35 +60,6 @@ fun HarmonizedActionFab(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White
-            )
-        }
-    }
-}
-
-@Composable
-fun HarmonizedIconFab(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = Color.Transparent,
-        tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f)),
-        modifier = modifier.size(48.dp)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.background(brush = primaryGradient())
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = Color.White
             )
         }
     }

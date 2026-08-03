@@ -25,13 +25,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,8 +55,8 @@ fun SummaryReportScreen(
     categoryViewModel: CategoryViewModel,
 ) {
     val haptic = LocalHapticFeedback.current
-    val state by viewModel.uiState.collectAsState()
-    val allCategories by categoryViewModel.allCategories.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
 
     val categoryDisplay = remember(allCategories) {
         allCategories.associate { it.id to "${it.emoji} ${it.label}" }

@@ -2,10 +2,6 @@ package com.example.cashia.ui.screens.upcomingTransactions
 
 import android.app.DatePickerDialog
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -38,9 +33,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -52,10 +45,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.RecurrenceType
 import com.example.cashia.models.ResolvedCategory
@@ -81,7 +73,6 @@ import com.example.cashia.models.UpcomingUiState
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
-import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
@@ -89,113 +80,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Calendar
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun UpcomingTransactionsSection(
-    upcomingViewModel: UpcomingViewModel,
-    categoryViewModel: CategoryViewModel,
-    allCategories: List<ResolvedCategory>
-) {
-    val haptic = LocalHapticFeedback.current
-    val upcoming by upcomingViewModel.upcoming.collectAsState()
-    var expanded by remember { mutableStateOf(true) }
-    var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f))
-                .clickable { PesaActions.playClick(haptic); expanded = !expanded }
-                .padding(16.dp, 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                SectionLabel("upcoming payments")
-                Subtitles("${upcoming.size} pending")
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable {
-                            PesaActions.playClick(haptic)
-                            upcomingViewModel.openCreate()
-                        }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.Add, null, tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-                Icon(
-                    if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                    null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            if (upcoming.isEmpty()) {
-                GlassySurface(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .padding(32.dp)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("📅", fontSize = 32.sp)
-                        Subtitles("No Upcoming Payments Added")
-                    }
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    upcoming.forEach { tx ->
-                        UpcomingTransactionCard(
-                            tx = tx,
-                            allCategories = allCategories,
-                            onMarkPaid = { upcomingViewModel.markPaid(tx) },
-                            onSkip = { upcomingViewModel.skip(tx) },
-                            onEdit = { upcomingViewModel.openEdit(tx) },
-                            onDelete = { deleteTarget = tx }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    deleteTarget?.let { tx ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete \"${tx.title}\"?") },
-            text = { Text("This upcoming payment will be permanently removed.") },
-            confirmButton = {
-                Button(
-                    onClick = { upcomingViewModel.delete(tx); deleteTarget = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
-            }
-        )
-    }
-}
 
 @Composable
 fun UpcomingTransactionCard(
@@ -374,6 +258,88 @@ fun UpcomingTransactionCard(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Compact preview used on History — soonest 2-3 pending items, no per-item expand/actions,
+ * plus a "View all" row to the dedicated [com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen].
+ * Full CRUD stays on that screen; this is read-only at a glance.
+ */
+@Composable
+fun UpcomingPreviewSection(
+    upcomingViewModel: UpcomingViewModel,
+    allCategories: List<ResolvedCategory>,
+    onViewAll: () -> Unit
+) {
+    val upcoming by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
+    if (upcoming.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionLabel("upcoming payments")
+            Text(
+                "View all",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onViewAll() }
+            )
+        }
+        upcoming.take(3).forEach { tx ->
+            val resolved = allCategories.find { it.id == tx.categoryId }
+            val emoji = resolved?.emoji ?: "📦"
+            val accentColor = if (tx.type == UpcomingType.INCOME)
+                MaterialTheme.colorScheme.tertiary
+            else
+                MaterialTheme.colorScheme.error
+
+            GlassySurface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onViewAll() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(accentColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) { Text(emoji, fontSize = 18.sp) }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            tx.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            tx.relativeDueLabel.lowercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    Text(
+                        PesaTimeConfiguration.formatCurrency(tx.amount),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = accentColor
+                    )
                 }
             }
         }

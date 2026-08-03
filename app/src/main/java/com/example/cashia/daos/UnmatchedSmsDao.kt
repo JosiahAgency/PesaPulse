@@ -46,14 +46,17 @@ interface UnmatchedSmsDao {
     fun pendingCountFlow(): Flow<Int>
 
     /**
-     * Active list: PENDING + SKIPPED items, newest first.
+     * Active list: PENDING + SKIPPED items, newest first. Bounded to the same window
+     * size as TransactionsViewModel.WINDOW_PAGE — nothing else in the app subscribes
+     * to an unbounded table scan, this shouldn't either.
      * IGNORED and SAVED are hidden from the main view.
      */
     @Query(
         """
-        SELECT * FROM UnmatchedSms 
+        SELECT * FROM UnmatchedSms
         WHERE status IN ('PENDING', 'SKIPPED')
         ORDER BY receivedAt DESC
+        LIMIT 200
     """
     )
     fun allUnmatchedFlow(): Flow<List<UnmatchedSms>>

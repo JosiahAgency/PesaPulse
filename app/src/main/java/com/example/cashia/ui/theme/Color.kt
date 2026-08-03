@@ -32,7 +32,7 @@ val DarkColorScheme = darkColorScheme(
     error = Color(0xFFFB7185),            // Soft Watermelon
     onError = Color(0xFF4C0519),
 
-    background = Color(0xFF0F172A),       // Deep Navy (Better than obsidian for glass)
+    background = Color(0xFF080B14),       // Near-black canvas — cards read clearly lighter
     onBackground = Color(0xFFF1F5F9),
     surface = Color(0xFF1E293B),          // Elevated Slate
     onSurface = Color(0xFFF1F5F9),
@@ -44,9 +44,6 @@ val DarkColorScheme = darkColorScheme(
 val WidgetBackground = Color(0xFF0F172A)
 val WidgetCard = Color(0xFF1E293B)
 
-val WidgetPrimary = Color(0xFF818CF8)
 val WidgetIncome = Color(0xFF34D399)
 val WidgetExpense = Color(0xFFFB7185)
 
-val WidgetText = Color(0xFFF1F5F9)
-val WidgetSubtle = Color(0xFF94A3B8)

@@ -32,7 +32,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -105,27 +104,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
         _newTransactionsSynced.asSharedFlow()
 
-    // ── Single shared DB upstream (full table, for screens that need history) ──
-    private val allTransactionsShared = dao
-        .getAllTransactions()
-        .shareIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            replay = 1
-        )
-
-    val allTransactionsFlow: StateFlow<List<MpesaTransactions>> = allTransactionsShared
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /**
-     * Full history with dates pre-derived from the epoch timestamp — parsed ONCE
-     * here and shared by every consumer (Calendar, Projections, …).
-     */
-    val parsedTransactionsFlow: StateFlow<List<ParsedTx>> = allTransactionsShared
-        .map { txs -> txs.map { it.toParsedTx() } }
-        .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
     // ── History pipeline: filters resolved once, applied in SQL ────────────────
 
     private val filtersFlow = combine(
@@ -192,19 +170,22 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             initialValue = TransactionState()
         )
 
-    // ── Reversal index — reuses the shared upstream ────────────────────────────
-    val reversalIndex: StateFlow<ReversalIndex> = allTransactionsShared
-        .map { all ->
-            val reversals = all.filter { it.reversedTxId != null }
-            val allById = all.associateBy { it.id }
+    // ── Reversal index — bounded to reversal rows + the originals they reference,
+    // instead of scanning the full transaction table ───────────────────────────
+    val reversalIndex: StateFlow<ReversalIndex> = dao.getReversalsFlow()
+        .map { reversals ->
+            if (reversals.isEmpty()) return@map ReversalIndex()
+
+            val originalIds = reversals.mapNotNull { it.reversedTxId }.distinct()
+            val originalsById = dao.getTransactionsByIds(originalIds).associateBy { it.id }
 
             val byOriginal = reversals.mapNotNull { rev ->
-                val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                val orig = originalsById[rev.reversedTxId] ?: return@mapNotNull null
                 orig.id to rev
             }.toMap()
 
             val byReversal = reversals.mapNotNull { rev ->
-                val orig = allById[rev.reversedTxId] ?: return@mapNotNull null
+                val orig = originalsById[rev.reversedTxId] ?: return@mapNotNull null
                 rev.id to orig
             }.toMap()
 

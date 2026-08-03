@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +53,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ResolvedCategory
-import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.GlassySurface
@@ -71,7 +69,6 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpcomingSection(
-    viewModel: TransactionsViewModel,
     overdue: List<UpcomingTransaction>,
     dueSoon: List<UpcomingTransaction>,
     later: List<UpcomingTransaction>,
@@ -83,8 +80,6 @@ fun UpcomingSection(
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
     val total = overdue.size + dueSoon.size + later.size
-    val allTransactions by viewModel.allTransactionsFlow.collectAsState()
-
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -98,8 +93,6 @@ fun UpcomingSection(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 var matchRunning by remember { mutableStateOf(false) }
-                val allTx = allTransactions
-
 
                 Surface(
                     shape = CircleShape,
@@ -111,7 +104,7 @@ fun UpcomingSection(
                             if (!matchRunning) {
                                 PesaActions.playClick(haptic)
                                 matchRunning = true
-                                upcomingViewModel.matchAllPending(allTx)
+                                upcomingViewModel.matchAllPending()
                                 MainScope().launch {
                                     delay(2000)
                                     matchRunning = false

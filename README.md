@@ -1,194 +1,106 @@
-# PesaPulse
+# Cashia (PesaPulse) 💸📊
 
-PesaPulse is an Android personal finance application that automatically reads and parses M-PESA SMS messages to help users track income, expenses, spending habits, and financial trends in real time.
+<p align="center">
+  <img src="app/src/main/pesapulse_logo-playstore.png" alt="PesaPulse logo" width="140" />
+</p>
 
-The application transforms raw transaction SMS messages into structured financial records, providing actionable insights, projections, and analytics without requiring manual data entry.
+Cashia is an Android personal finance app that reads M-PESA SMS messages, parses them into structured transactions, and turns them into live insights, forecasts, and reminders.
 
----
+## ✨ What the app currently does
 
-## Features
+- 📥 **SMS sync & parsing**: reads M-PESA messages and classifies transaction types.
+- 🧾 **Transaction history**: browse all records, inspect details, and review unmatched SMS.
+- 🏠 **Dashboard**: balance and period summaries, due-soon context, and quick financial status.
+- 📆 **Calendar view**: spending and activity over time with week/day context.
+- 📈 **Insights (Analytics)**: trends, category breakdowns, weekday patterns, and merchant analysis.
+- 🔮 **Forecasts (Projections)**: projected balance, upcoming impact, and due-soon grouping.
+- ⏰ **Upcoming payments**: full CRUD for future expenses/income/savings with recurrence and status tracking.
+- 🏷️ **Category management**: manage custom categories and apply categorization controls.
+- 🛡️ **Security & privacy**: optional biometric/PIN app lock and privacy-aware home screen widget state.
+- 🔔 **Smart reminders**: daily digest, upcoming reminders, and monthly summary notifications via WorkManager.
 
-### Automatic M-PESA SMS Sync
-- Reads incoming M-PESA SMS messages
-- Parses transactions automatically
-- Detects:
-  - Money sent
-  - Money received
-  - Paybill payments
-  - Buy goods transactions
-  - Airtime purchases
-  - Withdrawals
-  - Reversals
-  - Fuliza transactions
-  - Balance inquiries
+## 🧭 Main navigation
 
-### Smart Transaction Categorization
-Automatically categorizes transactions into groups such as:
-- Food
-- Transport
-- Shopping
-- Bills
-- Salary
-- Airtime
-- Loans
-- Entertainment
-- Savings
-- Other
+Bottom navigation includes:
 
-### Financial Insights
-Provides useful analytics including:
-- Daily spending trends
-- Monthly summaries
-- Spending distribution
-- Income vs expense analysis
-- Largest expense categories
-- Transaction frequency analysis
+1. **Home**
+2. **History**
+3. **Calendar**
+4. **Insights**
+5. **Forecast**
 
-### Financial Projections
-Uses historical transaction patterns to:
-- Estimate future spending
-- Predict upcoming cash flow
-- Forecast balance trends
-- Identify overspending behavior
+Additional routes:
 
-### Unmatched SMS Review System
-- Detects unsupported or unknown SMS formats
-- Allows manual review and classification
-- Supports future parser learning improvements
+- ⚙️ Settings
+- 🏷️ Categories
+- ⏳ Upcoming Payments
+- 📩 Review Unmatched SMS
+- 📄 Summary Report details
 
-### Offline First
-- Local Room database storage
-- Works without internet connection
-- Fast local analytics and querying
+## 🧱 Tech stack
 
----
+- **Language/UI**: Kotlin, Jetpack Compose, Material 3
+- **Architecture**: ViewModel + repository-style data flow
+- **Persistence**: Room
+- **Background work**: WorkManager
+- **Auth/Security**: Android Biometric + device credential flow
+- **Widget**: Jetpack Glance App Widget
+- **Services**: Firebase (Google services/auth wiring present)
 
-## Tech Stack
-
-### Android
-- Kotlin
-- Jetpack Compose
-- Coroutines
-- Android Content Resolver
-
-### Persistence
-- Room Database
-
-### Architecture
-- Repository Pattern
-- Local-first data layer
-- Structured parser pipeline
-
-### SMS Processing
-- Regex-based transaction extraction
-- Pattern grouping
-- SMS synchronization system
-
----
-
-## How It Works
-
-1. User grants SMS permission
-2. App scans M-PESA inbox messages
-3. SMS messages are parsed into structured transactions
-4. Transactions are stored locally
-5. Analytics and projections are generated from transaction history
-
----
-
-## Permissions
-
-PesaPulse requires the following permission:
+## 🔐 Permissions used
 
 ```xml
-<uses-permission android:name="android.permission.READ_SMS"/>
+<uses-permission android:name="android.permission.READ_SMS" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 ```
 
-SMS messages are processed locally on-device and are not shared externally.
+SMS processing is local to the device.
 
----
+## 🧪 Testing
 
-## Project Structure
+The project includes local unit tests and instrumentation tests, including parser quality/performance coverage and DAO equivalence checks.
+
+Run locally:
+
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebugAndroidTest
+```
+
+CI quality workflow:
+
+- `.github/workflows/quality-gates.yml`
+
+## 🚀 Setup
+
+1. Clone:
+
+```bash
+git clone https://github.com/JosiahAgency/Cashia.git
+```
+
+2. Open in Android Studio.
+3. Build/run on device or emulator (minSdk 26).
+
+## 🧩 Project layout (high level)
 
 ```text
-models/
-├── MpesaTransactions.kt
-├── UnmatchedSms.kt
-
-utility/
-├── SmsRepository.kt
-├── Parser utilities
-
-database/
-├── Room entities
-├── DAOs
-├── Sync state management
+app/src/main/java/com/example/cashia/
+├── models/           # entities, workers, and viewmodels
+├── daos/             # Room DAOs
+├── utility/          # parser, schedulers, helpers
+├── ui/               # navigation, screens, reusable components
+├── widget/           # Glance widget
+├── AppDatabase.kt
+├── MainActivity.kt
+└── PesaPulseApplication.kt
 ```
 
----
+## ⚠️ Disclaimer
 
-## Future Improvements
+Cashia/PesaPulse is an independent app and is not affiliated with Safaricom or M-PESA.
 
-- Machine learning transaction categorization
-- Cloud backup & sync
-- Budget goals
-- Recurring payment detection
-- Multi-account support
-- Data export (CSV/PDF)
-- AI-powered financial recommendations
-- Fraud/anomaly detection
-
----
-
-## Installation
-
-1. Clone the repository
-
-```bash
-git clone https://github.com/yourusername/pesapulse.git
-```
-
-2. Open in Android Studio
-
-3. Build and run on an Android device
-
----
-
-## Commit/Push Quality Gates
-
-This project now includes automated **test + performance evaluators** to catch regressions before and after code is pushed.
-
-### 1. Local Git hooks (pre-commit and pre-push)
-
-Hooks are stored in `.githooks/`:
-- `pre-commit`: runs parser quality tests
-- `pre-push`: runs unit tests, parser performance evaluator, and debug assemble
-
-Enable them once per clone:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-### 2. GitHub Actions on push/PR
-
-Workflow: `.github/workflows/quality-gates.yml`
-
-Runs on every push and pull request:
-- `:app:testDebugUnitTest`
-- `:app:assembleDebug`
-- Performance evaluator test (`ParserPerformanceEvaluatorTest`)
-
----
-
-## Disclaimer
-
-PesaPulse is not affiliated with Safaricom or M-PESA.
-
-This application processes SMS data locally for personal finance tracking purposes only.
-
----
-
-## License
+## 📄 License
 
 MIT License
