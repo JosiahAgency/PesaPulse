@@ -10,7 +10,6 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresExtension
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -24,6 +23,7 @@ import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.core.content.edit
 
 class MainActivity : FragmentActivity() {
     private val permissionRequestCode = 100
@@ -82,6 +82,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -114,7 +115,7 @@ class MainActivity : FragmentActivity() {
         val isFirstRun = prefs.getBoolean("first_run_notif", true)
         if (!isFirstRun) return
 
-        prefs.edit().putBoolean("first_run_notif", false).apply()
+        prefs.edit { putBoolean("first_run_notif", false) }
 
         // Fire immediately on a background thread — confirms the whole pipeline works
         lifecycleScope.launch(Dispatchers.IO) {

@@ -77,7 +77,6 @@ import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
-import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -91,7 +90,6 @@ import com.example.cashia.ui.screens.analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.calendar.CalendarScreen
 import com.example.cashia.ui.screens.category.CategoryManagementScreen
 import com.example.cashia.ui.screens.dashboard.DashboardScreen
-import com.example.cashia.ui.screens.projections.ProjectionScreen
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
@@ -111,7 +109,6 @@ fun PesaPulseApp() {
             AppDestinations.Transactions,
             AppDestinations.Calendar,
             AppDestinations.Analytics,
-            AppDestinations.Projections,
         )
     }
 
@@ -220,21 +217,6 @@ fun PesaPulseApp() {
                     )
                 )
                 AnalyticsScreen(categoryViewModel, analyticsViewModel)
-            }
-            composable(AppDestinations.Projections.route) {
-                val projectionViewModel: ProjectionViewModel = viewModel(
-                    factory = ProjectionViewModel.provideFactory(
-                        sharedViewModel.state,
-                        AppDatabase.getDatabase(context).transactionDao(),
-                        upcomingViewModel.upcoming
-                    )
-                )
-                ProjectionScreen(
-                    sharedViewModel,
-                    upcomingViewModel,
-                    categoryViewModel,
-                    projectionViewModel
-                )
             }
             composable(AppDestinations.Settings.route) {
                 SettingsScreen(
