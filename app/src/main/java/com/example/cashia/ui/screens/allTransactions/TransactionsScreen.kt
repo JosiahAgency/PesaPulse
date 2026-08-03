@@ -5,7 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,9 +45,11 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.ActionBanner
+import com.example.cashia.ui.reusedElements.DataSyncBanner
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.HarmonizedActionFab
+import com.example.cashia.ui.reusedElements.standardScreenPadding
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
@@ -69,6 +70,7 @@ fun TransactionScreen(
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -126,11 +128,14 @@ fun TransactionScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 115.dp, bottom = 100.dp
-                ),
+                contentPadding = standardScreenPadding(bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                if (isSyncing) {
+                    item(key = "history_sync_banner") {
+                        DataSyncBanner(modifier = Modifier.padding(bottom = 8.dp))
+                    }
+                }
 
                 item(key = "search") {
                     EnhancedSearchBar(
@@ -315,7 +320,7 @@ fun TransactionScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(bottom = 98.dp)
+                .padding(bottom = 95.dp)
         ) {
             HarmonizedActionFab(
                 icon = Icons.Rounded.KeyboardArrowUp,

@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.cashia.ui.theme.primaryGradient
 
 /**
  * [fullWidth] matches the Banani export's solid-bar "Back to top"/"Jump to today" buttons —
@@ -44,7 +43,8 @@ fun HarmonizedActionFab(
     ) {
         Row(
             modifier = Modifier
-                .background(brush = primaryGradient())
+//                .background(brush = primaryGradient())
+                .background(MaterialTheme.colorScheme.onPrimary)
                 .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = if (fullWidth) Arrangement.Center else Arrangement.Start,

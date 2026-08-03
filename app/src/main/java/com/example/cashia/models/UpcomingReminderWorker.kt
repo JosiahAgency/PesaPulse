@@ -7,7 +7,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.NotificationRuntimeStore
 import com.example.cashia.utility.NotificationScheduler
+import com.example.cashia.utility.NotificationStream
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,7 +24,11 @@ class UpcomingReminderWorker(
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result = try {
+        NotificationRuntimeStore.recordAttempt(context, NotificationStream.UPCOMING)
         run()
+    } catch (e: Exception) {
+        NotificationRuntimeStore.recordError(context, NotificationStream.UPCOMING, e.localizedMessage)
+        Result.failure()
     } finally {
         // Queue tomorrow's run so the one-time chain never dies.
         NotificationScheduler.scheduleUpcomingReminders(context, fromWorker = true)
@@ -62,6 +68,7 @@ class UpcomingReminderWorker(
             }
         }
 
+        NotificationRuntimeStore.recordSuccess(context, NotificationStream.UPCOMING)
         return Result.success()
     }
 

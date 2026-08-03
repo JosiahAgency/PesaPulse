@@ -56,7 +56,7 @@ object ParserLearningService {
             var discarded = 0
 
             for (row in outdated) {
-                when (val result = parseMpesaMessageRich(row.rawBody, row.receivedAt)) {
+                when (val result = parseMpesaMessageRich(row.rawBody, row.smsId, row.receivedAt)) {
 
                     is RichParseResult.FullMatch -> {
                         // 🎉 New regex picked it up — promote to real transaction
@@ -182,18 +182,4 @@ object ParserLearningService {
         // Normalise multiple spaces introduced by replacements
         .replace(Regex("""\s{2,}"""), " ")
         .trim()
-
-    // ── 3. Deduplication helper ───────────────────────────────────────────────
-
-    /**
-     * Returns messages whose [contentHash] appears more than once, grouped by hash.
-     * Useful for displaying "3 identical messages" in the UI instead of showing each separately.
-     */
-    suspend fun findDuplicates(dao: UnmatchedSmsDao): Map<String, List<UnmatchedSms>> =
-        withContext(Dispatchers.IO) {
-            val duplicateHashes = dao.getDuplicateHashes()
-            duplicateHashes.associate { (hash, _) ->
-                hash to dao.getByHash(hash)
-            }
-        }
 }

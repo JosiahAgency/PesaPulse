@@ -1,7 +1,6 @@
 package com.example.cashia.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
@@ -17,11 +16,6 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
     object Transactions : AppDestinations("transactions", "History", Icons.Outlined.Receipt)
     object Calendar : AppDestinations("calendar", "Calendar", Icons.Outlined.CalendarMonth)
     object Analytics : AppDestinations("analytics", "Insights", Icons.Outlined.BarChart)
-    object Projections : AppDestinations(
-        "projections", "Forecast",
-        Icons.AutoMirrored.Outlined.TrendingUp
-    )
-
     object Settings : AppDestinations("settings", "Settings", Icons.Outlined.Settings)
     object Categories : AppDestinations("categories", "categories", Icons.Outlined.Category)
 

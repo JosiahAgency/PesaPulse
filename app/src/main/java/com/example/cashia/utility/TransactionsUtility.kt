@@ -1,6 +1,7 @@
 package com.example.cashia.utility
 
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.DayGroup
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -56,9 +57,31 @@ fun MpesaTransactions.toParsedTx(): ParsedTx {
     return ParsedTx(this, d, weekBucket(d))
 }
 
+fun buildDayGroups(transactions: List<MpesaTransactions>): List<DayGroup> =
+    transactions
+        .groupBy { it.localDate() }
+        .entries
+        .sortedByDescending { it.key }
+        .map { (date, dayTxs) ->
+            var income = 0.0
+            var expense = 0.0
+            for (tx in dayTxs) {
+                when (tx.type) {
+                    "income" -> income += tx.amount
+                    "expense" -> expense += tx.amount
+                }
+            }
+            DayGroup(
+                date = date,
+                transactions = dayTxs.sortedByDescending { it.timestamp },
+                dayIncome = income,
+                dayExpense = expense,
+                dayBalance = dayTxs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
+            )
+        }
+
 private val amountFormatter = NumberFormat.getNumberInstance(Locale("en", "KE")).apply {
     minimumFractionDigits = 2; maximumFractionDigits = 2
 }
 
 fun formatAmount(amount: Double): String = amountFormatter.format(amount)
-

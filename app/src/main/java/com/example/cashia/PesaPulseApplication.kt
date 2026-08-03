@@ -11,8 +11,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -77,7 +75,6 @@ import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
-import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
@@ -91,7 +88,6 @@ import com.example.cashia.ui.screens.analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.calendar.CalendarScreen
 import com.example.cashia.ui.screens.category.CategoryManagementScreen
 import com.example.cashia.ui.screens.dashboard.DashboardScreen
-import com.example.cashia.ui.screens.projections.ProjectionScreen
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaActions
@@ -111,7 +107,6 @@ fun PesaPulseApp() {
             AppDestinations.Transactions,
             AppDestinations.Calendar,
             AppDestinations.Analytics,
-            AppDestinations.Projections,
         )
     }
 
@@ -129,6 +124,17 @@ fun PesaPulseApp() {
         factory = UpcomingViewModel.provideFactory(context)
     )
     val settingsViewModel: SettingsViewModel = viewModel()
+    val appDb = remember(context) { AppDatabase.getDatabase(context) }
+    val transactionDao = remember(appDb) { appDb.transactionDao() }
+    val calendarViewModel: CalendarViewModel = viewModel(
+        factory = CalendarViewModel.provideFactory(
+            transactionDao,
+            upcomingViewModel.upcoming
+        )
+    )
+    val analyticsViewModel: AnalyticsViewModel = viewModel(
+        factory = AnalyticsViewModel.provideFactory(transactionDao)
+    )
     val isDark by settingsViewModel.darkTheme.collectAsStateWithLifecycle()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -200,12 +206,6 @@ fun PesaPulseApp() {
                 )
             }
             composable(AppDestinations.Calendar.route) {
-                val calendarViewModel: CalendarViewModel = viewModel(
-                    factory = CalendarViewModel.provideFactory(
-                        AppDatabase.getDatabase(context).transactionDao(),
-                        upcomingViewModel.upcoming
-                    )
-                )
                 CalendarScreen(
                     sharedViewModel,
                     categoryViewModel,
@@ -214,27 +214,7 @@ fun PesaPulseApp() {
                 )
             }
             composable(AppDestinations.Analytics.route) {
-                val analyticsViewModel: AnalyticsViewModel = viewModel(
-                    factory = AnalyticsViewModel.provideFactory(
-                        AppDatabase.getDatabase(context).transactionDao(),
-                    )
-                )
                 AnalyticsScreen(categoryViewModel, analyticsViewModel)
-            }
-            composable(AppDestinations.Projections.route) {
-                val projectionViewModel: ProjectionViewModel = viewModel(
-                    factory = ProjectionViewModel.provideFactory(
-                        sharedViewModel.state,
-                        AppDatabase.getDatabase(context).transactionDao(),
-                        upcomingViewModel.upcoming
-                    )
-                )
-                ProjectionScreen(
-                    sharedViewModel,
-                    upcomingViewModel,
-                    categoryViewModel,
-                    projectionViewModel
-                )
             }
             composable(AppDestinations.Settings.route) {
                 SettingsScreen(
@@ -279,8 +259,7 @@ fun PesaPulseApp() {
                         AnimatedContent(
                             targetState = PesaTimeConfiguration.screenTitle(currentRoute),
                             transitionSpec = {
-                                (fadeIn(tween(180)) + scaleIn(tween(180), 0.97f))
-                                    .togetherWith(fadeOut(tween(120)) + scaleOut(tween(120), 0.97f))
+                                fadeIn(tween(90)).togetherWith(fadeOut(tween(70)))
                             },
                             label = "title"
                         ) { title ->
@@ -295,7 +274,7 @@ fun PesaPulseApp() {
                         AnimatedContent(
                             targetState = PesaTimeConfiguration.screenSubtitle(currentRoute),
                             transitionSpec = {
-                                fadeIn(tween(150)).togetherWith(fadeOut(tween(100)))
+                                fadeIn(tween(80)).togetherWith(fadeOut(tween(60)))
                             },
                             label = "subtitle"
                         ) { subtitle ->
@@ -413,10 +392,11 @@ fun IslandNavigationBar(
             .fillMaxWidth()
             .height(70.dp),
         shape = RoundedCornerShape(36.dp),
-        color = colorScheme.surface,
+        color = colorScheme.primary.copy(alpha = 0.07f),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {

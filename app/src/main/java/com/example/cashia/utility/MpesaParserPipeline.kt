@@ -5,6 +5,7 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.ParseResult
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.parseMpesaMessage
+import org.json.JSONObject
 import java.security.MessageDigest
 
 const val PARSER_VERSION = 2
@@ -129,23 +130,16 @@ fun partialExtract(normalized: String): Pair<PartialFields, Float> {
  * [UnmatchedSms.extractedFields].  Fields with null values are omitted.
  */
 fun PartialFields.toJson(): String {
-    val map = buildMap<String, String> {
-        transactionId?.let { put("id", it) }
-        amount?.let { put("amount", it) }
-        recipient?.let { put("recipient", it) }
-        date?.let { put("date", it) }
-        time?.let { put("time", it) }
-        balance?.let { put("balance", it) }
-        transactionCost?.let { put("cost", it) }
-        likelyType?.let { put("type", it) }
-    }
-    return buildString {
-        append("{")
-        map.entries.joinToString(",") { (k, v) ->
-            "\"$k\":\"${v.replace("\"", "\\\"")}\""
-        }.also { append(it) }
-        append("}")
-    }
+    val obj = JSONObject()
+    transactionId?.let { obj.put("id", it) }
+    amount?.let { obj.put("amount", it) }
+    recipient?.let { obj.put("recipient", it) }
+    date?.let { obj.put("date", it) }
+    time?.let { obj.put("time", it) }
+    balance?.let { obj.put("balance", it) }
+    transactionCost?.let { obj.put("cost", it) }
+    likelyType?.let { obj.put("type", it) }
+    return obj.toString()
 }
 
 /**
@@ -155,28 +149,18 @@ fun PartialFields.toJson(): String {
 fun partialFieldsFromJson(json: String?): PartialFields? {
     if (json.isNullOrBlank()) return null
     return try {
-        val map = mutableMapOf<String, String>()
-        // Simple hand-rolled parser — avoids a full JSON library dependency
-        val inner = json.trim().removePrefix("{").removeSuffix("}")
-        inner.split(",").forEach { pair ->
-            val kv = pair.trim().split("\":\"")
-            if (kv.size == 2) {
-                val key = kv[0].removePrefix("\"")
-                val value = kv[1].removeSuffix("\"")
-                map[key] = value
-            }
-        }
+        val obj = JSONObject(json)
         PartialFields(
-            transactionId = map["id"],
-            amount = map["amount"],
-            recipient = map["recipient"],
-            date = map["date"],
-            time = map["time"],
-            balance = map["balance"],
-            transactionCost = map["cost"],
-            likelyType = map["type"]
+            transactionId = obj.optString("id").takeIf { it.isNotBlank() },
+            amount = obj.optString("amount").takeIf { it.isNotBlank() },
+            recipient = obj.optString("recipient").takeIf { it.isNotBlank() },
+            date = obj.optString("date").takeIf { it.isNotBlank() },
+            time = obj.optString("time").takeIf { it.isNotBlank() },
+            balance = obj.optString("balance").takeIf { it.isNotBlank() },
+            transactionCost = obj.optString("cost").takeIf { it.isNotBlank() },
+            likelyType = obj.optString("type").takeIf { it.isNotBlank() }
         )
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }
@@ -232,6 +216,7 @@ sealed class RichParseResult {
  */
 fun parseMpesaMessageRich(
     rawBody: String,
+    smsId: Long,
     smsReceivedAt: Long = System.currentTimeMillis()
 ): RichParseResult {
     val normalized = normalizeSmsBody(rawBody)
@@ -246,7 +231,7 @@ fun parseMpesaMessageRich(
     if (isSystemNoise(normalized)) return RichParseResult.Irrelevant
 
     // ── Step 2: Primary regex pass (full confidence) ──────────────────────
-    val legacyResult = parseMpesaMessage(rawBody, smsReceivedAt)   // your existing parser
+    val legacyResult = parseMpesaMessage(rawBody, smsId, smsReceivedAt)
     if (legacyResult is ParseResult.Success) {
         return RichParseResult.FullMatch(legacyResult.transactions)
     }
@@ -272,13 +257,18 @@ fun parseMpesaMessageRich(
     }
 }
 
-fun RichParseResult.toUnmatchedSms(rawBody: String, smsReceivedAt: Long): UnmatchedSms? {
+fun RichParseResult.toUnmatchedSms(
+    rawBody: String,
+    smsId: Long,
+    smsReceivedAt: Long
+): UnmatchedSms? {
     val normalized = when (this) {
         is RichParseResult.LowConfidence -> normalizedBody
         is RichParseResult.Unmatched -> normalizedBody
         else -> return null  // FullMatch / Irrelevant — don't store
     }
     return UnmatchedSms(
+        smsId = smsId,
         rawBody = rawBody,
         receivedAt = smsReceivedAt,
 

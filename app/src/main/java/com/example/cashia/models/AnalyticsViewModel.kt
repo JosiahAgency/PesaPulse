@@ -41,12 +41,10 @@ class AnalyticsViewModel(
     private val dao: TransactionDao
 ) : ViewModel() {
 
-    private val today = LocalDate.now()
-
     private val _selectedType = MutableStateFlow(TransactionType.EXPENSE)
     private val _selectedScope = MutableStateFlow(TimeScope.MONTH)
-    private val _startDate = MutableStateFlow(today.withDayOfMonth(1))
-    private val _endDate = MutableStateFlow(today)
+    private val _startDate = MutableStateFlow(LocalDate.now().withDayOfMonth(1))
+    private val _endDate = MutableStateFlow(LocalDate.now())
 
     /**
      * Bounded to the selected period (both transaction types) instead of the full table —
@@ -63,7 +61,7 @@ class AnalyticsViewModel(
                 end.toString()
             )
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * Weekday spend/income pattern computed in SQL (see [TransactionDao.getWeekdaySpendPattern])
@@ -86,7 +84,7 @@ class AnalyticsViewModel(
             }
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * Recurring-merchant detection computed in SQL (see [TransactionDao.getRecurringMerchants])
@@ -112,7 +110,7 @@ class AnalyticsViewModel(
             }
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Type + time-range filtering runs in SQL: only the matching rows are loaded,
     // and Room re-emits automatically whenever the table changes.
@@ -138,18 +136,18 @@ class AnalyticsViewModel(
                 .map { filtered -> base.copy(filteredTransactions = filtered) }
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AnalyticsUiState())
 
     private fun periodLabel(scope: TimeScope, start: LocalDate, end: LocalDate): String =
         when (scope) {
-            TimeScope.DAY -> today.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+            TimeScope.DAY -> LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
             TimeScope.WEEK -> "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
                 end.format(
                     DateTimeFormatter.ofPattern("dd MMM yyyy")
                 )
             }"
 
-            TimeScope.MONTH -> today.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+            TimeScope.MONTH -> LocalDate.now().format(DateTimeFormatter.ofPattern("MMMM yyyy"))
             TimeScope.CUSTOM -> "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
                 end.format(
                     DateTimeFormatter.ofPattern("dd MMM yyyy")
@@ -168,6 +166,7 @@ class AnalyticsViewModel(
     fun setScope(scope: TimeScope) {
         _selectedScope.value = scope
         if (scope != TimeScope.CUSTOM) {
+            val today = LocalDate.now()
             val (newStart, newEnd) = when (scope) {
                 TimeScope.DAY -> today to today
                 TimeScope.WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) to
@@ -181,6 +180,11 @@ class AnalyticsViewModel(
             _startDate.value = newStart
             _endDate.value = newEnd
         }
+    }
+
+    fun refreshCurrentScopeRange() {
+        val scope = _selectedScope.value
+        if (scope != TimeScope.CUSTOM) setScope(scope)
     }
 
     fun setCustomStartDate(date: LocalDate) {

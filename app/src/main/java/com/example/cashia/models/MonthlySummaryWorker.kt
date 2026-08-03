@@ -6,7 +6,9 @@ import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.NotificationRuntimeStore
 import com.example.cashia.utility.NotificationScheduler
+import com.example.cashia.utility.NotificationStream
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +26,7 @@ class MonthlySummaryWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        NotificationRuntimeStore.recordAttempt(context, NotificationStream.MONTHLY)
         try {
             if (!PesaTimeConfiguration.isMonthlySummaryEnabled) return Result.success()
 
@@ -77,7 +80,11 @@ class MonthlySummaryWorker(
                     "month", monthStart.toString()
                 )
             )
+            NotificationRuntimeStore.recordSuccess(context, NotificationStream.MONTHLY)
             return Result.success()
+        } catch (e: Exception) {
+            NotificationRuntimeStore.recordError(context, NotificationStream.MONTHLY, e.localizedMessage)
+            return Result.failure()
         } finally {
             // Queue next month's run even when disabled or on failure, so the chain
             // never dies. APPEND keeps this running instance from cancelling itself.
