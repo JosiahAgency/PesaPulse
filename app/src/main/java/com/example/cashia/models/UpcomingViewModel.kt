@@ -28,19 +28,15 @@ data class UpcomingUiState(
     val error: String? = null
 )
 
-class UpcomingViewModel(private val context: Context) : ViewModel() {
+class UpcomingViewModel(context: Context) : ViewModel() {
 
-    private val dao = AppDatabase.getDatabase(context).upcomingTransactionDao()
-    private val transactionDao = AppDatabase.getDatabase(context).transactionDao()
+    private val dao = AppDatabase.getDatabase(context.applicationContext).upcomingTransactionDao()
 
     val upcoming: StateFlow<List<UpcomingTransaction>> = dao.getPending()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val all: StateFlow<List<UpcomingTransaction>> = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-//    var uiState by mutableStateOf(UpcomingUiState())
-//        private set
 
     private val _uiState = MutableStateFlow(UpcomingUiState())
     val uiState: StateFlow<UpcomingUiState> = _uiState.asStateFlow()

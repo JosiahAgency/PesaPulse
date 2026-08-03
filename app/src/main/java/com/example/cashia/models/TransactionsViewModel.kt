@@ -79,9 +79,9 @@ private data class HistoryFilters(
 )
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class TransactionsViewModel(private val context: Context) : ViewModel() {
+class TransactionsViewModel(private val appContext: Context) : ViewModel() {
 
-    private val database = AppDatabase.getDatabase(context)
+    private val database = AppDatabase.getDatabase(appContext)
     private val dao = database.transactionDao()
     private val unmatchedDao = database.unmatchedSmsDao()
 
@@ -199,10 +199,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         .pendingCountFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val nextPending: StateFlow<UnmatchedSms?> = unmatchedDao
-        .nextPendingFlow()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
     val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -211,10 +207,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     // Compose-observable; intentionally not in TransactionState since it's purely
     // a UI toggle that doesn't affect computation.
     var isBalanceVisible by mutableStateOf(false)
-        private set
-
-    // ── Recurring sheet ────────────────────────────────────────────────────────
-    var recurringSheetTransaction by mutableStateOf<MpesaTransactions?>(null)
         private set
 
     // ── Init ───────────────────────────────────────────────────────────────────
@@ -233,7 +225,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         if (!syncMutex.tryLock()) return
         _isSyncing.value = true
         try {
-            val newTxs = syncTransactions(context, database)
+            val newTxs = syncTransactions(appContext, database)
             if (newTxs.isNotEmpty()) {
                 _newTransactionsSynced.tryEmit(newTxs)
             }
@@ -304,7 +296,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 buildTransaction(
                     smsId = source.smsId,
                     id = source.smsId.toString(),
-                    amountStr = partial?.amount?.toString() ?: "0.00",
+                    amountStr = partial?.amount ?: "0.00",
                     recipient = "Manual Entry (from SMS)",
                     dateStr = partial?.date ?: LocalDate.now()
                         .format(DateTimeFormatter.ofPattern("d/M/yyyy")),
@@ -320,7 +312,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             }
             dao.insertTransactions(listOf(transaction))
             unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
-            WidgetUpdateManager.refreshCashiaWidgets(context)
+            WidgetUpdateManager.refreshCashiaWidgets(appContext)
         }
     }
 
@@ -404,7 +396,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(TransactionsViewModel::class.java)) {
-                        return TransactionsViewModel(context) as T
+                        return TransactionsViewModel(context.applicationContext) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }

@@ -159,9 +159,6 @@ object PesaTimeConfiguration {
             prefs.edit { putInt("upcoming_reminder_days", v) }
         }
 
-    fun saveUpcomingReminderDays(days: Int) {
-        upcomingReminderDaysBefore = days
-    }
 
     private fun monthlyTargetKey(month: YearMonth): String {
         return "$MONTHLY_TARGET_KEY_PREFIX${month}"
@@ -223,17 +220,6 @@ object PesaTimeConfiguration {
             }
         }
     }
-
-    var linkedGoogleEmail: String?
-        get() = prefs.getString("linked_google_email", null)
-        set(value) {
-            prefs.edit {
-                if (value != null) putString(
-                    "linked_google_email",
-                    value
-                ) else remove("linked_google_email")
-            }
-        }
 
     fun saveTimeFormat(enabled: Boolean) {
         use24HrsFormat = enabled
