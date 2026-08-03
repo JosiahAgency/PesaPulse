@@ -143,6 +143,13 @@ fun WeeklyCalendar(
 /** "Pace this month" row — see [MonthPaceState] for what this reuses/represents. */
 @Composable
 private fun MonthPaceRow(pace: MonthPaceState, modifier: Modifier = Modifier) {
+    val progressText = if (pace.hasTarget) "${pace.percentLabel}%" else "Set target"
+    val trailingText = when {
+        !pace.hasTarget -> "Add this month target"
+        pace.remainingLabel > 0.0 -> "Left ${PesaTimeConfiguration.formatCurrency(pace.remainingLabel)}"
+        else -> "Over ${PesaTimeConfiguration.formatCurrency(pace.spentAmount - pace.targetAmount)}"
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -159,16 +166,18 @@ private fun MonthPaceRow(pace: MonthPaceState, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             Text(
-                "${pace.percentLabel}%",
+                progressText,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                "Left ${PesaTimeConfiguration.formatCurrency(pace.remainingLabel)}",
+                trailingText,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.tertiary
+                color = if (pace.hasTarget && pace.remainingLabel <= 0.0)
+                    MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.tertiary
             )
         }
         Box(
@@ -181,7 +190,7 @@ private fun MonthPaceRow(pace: MonthPaceState, modifier: Modifier = Modifier) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(pace.progress)
+                    .fillMaxWidth(pace.progress.coerceIn(0f, 1f))
                     .clip(RoundedCornerShape(3.dp))
                     .background(primaryGradient())
             )

@@ -38,6 +38,9 @@ class MainActivity : FragmentActivity() {
         PesaTimeConfiguration.initialize(this)
         NotificationHelper.createChannels(this)
         NotificationScheduler.scheduleAll(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            NotificationScheduler.ensureHealthySchedules(this@MainActivity)
+        }
         fireWelcomeNotificationIfFirstRun()
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {

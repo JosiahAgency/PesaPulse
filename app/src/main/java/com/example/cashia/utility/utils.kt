@@ -13,6 +13,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.edit
 import com.example.cashia.ui.navigation.AppDestinations
 import java.time.DayOfWeek
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -64,8 +65,62 @@ object PesaTimeConfiguration {
             prefs.edit { putInt("reminder_minute", v) }
         }
 
-    fun saveReminderTime(hour: Int, minute: Int) {
-        reminderHour = hour; reminderMinute = minute
+    var dailyDigestHour: Int
+        get() = prefs.getInt("daily_digest_hour", reminderHour)
+        set(v) {
+            prefs.edit { putInt("daily_digest_hour", v) }
+        }
+
+    var dailyDigestMinute: Int
+        get() = prefs.getInt("daily_digest_minute", reminderMinute)
+        set(v) {
+            prefs.edit { putInt("daily_digest_minute", v) }
+        }
+
+    fun saveDailyDigestTime(hour: Int, minute: Int) {
+        dailyDigestHour = hour
+        dailyDigestMinute = minute
+    }
+
+    var monthlySummaryDayOfMonth: Int
+        get() = prefs.getInt("monthly_summary_day", 1).coerceIn(1, 28)
+        set(v) {
+            prefs.edit { putInt("monthly_summary_day", v.coerceIn(1, 28)) }
+        }
+
+    var monthlySummaryHour: Int
+        get() = prefs.getInt("monthly_summary_hour", 9)
+        set(v) {
+            prefs.edit { putInt("monthly_summary_hour", v) }
+        }
+
+    var monthlySummaryMinute: Int
+        get() = prefs.getInt("monthly_summary_minute", 0)
+        set(v) {
+            prefs.edit { putInt("monthly_summary_minute", v) }
+        }
+
+    fun saveMonthlySummarySchedule(dayOfMonth: Int, hour: Int, minute: Int) {
+        monthlySummaryDayOfMonth = dayOfMonth
+        monthlySummaryHour = hour
+        monthlySummaryMinute = minute
+    }
+
+    var upcomingReminderHour: Int
+        get() = prefs.getInt("upcoming_reminder_hour", (reminderHour - 1).coerceAtLeast(0))
+        set(v) {
+            prefs.edit { putInt("upcoming_reminder_hour", v) }
+        }
+
+    var upcomingReminderMinute: Int
+        get() = prefs.getInt("upcoming_reminder_minute", reminderMinute)
+        set(v) {
+            prefs.edit { putInt("upcoming_reminder_minute", v) }
+        }
+
+    fun saveUpcomingReminderTime(hour: Int, minute: Int) {
+        upcomingReminderHour = hour
+        upcomingReminderMinute = minute
     }
 
     var isDailyDigestEnabled: Boolean
@@ -108,7 +163,25 @@ object PesaTimeConfiguration {
         upcomingReminderDaysBefore = days
     }
 
+    private fun monthlyTargetKey(month: YearMonth): String {
+        return "$MONTHLY_TARGET_KEY_PREFIX${month}"
+    }
+
+    fun getMonthlySpendingTarget(month: YearMonth): Double? {
+        return prefs.getString(monthlyTargetKey(month), null)?.toDoubleOrNull()
+    }
+
+    fun hasMonthlySpendingTarget(month: YearMonth): Boolean {
+        return getMonthlySpendingTarget(month) != null
+    }
+
+    fun saveMonthlySpendingTarget(month: YearMonth, amount: Double) {
+        require(amount > 0.0) { "Monthly spending target must be greater than zero." }
+        prefs.edit { putString(monthlyTargetKey(month), amount.toString()) }
+    }
+
     private const val PREFS_NAME = "pesa_prefs"
+    private const val MONTHLY_TARGET_KEY_PREFIX = "monthly_target_"
 
     fun formatCurrency(amount: Double): String {
         return "$CURRENCY ${formatAmount(amount)}"

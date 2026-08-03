@@ -6,11 +6,9 @@ import androidx.core.net.toUri
 import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import com.example.cashia.models.MpesaTransactions
-import com.example.cashia.models.ParseResult
 import com.example.cashia.models.SyncState
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.models.guessCategory
-import com.example.cashia.models.parseMpesaMessage
 import com.example.cashia.widget.WidgetUpdateManager
 import com.example.cashia.utility.SmsRepository.fetchMpesaMessages
 import kotlinx.coroutines.Dispatchers
@@ -99,25 +97,37 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
     val processedResults = withContext(Dispatchers.Default) {
         messages.map { sms ->
             async {
-                when (val result = parseMpesaMessage(sms.body, sms.id, sms.date)) {
-                    is ParseResult.Success -> {
-                        val tx = result.transactions.copy(smsId = sms.id)
+                when (val result = parseMpesaMessageRich(sms.body, sms.id, sms.date)) {
+                    is RichParseResult.FullMatch -> {
+                        val tx = result.transaction.copy(smsId = sms.id)
                         val betterCategory = guessCategory(
                             recipient = tx.recipient,
                             type = tx.type,
                             customCategories = customCategories,
                             userCorrections = userCorrections
                         )
+                        if (tx.type != "neutral" && tx.amount <= 0.0) {
+                            Log.w(
+                                "SyncParse",
+                                "Parsed non-neutral tx has non-positive amount. smsId=${sms.id}, txId=${tx.id}, type=${tx.type}"
+                            )
+                        }
                         ProcessedResult.Parsed(
                             if (betterCategory != tx.category) tx.copy(category = betterCategory) else tx
                         )
                     }
 
-                    is ParseResult.Unmatched -> ProcessedResult.Unmatched(
-                        UnmatchedSms(smsId = sms.id, rawBody = result.rawBody)
-                    )
+                    is RichParseResult.LowConfidence,
+                    is RichParseResult.Unmatched -> {
+                        val unmatched = result.toUnmatchedSms(
+                            rawBody = sms.body,
+                            smsId = sms.id,
+                            smsReceivedAt = sms.date
+                        ) ?: UnmatchedSms(smsId = sms.id, rawBody = sms.body, receivedAt = sms.date)
+                        ProcessedResult.Unmatched(unmatched)
+                    }
 
-                    is ParseResult.Irrelevant -> ProcessedResult.Ignored
+                    is RichParseResult.Irrelevant -> ProcessedResult.Ignored
                 }
             }
         }.awaitAll()
@@ -135,6 +145,12 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
             ProcessedResult.Ignored -> Unit
         }
     }
+    val lowConfidenceCount = unmatched.count { it.confidence > 0f }
+    val ignoredCount = messages.size - parsed.size - unmatched.size
+    Log.i(
+        "SyncParseStats",
+        "full=${parsed.size}, lowConfidence=$lowConfidenceCount, unmatched=${unmatched.size - lowConfidenceCount}, ignored=$ignoredCount"
+    )
 
     // 3. Database Insertion Phase
     val dbStart = System.currentTimeMillis()

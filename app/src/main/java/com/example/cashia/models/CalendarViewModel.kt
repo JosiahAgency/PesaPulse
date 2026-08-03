@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.cashia.daos.TransactionDao
 import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.TransactionType
+import com.example.cashia.utility.buildDayGroups
 import com.example.cashia.utility.toParsedTx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,6 +27,7 @@ data class CalendarUiState(
     val filterByDay: Boolean = false,
     val selectedFilter: TransactionType = TransactionType.ALL,
     val filteredTransactions: List<MpesaTransactions> = emptyList(),
+    val dayGroups: List<DayGroup> = emptyList(),
     val upcomingForDay: List<UpcomingTransaction> = emptyList() // Adjust type based on your Upcoming model
 )
 
@@ -48,16 +50,17 @@ class CalendarViewModel(
     val windowedTransactionsFlow: StateFlow<List<MpesaTransactions>> = _selectedDate
         .map { date ->
             val month = YearMonth.from(date)
-            month.minusMonths(1).atDay(1).toString() to month.plusMonths(1).atEndOfMonth().toString()
+            month.minusMonths(1).atDay(1).toString() to month.plusMonths(1).atEndOfMonth()
+                .toString()
         }
         .distinctUntilChanged()
         .flatMapLatest { (start, end) -> dao.getTransactionsInRange(start, end) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val parsedWindowFlow: StateFlow<List<ParsedTx>> = windowedTransactionsFlow
         .map { txs -> txs.map { it.toParsedTx() } }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val uiState: StateFlow<CalendarUiState> = combine(
         parsedWindowFlow,   // dates already derived once, upstream
@@ -91,11 +94,12 @@ class CalendarViewModel(
             filterByDay = byDay,
             selectedFilter = filter,
             filteredTransactions = filteredTxs,
+            dayGroups = buildDayGroups(filteredTxs),
             upcomingForDay = upcomingForDay
         )
     }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CalendarUiState())
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -114,10 +118,6 @@ class CalendarViewModel(
         _filterByDay.value = false
     }
 
-    fun resetToToday() {
-        _selectedDate.value = LocalDate.now()
-        _filterByDay.value = true
-    }
 
     // ── Factory ──────────────────────────────────────────────────────────────
     companion object {

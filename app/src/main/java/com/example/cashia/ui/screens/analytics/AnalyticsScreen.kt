@@ -3,11 +3,11 @@ package com.example.cashia.ui.screens.analytics
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.reusedElements.standardScreenPadding
 import com.example.cashia.utility.TransactionType
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -32,6 +33,7 @@ fun AnalyticsScreen(
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
+    LaunchedEffect(Unit) { analyticsViewModel.refreshCurrentScopeRange() }
 //    val transactions = allTransactions
 //    var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
 //    var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
@@ -93,12 +95,7 @@ fun AnalyticsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 115.dp,
-            bottom = 120.dp
-        ),
+        contentPadding = standardScreenPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Period picker
