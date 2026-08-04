@@ -21,6 +21,8 @@ buildscript {
                 "org.bouncycastle:bcprov-jdk18on:1.84",
                 "org.bouncycastle:bcpkix-jdk18on:1.84",
                 "org.bouncycastle:bcutil-jdk18on:1.84",
+                "io.netty:netty-codec:4.1.122.Final",
+                "io.netty:netty-codec-http:4.1.122.Final",
                 "io.netty:netty-codec-http2:4.1.122.Final",
                 "io.netty:netty-handler:4.1.122.Final",
                 "org.bitbucket.b_c:jose4j:0.9.6",
@@ -37,6 +39,8 @@ allprojects {
                 "org.bouncycastle:bcprov-jdk18on:1.84",
                 "org.bouncycastle:bcpkix-jdk18on:1.84",
                 "org.bouncycastle:bcutil-jdk18on:1.84",
+                "io.netty:netty-codec:4.1.122.Final",
+                "io.netty:netty-codec-http:4.1.122.Final",
                 "io.netty:netty-codec-http2:4.1.122.Final",
                 "io.netty:netty-handler:4.1.122.Final",
                 "org.bitbucket.b_c:jose4j:0.9.6"
