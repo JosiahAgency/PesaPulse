@@ -1,0 +1,295 @@
+package com.example.cashia.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.EventBusy
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.cashia.models.SettingsViewModel
+import com.example.cashia.ui.reusedElements.PesaDialog
+import com.example.cashia.utility.PesaTimeConfiguration
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+
+/**
+ * One home for every reminder/alert Cashia can send. Split out of [SettingsScreen] so the
+ * growing list of notification types (digest, monthly summary, upcoming/overdue payments,
+ * low balance, monthly target) doesn't overwhelm the main Settings screen.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
+    val is24Hour by settingsViewModel.use24Hour.collectAsStateWithLifecycle()
+    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsStateWithLifecycle()
+    val isMonthlySummaryOn by settingsViewModel.isMonthlySummaryEnabled.collectAsStateWithLifecycle()
+    val isUpcomingReminderOn by settingsViewModel.isUpcomingReminderEnabled.collectAsStateWithLifecycle()
+    val upcomingReminderDays by settingsViewModel.upcomingReminderDays.collectAsStateWithLifecycle()
+    val isLowBalanceOn by settingsViewModel.isLowBalanceAlertEnabled.collectAsStateWithLifecycle()
+    val lowBalanceThreshold by settingsViewModel.lowBalanceThreshold.collectAsStateWithLifecycle()
+    val isTargetReminderOn by settingsViewModel.isMonthlyTargetReminderEnabled.collectAsStateWithLifecycle()
+    val monthlySpendingCap by settingsViewModel.monthlySpendingCap.collectAsStateWithLifecycle()
+    val monthlySavingsGoal by settingsViewModel.monthlySavingsGoal.collectAsStateWithLifecycle()
+
+    var showTimePicker by remember { mutableStateOf(false) }
+    var showDaysDialog by remember { mutableStateOf(false) }
+    var showThresholdDialog by remember { mutableStateOf(false) }
+    var showTargetsDialog by remember { mutableStateOf(false) }
+
+    val reminderTimeText = remember(
+        PesaTimeConfiguration.reminderHour,
+        PesaTimeConfiguration.reminderMinute,
+        is24Hour
+    ) {
+        val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
+        LocalTime.of(PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute)
+            .format(DateTimeFormatter.ofPattern(pattern))
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = PesaTimeConfiguration.reminderHour,
+            initialMinute = PesaTimeConfiguration.reminderMinute,
+            is24Hour = is24Hour
+        )
+        PesaDialog(onDismissRequest = { showTimePicker = false }) {
+            TimePicker(state = timePickerState)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                TextButton(onClick = {
+                    settingsViewModel.updateReminderTime(timePickerState.hour, timePickerState.minute)
+                    showTimePicker = false
+                }) { Text("Confirm") }
+            }
+        }
+    }
+
+    if (showDaysDialog) {
+        var text by remember { mutableStateOf(upcomingReminderDays.toString()) }
+        PesaDialog(onDismissRequest = { showDaysDialog = false }, modifier = Modifier.fillMaxWidth()) {
+            Text("Remind Me Before", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "How many days ahead of a due date should upcoming reminders start?",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit) },
+                label = { Text("Days before") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showDaysDialog = false }) { Text("Cancel") }
+                TextButton(onClick = {
+                    text.toIntOrNull()?.let { settingsViewModel.setUpcomingReminderDays(it.coerceIn(0, 30)) }
+                    showDaysDialog = false
+                }) { Text("Save") }
+            }
+        }
+    }
+
+    if (showThresholdDialog) {
+        var text by remember { mutableStateOf(lowBalanceThreshold.toInt().toString()) }
+        PesaDialog(onDismissRequest = { showThresholdDialog = false }, modifier = Modifier.fillMaxWidth()) {
+            Text("Low Balance Threshold", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Get alerted when your M-Pesa balance drops to or below this amount.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit) },
+                label = { Text("KSh") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showThresholdDialog = false }) { Text("Cancel") }
+                TextButton(onClick = {
+                    text.toDoubleOrNull()?.let { settingsViewModel.setLowBalanceThreshold(it) }
+                    showThresholdDialog = false
+                }) { Text("Save") }
+            }
+        }
+    }
+
+    if (showTargetsDialog) {
+        var capText by remember { mutableStateOf(monthlySpendingCap?.toInt()?.toString() ?: "") }
+        var goalText by remember { mutableStateOf(monthlySavingsGoal?.toInt()?.toString() ?: "") }
+        PesaDialog(onDismissRequest = { showTargetsDialog = false }, modifier = Modifier.fillMaxWidth()) {
+            Text("Monthly Target", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Set either (or both) — Cashia will stop nagging you once at least one is set.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = capText,
+                onValueChange = { capText = it.filter(Char::isDigit) },
+                label = { Text("Spending cap (KSh)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = goalText,
+                onValueChange = { goalText = it.filter(Char::isDigit) },
+                label = { Text("Savings goal (KSh)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showTargetsDialog = false }) { Text("Cancel") }
+                TextButton(onClick = {
+                    settingsViewModel.setMonthlyTargets(
+                        capText.toDoubleOrNull(),
+                        goalText.toDoubleOrNull()
+                    )
+                    showTargetsDialog = false
+                }) { Text("Save") }
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 115.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            SettingsSection("Daily & Monthly Reports") {
+                SettingsToggleItem(
+                    label = "Daily Payment Digest",
+                    subtitle = "Evening recap of the day's spending & income.",
+                    icon = Icons.Rounded.NotificationsActive,
+                    checked = isDailyDigestOn,
+                    onCheckedChange = settingsViewModel::setDailyDigestEnabled
+                )
+                SettingsActionItem(
+                    label = "Reminder Time",
+                    subtitle = "Currently set for $reminderTimeText",
+                    icon = Icons.Rounded.Schedule,
+                    onClick = { showTimePicker = true },
+                    isExpanded = false
+                )
+                SettingsToggleItem(
+                    label = "Monthly Summary",
+                    subtitle = "Report for the month that just ended.",
+                    icon = Icons.Rounded.NotificationsActive,
+                    checked = isMonthlySummaryOn,
+                    onCheckedChange = settingsViewModel::setMonthlySummaryEnabled
+                )
+            }
+        }
+
+        item {
+            SettingsSection("Upcoming & Overdue Payments") {
+                SettingsToggleItem(
+                    label = "Upcoming Payment Reminders",
+                    subtitle = "Alerts as a scheduled bill or income nears its due date.",
+                    icon = Icons.Rounded.Schedule,
+                    checked = isUpcomingReminderOn,
+                    onCheckedChange = settingsViewModel::setUpcomingReminderEnabled
+                )
+                SettingsActionItem(
+                    label = "Remind Me Before",
+                    subtitle = "$upcomingReminderDays day(s) ahead of the due date",
+                    icon = Icons.Rounded.Schedule,
+                    onClick = { showDaysDialog = true },
+                    isExpanded = false
+                )
+                SettingsActionItem(
+                    label = "Overdue Escalation",
+                    subtitle = "Once something is overdue, you're re-alerted every 7 days until it's resolved.",
+                    icon = Icons.Rounded.EventBusy,
+                    onClick = {},
+                    isExpanded = false
+                )
+            }
+        }
+
+        item {
+            SettingsSection("Low Balance Alerts") {
+                SettingsToggleItem(
+                    label = "Low Balance Alerts",
+                    subtitle = "Warn me when my M-Pesa balance drops too low.",
+                    icon = Icons.Rounded.AccountBalanceWallet,
+                    checked = isLowBalanceOn,
+                    onCheckedChange = settingsViewModel::setLowBalanceAlertEnabled
+                )
+                SettingsActionItem(
+                    label = "Alert Threshold",
+                    subtitle = "KSh ${lowBalanceThreshold.toInt()}",
+                    icon = Icons.Rounded.AccountBalanceWallet,
+                    onClick = { showThresholdDialog = true },
+                    isExpanded = false
+                )
+            }
+        }
+
+        item {
+            SettingsSection("Monthly Target") {
+                SettingsToggleItem(
+                    label = "Target Reminder",
+                    subtitle = "Nag me weekly until I set a monthly target.",
+                    icon = Icons.Rounded.Flag,
+                    checked = isTargetReminderOn,
+                    onCheckedChange = settingsViewModel::setMonthlyTargetReminderEnabled
+                )
+                SettingsActionItem(
+                    label = "Spending Cap & Savings Goal",
+                    subtitle = when {
+                        monthlySpendingCap == null && monthlySavingsGoal == null -> "Not set yet"
+                        else -> buildString {
+                            monthlySpendingCap?.let { append("Cap KSh ${it.toInt()}") }
+                            if (monthlySpendingCap != null && monthlySavingsGoal != null) append(" · ")
+                            monthlySavingsGoal?.let { append("Goal KSh ${it.toInt()}") }
+                        }
+                    },
+                    icon = Icons.Rounded.Savings,
+                    onClick = { showTargetsDialog = true },
+                    isExpanded = false
+                )
+            }
+        }
+    }
+}

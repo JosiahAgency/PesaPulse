@@ -64,6 +64,30 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             PesaTimeConfiguration.upcomingReminderDaysBefore
         )
 
+    val isLowBalanceAlertEnabled = snapshotFlow { PesaTimeConfiguration.isLowBalanceAlertEnabled }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            PesaTimeConfiguration.isLowBalanceAlertEnabled
+        )
+
+    val lowBalanceThreshold = snapshotFlow { PesaTimeConfiguration.lowBalanceThreshold }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.lowBalanceThreshold)
+
+    val isMonthlyTargetReminderEnabled =
+        snapshotFlow { PesaTimeConfiguration.isMonthlyTargetReminderEnabled }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.isMonthlyTargetReminderEnabled
+            )
+
+    val monthlySpendingCap = snapshotFlow { PesaTimeConfiguration.monthlySpendingCap }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.monthlySpendingCap)
+
+    val monthlySavingsGoal = snapshotFlow { PesaTimeConfiguration.monthlySavingsGoal }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.monthlySavingsGoal)
+
 
     private val _linkedGoogleEmail = MutableStateFlow<String?>(
         PesaTimeConfiguration.linkedGoogleEmail
@@ -131,5 +155,23 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         PesaTimeConfiguration.saveReminderTime(hour, minute)
         if (PesaTimeConfiguration.isDailyDigestEnabled)      NotificationScheduler.scheduleDailyDigest(context)
         if (PesaTimeConfiguration.isUpcomingReminderEnabled) NotificationScheduler.scheduleUpcomingReminders(context)
+    }
+
+    fun setLowBalanceAlertEnabled(enabled: Boolean) {
+        PesaTimeConfiguration.saveLowBalanceAlert(enabled)
+    }
+
+    fun setLowBalanceThreshold(amount: Double) {
+        PesaTimeConfiguration.saveLowBalanceThreshold(amount)
+    }
+
+    fun setMonthlyTargetReminderEnabled(enabled: Boolean) {
+        PesaTimeConfiguration.saveMonthlyTargetReminder(enabled)
+        if (enabled) NotificationScheduler.scheduleMonthlyTargetReminder(context)
+        else WorkManager.getInstance(context).cancelUniqueWork(MonthlyTargetReminderWorker.WORK_NAME)
+    }
+
+    fun setMonthlyTargets(spendingCap: Double?, savingsGoal: Double?) {
+        PesaTimeConfiguration.saveMonthlyTargets(spendingCap, savingsGoal)
     }
 }

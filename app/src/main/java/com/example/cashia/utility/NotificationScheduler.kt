@@ -6,6 +6,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.cashia.models.DailyDigestWorker
 import com.example.cashia.models.MonthlySummaryWorker
+import com.example.cashia.models.MonthlyTargetReminderWorker
 import com.example.cashia.models.UpcomingReminderWorker
 import java.time.Duration
 import java.time.LocalDate
@@ -24,6 +25,7 @@ object NotificationScheduler {
         if (PesaTimeConfiguration.isDailyDigestEnabled) scheduleDailyDigest(context)
         if (PesaTimeConfiguration.isMonthlySummaryEnabled) scheduleMonthly(context)
         if (PesaTimeConfiguration.isUpcomingReminderEnabled) scheduleUpcomingReminders(context)
+        if (PesaTimeConfiguration.isMonthlyTargetReminderEnabled) scheduleMonthlyTargetReminder(context)
     }
 
     /**
@@ -71,12 +73,24 @@ object NotificationScheduler {
         )
     }
 
+    /** Weekly check; nags only while no monthly target is configured (see the worker). */
+    fun scheduleMonthlyTargetReminder(context: Context, fromWorker: Boolean = false) {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            MonthlyTargetReminderWorker.WORK_NAME,
+            if (fromWorker) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<MonthlyTargetReminderWorker>()
+                .setInitialDelay(TimeUnit.DAYS.toMinutes(7), TimeUnit.MINUTES)
+                .build()
+        )
+    }
+
     fun cancelAll(context: Context) {
         val wm = WorkManager.getInstance(context)
         listOf(
             DailyDigestWorker.WORK_NAME,
             MonthlySummaryWorker.WORK_NAME,
             UpcomingReminderWorker.WORK_NAME,
+            MonthlyTargetReminderWorker.WORK_NAME,
         ).forEach { wm.cancelUniqueWork(it) }
     }
 

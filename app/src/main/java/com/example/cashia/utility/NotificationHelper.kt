@@ -18,6 +18,9 @@ object NotificationHelper {
     const val CH_DAILY = "ch_daily_digest"
     const val CH_PERIODIC = "ch_periodic_summary"
     const val CH_UPCOMING = "ch_upcoming_reminders"
+    const val CH_OVERDUE = "ch_overdue_payments"
+    const val CH_LOW_BALANCE = "ch_low_balance"
+    const val CH_TARGET_NAG = "ch_monthly_target"
 
     /** Intent extra carrying an in-app navigation route for the tapped notification. */
     const val EXTRA_ROUTE = "com.example.cashia.EXTRA_ROUTE"
@@ -41,6 +44,24 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_HIGH
             )
                 .apply { description = "Alerts for upcoming due transactions" },
+            NotificationChannel(
+                CH_OVERDUE,
+                "Overdue Payments",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+                .apply { description = "Recurring alerts for payments past their due date" },
+            NotificationChannel(
+                CH_LOW_BALANCE,
+                "Low Balance Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+                .apply { description = "Warns when your M-Pesa balance drops below your threshold" },
+            NotificationChannel(
+                CH_TARGET_NAG,
+                "Monthly Target",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+                .apply { description = "Reminders to set a monthly spending/savings target" },
         ).forEach { nm.createNotificationChannel(it) }
     }
 
@@ -74,7 +95,8 @@ object NotificationHelper {
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setPriority(
-                if (channelId == CH_UPCOMING) NotificationCompat.PRIORITY_HIGH
+                if (channelId == CH_UPCOMING || channelId == CH_OVERDUE || channelId == CH_LOW_BALANCE)
+                    NotificationCompat.PRIORITY_HIGH
                 else NotificationCompat.PRIORITY_DEFAULT
             )
             .build()

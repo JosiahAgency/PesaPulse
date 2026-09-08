@@ -108,6 +108,71 @@ object PesaTimeConfiguration {
         upcomingReminderDaysBefore = days
     }
 
+    // ── Low balance alerts ───────────────────────────────────────────────────
+
+    var isLowBalanceAlertEnabled: Boolean
+        get() = prefs.getBoolean("low_balance_alert_enabled", true)
+        set(v) {
+            prefs.edit { putBoolean("low_balance_alert_enabled", v) }
+        }
+
+    /** KSh amount; balance at or below this triggers a low-balance notification. */
+    var lowBalanceThreshold: Double
+        get() = prefs.getFloat("low_balance_threshold", 50f).toDouble()
+        set(v) {
+            prefs.edit { putFloat("low_balance_threshold", v.toFloat()) }
+        }
+
+    fun saveLowBalanceAlert(enabled: Boolean) {
+        isLowBalanceAlertEnabled = enabled
+    }
+
+    fun saveLowBalanceThreshold(amount: Double) {
+        lowBalanceThreshold = amount
+    }
+
+    /** ISO date (yyyy-MM-dd) of the last posted low-balance alert; avoids re-notifying every sync while balance stays low. */
+    var lastLowBalanceAlertDate: String?
+        get() = prefs.getString("last_low_balance_alert_date", null)
+        set(v) {
+            prefs.edit { putString("last_low_balance_alert_date", v) }
+        }
+
+    // ── Monthly target (spending cap / savings goal) ────────────────────────
+
+    var isMonthlyTargetReminderEnabled: Boolean
+        get() = prefs.getBoolean("monthly_target_reminder_enabled", true)
+        set(v) {
+            prefs.edit { putBoolean("monthly_target_reminder_enabled", v) }
+        }
+
+    /** KSh; null/<=0 means "not set". */
+    var monthlySpendingCap: Double?
+        get() = prefs.getFloat("monthly_spending_cap", -1f).toDouble().takeIf { it > 0 }
+        set(v) {
+            prefs.edit { putFloat("monthly_spending_cap", (v ?: -1.0).toFloat()) }
+        }
+
+    /** KSh; null/<=0 means "not set". */
+    var monthlySavingsGoal: Double?
+        get() = prefs.getFloat("monthly_savings_goal", -1f).toDouble().takeIf { it > 0 }
+        set(v) {
+            prefs.edit { putFloat("monthly_savings_goal", (v ?: -1.0).toFloat()) }
+        }
+
+    /** True once the user has configured either a spending cap or a savings goal. */
+    val hasMonthlyTargetSet: Boolean
+        get() = monthlySpendingCap != null || monthlySavingsGoal != null
+
+    fun saveMonthlyTargetReminder(enabled: Boolean) {
+        isMonthlyTargetReminderEnabled = enabled
+    }
+
+    fun saveMonthlyTargets(spendingCap: Double?, savingsGoal: Double?) {
+        monthlySpendingCap = spendingCap
+        monthlySavingsGoal = savingsGoal
+    }
+
     private const val PREFS_NAME = "pesa_prefs"
 
     fun formatCurrency(amount: Double): String {
@@ -191,9 +256,9 @@ object PesaTimeConfiguration {
         AppDestinations.SummaryReport.route -> "Daily & monthly reports"
         AppDestinations.UpcomingPayments.route -> "Manage your scheduled bills and income"
         AppDestinations.UnmatchedReview.route -> "Confirm or ignore unrecognised messages"
+        AppDestinations.NotificationsSettings.route -> "Reminders, alerts & monthly targets"
         else -> ""
     }
-
     fun screenTitle(route: String?): String = when (route) {
         AppDestinations.Dashboard.route -> "Home"
         AppDestinations.Transactions.route -> "History"
@@ -205,6 +270,7 @@ object PesaTimeConfiguration {
         AppDestinations.SummaryReport.route -> "Summary"
         AppDestinations.UpcomingPayments.route -> "Upcoming Payments"
         AppDestinations.UnmatchedReview.route -> "Review Unmatched SMS"
+        AppDestinations.NotificationsSettings.route -> "Notifications"
         else -> "PesaPulse"
     }
 

@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
+import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.PesaDialog
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.BiometricAuthenticator
@@ -95,11 +96,9 @@ fun SettingsScreen(
     )
 
     // Collect all state flows from ViewModel — this is the single source of truth
-    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsStateWithLifecycle()
     val is24Hour by settingsViewModel.use24Hour.collectAsStateWithLifecycle()
 
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
-    var showTimePicker by remember { mutableStateOf(false) }
 
     // Day picker dialog
     if (showDayPicker) {
@@ -197,43 +196,7 @@ fun SettingsScreen(
         }
     }
 
-    // Time picker dialog
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState(
-            initialHour = PesaTimeConfiguration.reminderHour,
-            initialMinute = PesaTimeConfiguration.reminderMinute,
-            is24Hour = is24Hour  // Respect the user's time format preference
-        )
-        PesaDialog(onDismissRequest = { showTimePicker = false }) {
-            TimePicker(state = timePickerState)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
-                TextButton(
-                    onClick = {
-                        settingsViewModel.updateReminderTime(
-                            timePickerState.hour,
-                            timePickerState.minute
-                        )
-                        showTimePicker = false
-                    }
-                ) { Text("Confirm") }
-            }
-        }
-    }
-
-    // Format reminder time display based on current 24h/12h preference
-    val reminderTimeText = remember(
-        PesaTimeConfiguration.reminderHour,
-        PesaTimeConfiguration.reminderMinute,
-        is24Hour
-    ) {
-        val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
-        LocalTime.of(PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute)
-            .format(DateTimeFormatter.ofPattern(pattern))
-    }
+    // Time picker dialog and reminder-time preview moved to NotificationsSettingsScreen.
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -333,27 +296,14 @@ fun SettingsScreen(
         // Notifications
         item {
             SettingsSection("Notifications") {
-                SettingsToggleItem(
-                    label = "Daily Payment Digest",
-                    subtitle = "Get a morning summary of upcoming bills and dues.",
-                    icon = Icons.Rounded.NotificationsActive,
-                    checked = isDailyDigestOn,
-                    onCheckedChange = { enable ->
-                        PesaActions.playClick(haptic)
-                        if (enable) {
-                            Toast.makeText(
-                                context,
-                                "Reminders set for $reminderTimeText",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                )
                 SettingsActionItem(
-                    label = "Reminder Time",
-                    subtitle = "Currently set for $reminderTimeText",
-                    icon = Icons.Rounded.Schedule,
-                    onClick = { showTimePicker = true },
+                    label = "Reminders & Alerts",
+                    subtitle = "Digests, upcoming/overdue payments, low balance & monthly targets",
+                    icon = Icons.Rounded.NotificationsActive,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        navController.navigate(AppDestinations.NotificationsSettings.route)
+                    },
                     isExpanded = false
                 )
             }

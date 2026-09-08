@@ -39,26 +39,37 @@ class UpcomingReminderWorker(
         pending.forEach { tx ->
             val dueDate = runCatching { LocalDate.parse(tx.dueDate) }.getOrNull() ?: return@forEach
             val daysUntil = ChronoUnit.DAYS.between(today, dueDate)
+            val icon = if (tx.type == UpcomingType.INCOME) "💰" else "💸"
 
-            // Fire for overdue (< 0, up to -3) and upcoming within the user's window
-            if (daysUntil in -3..window) {
-                val icon = if (tx.type == UpcomingType.INCOME) "💰" else "💸"
-                val whenText = when {
-                    daysUntil < 0 -> "⚠️ OVERDUE by ${abs(daysUntil)} day(s)"
-                    daysUntil == 0L -> "Due TODAY"
-                    daysUntil == 1L -> "Due TOMORROW"
-                    else -> "Due in $daysUntil days"
+            when {
+                // Upcoming (due today through the user's reminder window)
+                daysUntil in 0..window -> {
+                    val whenText = when (daysUntil) {
+                        0L -> "Due TODAY"
+                        1L -> "Due TOMORROW"
+                        else -> "Due in $daysUntil days"
+                    }
+                    NotificationHelper.post(
+                        context,
+                        id = 2000 + (tx.id.hashCode() and 0x3FF),
+                        channelId = NotificationHelper.CH_UPCOMING,
+                        title = "⏰ ${tx.title}",
+                        body = "$icon ${NotificationHelper.ksh(tx.amount)} • $whenText"
+                    )
                 }
-                val body = "$icon ${NotificationHelper.ksh(tx.amount)} • $whenText"
-                // Stable ID per upcoming item so repeated runs update rather than stack
-                val notifId = 2000 + (tx.id.hashCode() and 0x3FF)
 
-                NotificationHelper.post(
-                    context, notifId,
-                    NotificationHelper.CH_UPCOMING,
-                    "⏰ ${tx.title}",
-                    body
-                )
+                // Overdue: alert the day it becomes overdue, then re-alert weekly
+                // until the user marks it paid/cancelled — no longer capped at 3 days.
+                daysUntil < 0 && (daysUntil == -1L || abs(daysUntil) % 7 == 0L) -> {
+                    val whenText = "⚠️ OVERDUE by ${abs(daysUntil)} day(s)"
+                    NotificationHelper.post(
+                        context,
+                        id = 3000 + (tx.id.hashCode() and 0x3FF),
+                        channelId = NotificationHelper.CH_OVERDUE,
+                        title = "⚠️ ${tx.title}",
+                        body = "$icon ${NotificationHelper.ksh(tx.amount)} • $whenText"
+                    )
+                }
             }
         }
 

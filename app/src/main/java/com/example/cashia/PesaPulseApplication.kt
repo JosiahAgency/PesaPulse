@@ -84,6 +84,7 @@ import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.ui.screens.NotificationsSettingsScreen
 import com.example.cashia.ui.screens.SettingsScreen
 import com.example.cashia.ui.screens.allTransactions.TransactionScreen
 import com.example.cashia.ui.screens.allTransactions.UnmatchedReviewScreen
@@ -244,6 +245,9 @@ fun PesaPulseApp() {
                     navController,
                 )
             }
+            composable(AppDestinations.NotificationsSettings.route) {
+                NotificationsSettingsScreen(settingsViewModel)
+            }
             composable(AppDestinations.Categories.route) {
                 CategoryManagementScreen(categoryViewModel)
             }
@@ -321,7 +325,11 @@ fun PesaPulseApp() {
                     ) {
                         IconButton(onClick = {
                             PesaActions.playClick(haptic)
-                            goToSettings()
+                            navController.navigate(AppDestinations.NotificationsSettings.route) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                restoreState = true
+                            }
                         }) {
                             Icon(
                                 imageVector = Icons.Outlined.Notifications,

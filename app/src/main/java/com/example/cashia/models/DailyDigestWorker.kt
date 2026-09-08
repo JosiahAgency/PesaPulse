@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.ui.navigation.AppDestinations
+import com.example.cashia.utility.BalanceAlertService
 import com.example.cashia.utility.NotificationHelper
 import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
@@ -23,10 +24,13 @@ class DailyDigestWorker(
 
     override suspend fun doWork(): Result {
         try {
+            val db = AppDatabase.getDatabase(context)
+            // Daily safety-net: catches balance dips even on days with no new SMS sync.
+            BalanceAlertService.checkAndNotify(context, db)
+
             if (!PesaTimeConfiguration.isDailyDigestEnabled) return Result.success()
 
             val today = LocalDate.now().toString()
-            val db = AppDatabase.getDatabase(context)
             val txs = withContext(Dispatchers.IO) {
                 db.transactionDao().getTransactionsForDateRange(today, today)
             }

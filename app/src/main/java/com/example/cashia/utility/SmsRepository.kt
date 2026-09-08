@@ -146,7 +146,11 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
     val dbEnd = System.currentTimeMillis()
 
     Log.d("SyncPerf", "Database transaction finished in ${dbEnd - dbStart}ms")
-    if (parsed.isNotEmpty()) WidgetUpdateManager.refreshCashiaWidgets(context)
+    if (parsed.isNotEmpty()) {
+        WidgetUpdateManager.refreshCashiaWidgets(context)
+        // Balance only changes when a transaction lands, so check it here rather than on a timer.
+        BalanceAlertService.checkAndNotify(context, database)
+    }
     Log.d("SyncPerf", "Total sync cycle completed in ${dbEnd - startTime}ms")
     return parsed
 }
