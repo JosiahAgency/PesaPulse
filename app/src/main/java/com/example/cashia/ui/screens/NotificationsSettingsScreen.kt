@@ -1,7 +1,6 @@
 package com.example.cashia.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.EventBusy
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -24,17 +24,26 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.reusedElements.PesaDialog
+import com.example.cashia.ui.reusedElements.SectionCard
+import com.example.cashia.ui.theme.screenContentPadding
+import com.example.cashia.utility.BatteryOptimizationHelper
 import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -63,10 +72,27 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
     var showThresholdDialog by remember { mutableStateOf(false) }
     var showTargetsDialog by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    var isBatteryUnrestricted by remember {
+        mutableStateOf(BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context))
+    }
+    // Re-check whenever the screen resumes: the user may have just come back from the
+    // system battery-optimization dialog/settings, so the banner should clear immediately.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentContext by rememberUpdatedState(context)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isBatteryUnrestricted =
+                    BatteryOptimizationHelper.isIgnoringBatteryOptimizations(currentContext)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val reminderTimeText = remember(
-        PesaTimeConfiguration.reminderHour,
-        PesaTimeConfiguration.reminderMinute,
-        is24Hour
+        PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute, is24Hour
     ) {
         val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
         LocalTime.of(PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute)
@@ -84,7 +110,9 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
                 TextButton(onClick = {
-                    settingsViewModel.updateReminderTime(timePickerState.hour, timePickerState.minute)
+                    settingsViewModel.updateReminderTime(
+                        timePickerState.hour, timePickerState.minute
+                    )
                     showTimePicker = false
                 }) { Text("Confirm") }
             }
@@ -93,8 +121,13 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
 
     if (showDaysDialog) {
         var text by remember { mutableStateOf(upcomingReminderDays.toString()) }
-        PesaDialog(onDismissRequest = { showDaysDialog = false }, modifier = Modifier.fillMaxWidth()) {
-            Text("Remind Me Before", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        PesaDialog(
+            onDismissRequest = { showDaysDialog = false }, modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Remind Me Before",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 "How many days ahead of a due date should upcoming reminders start?",
@@ -113,7 +146,8 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { showDaysDialog = false }) { Text("Cancel") }
                 TextButton(onClick = {
-                    text.toIntOrNull()?.let { settingsViewModel.setUpcomingReminderDays(it.coerceIn(0, 30)) }
+                    text.toIntOrNull()
+                        ?.let { settingsViewModel.setUpcomingReminderDays(it.coerceIn(0, 30)) }
                     showDaysDialog = false
                 }) { Text("Save") }
             }
@@ -122,8 +156,13 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
 
     if (showThresholdDialog) {
         var text by remember { mutableStateOf(lowBalanceThreshold.toInt().toString()) }
-        PesaDialog(onDismissRequest = { showThresholdDialog = false }, modifier = Modifier.fillMaxWidth()) {
-            Text("Low Balance Threshold", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        PesaDialog(
+            onDismissRequest = { showThresholdDialog = false }, modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Low Balance Threshold",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 "Get alerted when your M-Pesa balance drops to or below this amount.",
@@ -152,8 +191,13 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
     if (showTargetsDialog) {
         var capText by remember { mutableStateOf(monthlySpendingCap?.toInt()?.toString() ?: "") }
         var goalText by remember { mutableStateOf(monthlySavingsGoal?.toInt()?.toString() ?: "") }
-        PesaDialog(onDismissRequest = { showTargetsDialog = false }, modifier = Modifier.fillMaxWidth()) {
-            Text("Monthly Target", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        PesaDialog(
+            onDismissRequest = { showTargetsDialog = false }, modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Monthly Target",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 "Set either (or both) — Cashia will stop nagging you once at least one is set.",
@@ -181,8 +225,7 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
                 TextButton(onClick = { showTargetsDialog = false }) { Text("Cancel") }
                 TextButton(onClick = {
                     settingsViewModel.setMonthlyTargets(
-                        capText.toDoubleOrNull(),
-                        goalText.toDoubleOrNull()
+                        capText.toDoubleOrNull(), goalText.toDoubleOrNull()
                     )
                     showTargetsDialog = false
                 }) { Text("Save") }
@@ -192,11 +235,29 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 115.dp, bottom = 120.dp),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item {
-            SettingsSection("Daily & Monthly Reports") {
+            if (BatteryOptimizationHelper.isSupported && !isBatteryUnrestricted) {
+                SectionCard("Reliability") {
+                    SettingsActionItem(
+                        label = "Fix Missed Reminders",
+                        subtitle = "Battery optimization is ON for Cashia — this is the #1 reason " + "reminders arrive late or not at all. Tap to allow background delivery.",
+                        icon = Icons.Rounded.BatteryAlert,
+                        onClick = {
+                            BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(
+                                context
+                            )
+                        },
+                        isExpanded = false
+                    )
+                }
+            }
+        }
+
+        item {
+            SectionCard("Daily & Monthly Reports") {
                 SettingsToggleItem(
                     label = "Daily Payment Digest",
                     subtitle = "Evening recap of the day's spending & income.",
@@ -222,7 +283,7 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
         }
 
         item {
-            SettingsSection("Upcoming & Overdue Payments") {
+            SectionCard("Upcoming & Overdue Payments") {
                 SettingsToggleItem(
                     label = "Upcoming Payment Reminders",
                     subtitle = "Alerts as a scheduled bill or income nears its due date.",
@@ -248,7 +309,7 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
         }
 
         item {
-            SettingsSection("Low Balance Alerts") {
+            SectionCard("Low Balance Alerts") {
                 SettingsToggleItem(
                     label = "Low Balance Alerts",
                     subtitle = "Warn me when my M-Pesa balance drops too low.",
@@ -267,7 +328,7 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
         }
 
         item {
-            SettingsSection("Monthly Target") {
+            SectionCard("Monthly Target") {
                 SettingsToggleItem(
                     label = "Target Reminder",
                     subtitle = "Nag me weekly until I set a monthly target.",

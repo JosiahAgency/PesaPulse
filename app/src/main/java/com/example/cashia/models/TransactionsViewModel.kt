@@ -35,7 +35,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -61,6 +60,8 @@ data class TransactionState(
     val fulizaLimit: Double = 0.0,
     val dateRangeStart: LocalDate? = null,
     val dateRangeEnd: LocalDate? = null,
+    /** False until the first Room emission arrives; distinguishes "loading" from "loaded but empty". */
+    val hasLoaded: Boolean = false,
 )
 
 data class ReversalIndex(
@@ -103,6 +104,10 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         MutableSharedFlow<List<MpesaTransactions>>(extraBufferCapacity = 1)
     val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
         _newTransactionsSynced.asSharedFlow()
+
+    // ── Sync-failure event (surfaced to the user via a Snackbar) ────────────────
+    private val _syncError = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val syncError: SharedFlow<String> = _syncError.asSharedFlow()
 
     // ── History pipeline: filters resolved once, applied in SQL ────────────────
 
@@ -240,6 +245,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             }
         } catch (e: Exception) {
             Log.e("TransactionsViewModel", "Background sync failure", e)
+            _syncError.tryEmit("Couldn't sync new SMS messages. Pull to refresh to try again.")
         } finally {
             _isSyncing.value = false
             syncMutex.unlock()
@@ -251,14 +257,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     /** Grows the History window by one page when the user nears the end of the list. */
     fun loadMore() {
         if (state.value.hasMore) _windowLimit.value += WINDOW_PAGE
-    }
-
-    fun showRecurringSheet(tx: MpesaTransactions) {
-        recurringSheetTransaction = tx
-    }
-
-    fun hideRecurringSheet() {
-        recurringSheetTransaction = null
     }
 
     fun toggleBalanceVisibility() {
@@ -290,11 +288,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         _dateRangeEnd.value = end
     }
 
-    suspend fun getTransactionById(id: String): MpesaTransactions? =
-        withContext(Dispatchers.IO) { dao.getTransactionById(id) }
-
-    suspend fun getReversalFor(txId: String): MpesaTransactions? =
-        withContext(Dispatchers.IO) { dao.getReversalFor(txId) }
 
     fun markSkipped(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -368,6 +361,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             fulizaLimit = fulizaLimit ?: 0.0,
             dateRangeStart = f.start,
             dateRangeEnd = f.end,
+            hasLoaded = true,
         )
     }
 

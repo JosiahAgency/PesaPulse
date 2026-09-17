@@ -61,6 +61,7 @@ import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
+import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.partialFieldsFromJson
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -190,7 +191,7 @@ fun UnmatchedSmsModal(
                         ) {
                             Icon(
                                 Icons.Rounded.Close,
-                                contentDescription = null,
+                                contentDescription = "Close",
                                 tint = colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -264,7 +265,7 @@ fun UnmatchedSmsModal(
                                     ) {
                                         partial?.amount?.let {
                                             ExtractedFieldPill(
-                                                "Ksh $it",
+                                                "${PesaTimeConfiguration.CURRENCY} $it",
                                                 confidenceColor
                                             )
                                         }

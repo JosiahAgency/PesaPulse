@@ -1,7 +1,6 @@
 package com.example.cashia.ui.screens.projections
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -15,6 +14,7 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,12 +38,7 @@ fun ProjectionScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 115.dp,
-            bottom = 120.dp
-        ),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item(key = "config") {

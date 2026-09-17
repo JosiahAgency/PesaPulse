@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cashia.models.MpesaTransactions
@@ -166,6 +168,15 @@ fun BalanceSparklineCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(72.dp)
+                            .semantics {
+                                contentDescription = "Balance trend chart. Started at " +
+                                        "${PesaTimeConfiguration.formatCurrency(startBalance.toDouble())}, " +
+                                        "ended at ${PesaTimeConfiguration.formatCurrency(endBalance.toDouble())}, " +
+                                        "a ${if (deltaPositive) "gain" else "drop"} of " +
+                                        PesaTimeConfiguration.formatCurrency(
+                                            kotlin.math.abs(delta).toDouble()
+                                        )
+                            }
                     ) {
                         val w = size.width
                         val h = size.height

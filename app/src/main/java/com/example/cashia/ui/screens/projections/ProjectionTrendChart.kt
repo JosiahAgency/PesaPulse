@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -274,10 +276,20 @@ fun ProjectionTrendChart(
             }
 
             // ── Canvas chart ───────────────────────────────────────────────
+            val projectionDescription = remember(allValues, currentBalance, confidence) {
+                val end = allValues.last()
+                val delta = end - currentBalance
+                "Balance projection chart. Current balance " +
+                    "${PesaTimeConfiguration.formatCurrency(currentBalance)}, projected to " +
+                    "${PesaTimeConfiguration.formatCurrency(end)} " +
+                    "(${if (delta >= 0) "+" else ""}${PesaTimeConfiguration.formatCurrency(delta)}), " +
+                    "$confidence% confidence."
+            }
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(170.dp)
+                    .semantics { contentDescription = projectionDescription }
                     // [FIX] Capture true canvas width via onSizeChanged instead of
                     // assigning inside the draw scope. Draw scope runs after layout
                     // so pointer input could fire first and read the stale 1f default.

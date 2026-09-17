@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,17 +41,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.TransactionCategory
 import com.example.cashia.ui.reusedElements.PesaDialog
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
 
 private sealed class CatListItem {
@@ -103,12 +103,7 @@ fun CategoryManagementScreen(viewModel: CategoryViewModel) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 115.dp,
-                bottom = 120.dp
-            ),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(listItems, key = { item ->

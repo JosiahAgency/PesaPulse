@@ -36,6 +36,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
@@ -43,6 +44,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -77,6 +80,7 @@ import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
+import com.example.cashia.models.ExportViewModel
 import com.example.cashia.models.ProjectionViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
@@ -92,6 +96,7 @@ import com.example.cashia.ui.screens.analytics.AnalyticsScreen
 import com.example.cashia.ui.screens.calendar.CalendarScreen
 import com.example.cashia.ui.screens.category.CategoryManagementScreen
 import com.example.cashia.ui.screens.dashboard.DashboardScreen
+import com.example.cashia.ui.screens.export.ExportScreen
 import com.example.cashia.ui.screens.projections.ProjectionScreen
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPaymentsScreen
 import com.example.cashia.ui.theme.primaryGradient
@@ -134,6 +139,7 @@ fun PesaPulseApp() {
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val isTabDestination = navItems.any { it.route == currentRoute }
 
     // Dashboard FAB state — lives here since there's no Scaffold in DashboardScreen
     val today = remember { LocalDate.now() }
@@ -144,6 +150,13 @@ fun PesaPulseApp() {
     LaunchedEffect(sharedViewModel, upcomingViewModel) {
         sharedViewModel.newTransactionsSynced.collect { newTxs ->
             newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
+        }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(sharedViewModel) {
+        sharedViewModel.syncError.collect { message ->
+            snackbarHostState.showSnackbar(message)
         }
     }
 
@@ -251,6 +264,12 @@ fun PesaPulseApp() {
             composable(AppDestinations.Categories.route) {
                 CategoryManagementScreen(categoryViewModel)
             }
+            composable(AppDestinations.Export.route) {
+                val exportViewModel: ExportViewModel = viewModel(
+                    factory = ExportViewModel.provideFactory(context)
+                )
+                ExportScreen(exportViewModel, categoryViewModel)
+            }
             composable(AppDestinations.UpcomingPayments.route) {
                 UpcomingPaymentsScreen(upcomingViewModel, categoryViewModel)
             }
@@ -278,6 +297,20 @@ fun PesaPulseApp() {
             )
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
+                navigationIcon = {
+                    if (!isTabDestination) {
+                        IconButton(onClick = {
+                            PesaActions.playClick(haptic)
+                            navController.popBackStack()
+                        }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                },
                 title = {
                     Column {
                         AnimatedContent(
@@ -364,6 +397,7 @@ fun PesaPulseApp() {
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
         ) {
+            if (isTabDestination) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -401,6 +435,15 @@ fun PesaPulseApp() {
 
                 IslandNavigationBar(haptic, navController, navItems)
             }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 96.dp)
+            )
         }
     }
 }

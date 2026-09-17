@@ -3,7 +3,6 @@ package com.example.cashia.ui.screens.analytics
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -16,6 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -93,12 +93,7 @@ fun AnalyticsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 115.dp,
-            bottom = 120.dp
-        ),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Period picker

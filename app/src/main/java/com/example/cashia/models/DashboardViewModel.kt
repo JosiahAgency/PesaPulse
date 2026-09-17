@@ -37,6 +37,8 @@ data class DashboardState(
     val periodLabel: String = "",
     val dateRangeStart: LocalDate? = null,
     val dateRangeEnd: LocalDate? = null,
+    /** False until the first Room emission arrives; distinguishes "loading" from "loaded but empty". */
+    val hasLoaded: Boolean = false,
 )
 
 /**
@@ -147,6 +149,7 @@ class DashboardViewModel(
                     periodLabel = label,
                     dateRangeStart = start,
                     dateRangeEnd = end,
+                    hasLoaded = true,
                 )
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Schedule
@@ -28,6 +29,7 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
         "notifications_settings", "Notifications", Icons.Rounded.NotificationsActive
     )
     object Categories : AppDestinations("categories", "categories", Icons.Outlined.Category)
+    object Export : AppDestinations("export", "Export Transactions", Icons.Outlined.FileDownload)
 
     /** Full CRUD list of upcoming payments — moved out of History into its own screen. */
     object UpcomingPayments :

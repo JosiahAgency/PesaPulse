@@ -8,8 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +27,7 @@ import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -39,13 +38,9 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,13 +64,13 @@ import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.PesaDialog
+import com.example.cashia.ui.reusedElements.SectionCard
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.BiometricAuthenticator
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.DayOfWeek
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,17 +195,12 @@ fun SettingsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 115.dp,
-            bottom = 120.dp
-        ),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Categories
         item {
-            SettingsSection(title = "Categories") {
+            SectionCard(title = "Categories") {
                 SettingsActionItem(
                     label = "Manage Categories",
                     subtitle = "Add or update categories",
@@ -226,7 +216,7 @@ fun SettingsScreen(
 
         // Appearance
         item {
-            SettingsSection(title = "Appearance") {
+            SectionCard(title = "Appearance") {
                 SettingsToggleItem(
                     label = "App Theme",
                     subtitle = "Switch between Light & Dark Modes.",
@@ -264,7 +254,7 @@ fun SettingsScreen(
 
         // Security
         item {
-            SettingsSection(title = "Security") {
+            SectionCard(title = "Security") {
                 SettingsToggleItem(
                     label = "App Lock",
                     subtitle = "Secure your financial data with biometrics or device PIN.",
@@ -295,7 +285,7 @@ fun SettingsScreen(
 
         // Notifications
         item {
-            SettingsSection("Notifications") {
+            SectionCard("Notifications") {
                 SettingsActionItem(
                     label = "Reminders & Alerts",
                     subtitle = "Digests, upcoming/overdue payments, low balance & monthly targets",
@@ -309,10 +299,26 @@ fun SettingsScreen(
             }
         }
 
+        // Data
+        item {
+            SectionCard(title = "Data") {
+                SettingsActionItem(
+                    label = "Export Transactions",
+                    subtitle = "Export your history to CSV",
+                    icon = Icons.Rounded.FileDownload,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        navController.navigate(AppDestinations.Export.route)
+                    },
+                    isExpanded = false
+                )
+            }
+        }
+
         // About
         item {
             var showSummary by remember { mutableStateOf(false) }
-            SettingsSection(title = "About") {
+            SectionCard(title = "About") {
                 SettingsActionItem(
                     label = "PesaPulse Version",
                     subtitle = appVersion,
@@ -377,27 +383,6 @@ fun FeatureSmallBadge(text: String, icon: ImageVector) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-    }
-}
-
-@Composable
-fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
-            letterSpacing = 1.5.sp
-        )
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column { content() }
-        }
     }
 }
 

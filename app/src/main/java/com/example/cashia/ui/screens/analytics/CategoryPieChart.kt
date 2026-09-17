@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -55,6 +57,7 @@ import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
+import kotlin.math.roundToInt
 import com.example.cashia.utility.TransactionType
 
 private val SLICE_COLORS = listOf(
@@ -163,7 +166,17 @@ fun CategoryPieChart(
                         val strokeWidth = 52f
                         val gapDegrees = 2f
 
-                        Canvas(modifier = Modifier.size(200.dp)) {
+                        val pieDescription = remember(slices) {
+                            "Category breakdown pie chart. " + slices.joinToString(", ") { s ->
+                                "${s.label} ${s.percentage.roundToInt()}% (${PesaTimeConfiguration.formatCurrency(s.amount)})"
+                            }
+                        }
+
+                        Canvas(
+                            modifier = Modifier
+                                .size(200.dp)
+                                .semantics { contentDescription = pieDescription }
+                        ) {
                             val diameter = size.minDimension - strokeWidth
                             val topLeft = Offset(
                                 (size.width - diameter) / 2f,

@@ -4,16 +4,19 @@ import android.os.Build
 import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -24,13 +27,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.DashboardViewModel
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UpcomingStatus
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.WeeklyCalendar
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
-import com.example.cashia.models.UpcomingStatus
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.dashboardDayBucket
 import com.example.cashia.utility.localDate
@@ -95,12 +99,7 @@ fun DashboardScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 115.dp,
-                bottom = 120.dp
-            ),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
@@ -163,11 +162,22 @@ fun DashboardScreen(
                 }
             } else if (dashboardState.filteredTransactions.isEmpty() && isListExpanded) {
                 item {
-                    EmptyStateMessage(
-                        title = "No transactions",
-                        message = "Nothing recorded for this period yet.",
-                        emoji = "🧾"
-                    )
+                    if (!dashboardState.hasLoaded) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        EmptyStateMessage(
+                            title = "No transactions",
+                            message = "Nothing recorded for this period yet.",
+                            emoji = "🧾"
+                        )
+                    }
                 }
             }
 

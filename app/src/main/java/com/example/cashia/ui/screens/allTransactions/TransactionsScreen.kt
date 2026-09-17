@@ -5,7 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,11 +19,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -52,8 +55,9 @@ import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.ui.theme.screenContentPadding
+import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -69,6 +73,7 @@ fun TransactionScreen(
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -108,6 +113,8 @@ fun TransactionScreen(
         if (nearListEnd && state.hasMore) viewModel.loadMore()
     }
 
+    val pullToRefreshState = rememberPullToRefreshState()
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
             swipeCategoryTarget?.let { tx ->
@@ -125,10 +132,14 @@ fun TransactionScreen(
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 115.dp, bottom = 100.dp
-                ),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pullToRefresh(
+                        isRefreshing = isSyncing,
+                        state = pullToRefreshState,
+                        onRefresh = viewModel::refreshFromSms
+                    ),
+                contentPadding = screenContentPadding(),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
 
@@ -179,13 +190,7 @@ fun TransactionScreen(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Ksh ${
-                                        String.format(
-                                            Locale.US,
-                                            "%,.2f",
-                                            state.fulizaLimit
-                                        )
-                                    }",
+                                    text = PesaTimeConfiguration.formatCurrency(state.fulizaLimit),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -243,7 +248,16 @@ fun TransactionScreen(
 
                 if (state.filteredTransactions.isEmpty()) {
                     item(key = "empty") {
-                        if (hasFilters) {
+                        if (!state.hasLoaded) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (hasFilters) {
                             EmptyStateMessage(
                                 title = "No matching transactions",
                                 message = "Try adjusting your search or filters.",
@@ -307,6 +321,12 @@ fun TransactionScreen(
                 onDismiss = { upcomingViewModel.closeSheet() }
             )
         }
+
+        PullToRefreshDefaults.Indicator(
+            state = pullToRefreshState,
+            isRefreshing = isSyncing,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
 
         AnimatedVisibility(
             visible = showBackToTop,

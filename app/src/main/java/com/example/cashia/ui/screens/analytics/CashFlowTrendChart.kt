@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -111,6 +113,12 @@ fun CashFlowTrendChart(
 
     val hasData = incomePoints.last() > 0f || expensePoints.last() > 0f
     if (!hasData) return
+
+    val chartDescription = remember(incomePoints, expensePoints, startDate, endDate) {
+        "Cash flow trend chart from ${startDate} to ${endDate}. " +
+            "Cumulative income ${PesaTimeConfiguration.formatCurrency(incomePoints.last().toDouble())}, " +
+            "cumulative expenses ${PesaTimeConfiguration.formatCurrency(expensePoints.last().toDouble())}."
+    }
 
     val incomeColor = MaterialTheme.colorScheme.tertiary
     val expenseColor = MaterialTheme.colorScheme.error
@@ -271,6 +279,7 @@ fun CashFlowTrendChart(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
+                            .semantics { contentDescription = chartDescription }
                             .pointerInput(days.size) {
                                 detectTapGestures { offset ->
                                     val n = days.size

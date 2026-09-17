@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,14 +38,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
-import com.example.cashia.ui.reusedElements.GlassySurface
+import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
 
 /**
@@ -70,7 +70,7 @@ fun UpcomingPaymentsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 115.dp, bottom = 32.dp),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "upcoming_header") {
@@ -92,26 +92,33 @@ fun UpcomingPaymentsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clickable {
-                                    PesaActions.playClick(haptic)
-                                    upcomingViewModel.openCreate()
-                                }
+                        IconButton(
+                            onClick = {
+                                PesaActions.playClick(haptic)
+                                upcomingViewModel.openCreate()
+                            },
+                            modifier = Modifier.size(48.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Rounded.Add, null, tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Rounded.Add,
+                                        contentDescription = "Add upcoming payment",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                         Icon(
                             if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                            null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)
+                            null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -120,18 +127,11 @@ fun UpcomingPaymentsScreen(
             if (expanded) {
                 if (upcoming.isEmpty()) {
                     item(key = "upcoming_empty") {
-                        GlassySurface(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(32.dp)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text("📅", fontSize = 32.sp)
-                                Subtitles("No Upcoming Payments Added")
-                            }
-                        }
+                        EmptyStateMessage(
+                            title = "No upcoming payments",
+                            message = "Recurring bills you add or auto-detect will show up here.",
+                            emoji = "📅"
+                        )
                     }
                 } else {
                     items(upcoming, key = { it.id }) { tx ->

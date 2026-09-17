@@ -257,6 +257,7 @@ object PesaTimeConfiguration {
         AppDestinations.UpcomingPayments.route -> "Manage your scheduled bills and income"
         AppDestinations.UnmatchedReview.route -> "Confirm or ignore unrecognised messages"
         AppDestinations.NotificationsSettings.route -> "Reminders, alerts & monthly targets"
+        AppDestinations.Export.route -> "Choose columns & a period to export"
         else -> ""
     }
     fun screenTitle(route: String?): String = when (route) {
@@ -271,6 +272,7 @@ object PesaTimeConfiguration {
         AppDestinations.UpcomingPayments.route -> "Upcoming Payments"
         AppDestinations.UnmatchedReview.route -> "Review Unmatched SMS"
         AppDestinations.NotificationsSettings.route -> "Notifications"
+        AppDestinations.Export.route -> "Export Transactions"
         else -> "PesaPulse"
     }
 

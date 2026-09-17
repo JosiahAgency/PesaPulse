@@ -58,6 +58,7 @@ import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -102,12 +103,7 @@ fun CalendarScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 115.dp,
-                bottom = 120.dp
-            ),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {

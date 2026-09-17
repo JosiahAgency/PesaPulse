@@ -39,6 +39,7 @@ import com.example.cashia.ui.theme.WidgetBackground
 import com.example.cashia.ui.theme.WidgetCard
 import com.example.cashia.ui.theme.WidgetExpense
 import com.example.cashia.ui.theme.WidgetIncome
+import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -56,7 +57,11 @@ class CashiaWidget : GlanceAppWidget() {
         private const val WIDGET_PREFS = "cashia_widget_prefs"
         private const val SHOW_BALANCE_KEY = "widget_show_balance"
 
-        fun ksh(amount: Double): String = "Ksh ${"%,.0f".format(amount)}"
+        fun ksh(amount: Double): String =
+            "${PesaTimeConfiguration.CURRENCY} ${compactAmount(amount)}"
+
+        /** Bare number (no currency prefix) for compact rows that supply their own sign/prefix. */
+        fun compactAmount(amount: Double): String = "%,.0f".format(amount)
     }
 
     override val sizeMode: SizeMode = SizeMode.Responsive(
@@ -251,15 +256,14 @@ class CashiaWidget : GlanceAppWidget() {
     @Composable
     private fun MetricsInline(metrics: Metrics) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
-            MetricPill("Income", metrics.income, WidgetIncome, GlanceModifier.defaultWeight())
+            MetricPill("Income", metrics.income, GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(6.dp))
-            MetricPill("Expense", metrics.expenses, WidgetExpense, GlanceModifier.defaultWeight())
+            MetricPill("Expense", metrics.expenses, GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(6.dp))
             val netColor = if (metrics.net >= 0) WidgetIncome else WidgetExpense
             MetricPill(
                 label = "Net",
                 amount = kotlin.math.abs(metrics.net),
-                tint = netColor,
                 modifier = GlanceModifier.defaultWeight(),
                 sign = if (metrics.net >= 0) "+" else "−"
             )
@@ -291,7 +295,6 @@ class CashiaWidget : GlanceAppWidget() {
     private fun MetricPill(
         label: String,
         amount: Double,
-        tint: androidx.compose.ui.graphics.Color,
         modifier: GlanceModifier,
         sign: String = ""
     ) {
@@ -308,7 +311,7 @@ class CashiaWidget : GlanceAppWidget() {
             )
             Spacer(GlanceModifier.height(4.dp))
             Text(
-                text = "$sign${ksh(amount).removePrefix("Ksh ")}",
+                text = "$sign${compactAmount(amount)}",
                 style = TextStyle(
                     fontSize = TextUnit(10f, TextUnitType.Sp),
                     fontWeight = FontWeight.Bold
@@ -330,9 +333,7 @@ class CashiaWidget : GlanceAppWidget() {
         ) {
             Text(
                 text = "Today net: ${if (today.net >= 0) "+" else "−"}${
-                    ksh(kotlin.math.abs(today.net)).removePrefix(
-                        "Ksh "
-                    )
+                    compactAmount(kotlin.math.abs(today.net))
                 }",
                 style = TextStyle(
                     fontSize = TextUnit(10f, TextUnitType.Sp),
@@ -358,7 +359,7 @@ class CashiaWidget : GlanceAppWidget() {
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
-                    .height(28.dp)
+                    .height(48.dp)
                     .background(WidgetCard)
                     .cornerRadius(8.dp)
                     .clickable(actionRunCallback<ToggleBalanceVisibilityAction>()),
@@ -380,7 +381,7 @@ class CashiaWidget : GlanceAppWidget() {
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
-                    .height(28.dp)
+                    .height(48.dp)
                     .background(WidgetCard)
                     .cornerRadius(8.dp)
                     .clickable(actionStartActivity<MainActivity>()),
