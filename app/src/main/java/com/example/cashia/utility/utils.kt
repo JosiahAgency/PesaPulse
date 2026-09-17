@@ -260,6 +260,7 @@ object PesaTimeConfiguration {
         AppDestinations.Export.route -> "Choose columns & a period to export"
         else -> ""
     }
+
     fun screenTitle(route: String?): String = when (route) {
         AppDestinations.Dashboard.route -> "Home"
         AppDestinations.Transactions.route -> "History"

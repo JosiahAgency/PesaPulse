@@ -37,8 +37,6 @@ import com.example.cashia.AppDatabase
 import com.example.cashia.MainActivity
 import com.example.cashia.ui.theme.WidgetBackground
 import com.example.cashia.ui.theme.WidgetCard
-import com.example.cashia.ui.theme.WidgetExpense
-import com.example.cashia.ui.theme.WidgetIncome
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -260,7 +258,6 @@ class CashiaWidget : GlanceAppWidget() {
             Spacer(GlanceModifier.width(6.dp))
             MetricPill("Expense", metrics.expenses, GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(6.dp))
-            val netColor = if (metrics.net >= 0) WidgetIncome else WidgetExpense
             MetricPill(
                 label = "Net",
                 amount = kotlin.math.abs(metrics.net),

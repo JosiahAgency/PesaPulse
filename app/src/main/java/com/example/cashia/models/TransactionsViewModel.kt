@@ -205,10 +205,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         .pendingCountFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val nextPending: StateFlow<UnmatchedSms?> = unmatchedDao
-        .nextPendingFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
     val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -219,9 +215,6 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     var isBalanceVisible by mutableStateOf(false)
         private set
 
-    // ── Recurring sheet ────────────────────────────────────────────────────────
-    var recurringSheetTransaction by mutableStateOf<MpesaTransactions?>(null)
-        private set
 
     // ── Init ───────────────────────────────────────────────────────────────────
     init {
