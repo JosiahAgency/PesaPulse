@@ -28,19 +28,15 @@ data class UpcomingUiState(
     val error: String? = null
 )
 
-class UpcomingViewModel(private val context: Context) : ViewModel() {
+class UpcomingViewModel(context: Context) : ViewModel() {
 
-    private val dao = AppDatabase.getDatabase(context).upcomingTransactionDao()
-    private val transactionDao = AppDatabase.getDatabase(context).transactionDao()
+    private val dao = AppDatabase.getDatabase(context.applicationContext).upcomingTransactionDao()
 
     val upcoming: StateFlow<List<UpcomingTransaction>> = dao.getPending()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val all: StateFlow<List<UpcomingTransaction>> = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-//    var uiState by mutableStateOf(UpcomingUiState())
-//        private set
 
     private val _uiState = MutableStateFlow(UpcomingUiState())
     val uiState: StateFlow<UpcomingUiState> = _uiState.asStateFlow()
@@ -112,23 +108,22 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     // ── Save ──────────────────────────────────────────────────────────────
     fun save() {
         val title = _uiState.value.draftTitle.trim()
-        val amount = _uiState.value.draftAmount.toDouble()
+        val amountText = _uiState.value.draftAmount.trim().replace(",", "")
 
         if (title.isBlank()) {
-            _uiState.update {
-                it.copy(error = "Title cannot be empty"); return
-            }
+            _uiState.update { it.copy(error = "Title cannot be empty") }
+            return
         }
-        if (amount == null || amount <= 0) {
-            _uiState.update {
-                it.copy(error = "Enter a valid amount"); return
-            }
+        val validAmount = amountText.toDoubleOrNull()
+        if (validAmount == null || validAmount <= 0.0) {
+            _uiState.update { it.copy(error = "Enter a valid amount") }
+            return
         }
 
         val txToSave = UpcomingTransaction(
             id = _uiState.value.editing?.id ?: java.util.UUID.randomUUID().toString(),
             title = title,
-            amount = amount,
+            amount = validAmount,
             categoryId = _uiState.value.draftCategory,
             dueDate = _uiState.value.draftDueDate.toString(),
             type = _uiState.value.draftType,
@@ -196,20 +191,6 @@ class UpcomingViewModel(private val context: Context) : ViewModel() {
     fun tryAutoMatch(mpesaTx: MpesaTransactions) {
         viewModelScope.launch(Dispatchers.IO) {
             matchTransaction(mpesaTx)
-        }
-    }
-
-    /**
-     * Manual trigger — scans recent M-Pesa transactions against
-     * ALL pending upcoming items. Useful after adding a new upcoming item.
-     */
-    fun matchAllPending() {
-        viewModelScope.launch(Dispatchers.IO) {
-            // Only look at transactions from the last 14 days to avoid false positives
-            val today = LocalDate.now()
-            val cutoff = today.minusDays(14).toString()
-            val recent = transactionDao.getTransactionsForDateRange(cutoff, today.toString())
-            recent.forEach { matchTransaction(it) }
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.cashia.AppDatabase
 import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TimeScope
+import com.example.cashia.utility.buildDayGroups
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +21,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import kotlin.math.roundToInt
 
@@ -32,6 +33,7 @@ private val yearFormatter = DateTimeFormatter.ofPattern("yyyy")
 
 data class DashboardState(
     val filteredTransactions: List<MpesaTransactions> = emptyList(),
+    val dayGroups: List<DayGroup> = emptyList(),
     val totalIncome: Double = 0.0,
     val totalExpenses: Double = 0.0,
     val periodLabel: String = "",
@@ -41,13 +43,11 @@ data class DashboardState(
     val hasLoaded: Boolean = false,
 )
 
-/**
- * "Pace this month" — a relabeled reuse of Insights' burn-rate/projected-pace math
- * (see AnalyticsExtras.kt's BurnRateCard), NOT a persisted budget limit. [progress] is
- * spend-so-far ÷ pace-projected-total-for-the-month, independent of the Day/Week/Month/Year
- * scope selector so it always reads as "this calendar month" regardless of what's selected.
- */
+/** "Pace this month" against the user's saved monthly target for the current month. */
 data class MonthPaceState(
+    val hasTarget: Boolean = false,
+    val targetAmount: Double = 0.0,
+    val spentAmount: Double = 0.0,
     val progress: Float = 0f,
     val percentLabel: Int = 0,
     val remainingLabel: Double = 0.0,
@@ -70,11 +70,6 @@ class DashboardViewModel(
         LocalDate.now().with(TemporalAdjusters.previousOrSame(PesaTimeConfiguration.firstDayOfWeek))
     )
 
-    /**
-     * Bounded to the visible week plus a one-week buffer on each side instead of the full
-     * table. [WeeklyCalendar] reports the week it's actually showing back through
-     * [setVisibleWeek] as the user swipes, so this stays centered on-screen.
-     */
     val weeklyCalendarTransactionsFlow: StateFlow<List<MpesaTransactions>> = _visibleWeekStart
         .flatMapLatest { weekStart ->
             dao.getTransactionsInRange(
@@ -87,32 +82,50 @@ class DashboardViewModel(
     private val _isListExpanded = MutableStateFlow(true)
     val isListExpanded = _isListExpanded.asStateFlow()
 
-    val monthPace: StateFlow<MonthPaceState> = run {
-        val today = LocalDate.now()
-        val monthStart = today.with(TemporalAdjusters.firstDayOfMonth())
-        val monthEnd = today.with(TemporalAdjusters.lastDayOfMonth())
-        dao.getTransactionsInRange(monthStart.toString(), monthEnd.toString())
-            .map { txs ->
+    private val _monthPaceRefresh = MutableStateFlow(0)
+
+    val previousMonthSpend: StateFlow<Double> = _monthPaceRefresh
+        .flatMapLatest {
+            val previousMonth = YearMonth.now().minusMonths(1)
+            dao.getTransactionsInRange(
+                previousMonth.atDay(1).toString(),
+                previousMonth.atEndOfMonth().toString()
+            )
+        }
+        .map { txs ->
+            txs.filter { it.type == "expense" && it.reversedTxId == null }
+                .sumOf { it.amount + it.transactionCost }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+
+    val monthPace: StateFlow<MonthPaceState> = _monthPaceRefresh
+        .flatMapLatest {
+            val today = LocalDate.now()
+            val monthStart = today.with(TemporalAdjusters.firstDayOfMonth())
+            val monthEnd = today.with(TemporalAdjusters.lastDayOfMonth())
+            dao.getTransactionsInRange(monthStart.toString(), monthEnd.toString()).map { txs ->
                 val totalSpend = txs
                     .filter { it.type == "expense" && it.reversedTxId == null }
-                    .sumOf { it.amount }
-                val totalDays = ChronoUnit.DAYS.between(monthStart, monthEnd).toInt() + 1
-                val elapsedDays = (ChronoUnit.DAYS.between(monthStart, today.coerceAtMost(monthEnd))
-                    .toInt() + 1).coerceAtLeast(1)
-                val dailyRate = totalSpend / elapsedDays
-                val projectedTotal = dailyRate * totalDays
-                val progress = if (projectedTotal <= 0.0) 0f
-                else (totalSpend / projectedTotal).toFloat().coerceIn(0f, 1f)
-
-                MonthPaceState(
-                    progress = progress,
-                    percentLabel = (progress * 100).roundToInt(),
-                    remainingLabel = (projectedTotal - totalSpend).coerceAtLeast(0.0)
-                )
+                    .sumOf { it.amount + it.transactionCost }
+                val target = PesaTimeConfiguration.getMonthlySpendingTarget(YearMonth.from(today))
+                if (target == null || target <= 0.0) {
+                    MonthPaceState(hasTarget = false, spentAmount = totalSpend)
+                } else {
+                    val ratio = totalSpend / target
+                    MonthPaceState(
+                        hasTarget = true,
+                        targetAmount = target,
+                        spentAmount = totalSpend,
+                        progress = ratio.toFloat().coerceIn(0f, 1f),
+                        percentLabel = (ratio * 100).roundToInt(),
+                        remainingLabel = (target - totalSpend).coerceAtLeast(0.0)
+                    )
+                }
             }
-            .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MonthPaceState())
-    }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MonthPaceState())
 
     // The date-range filter runs in SQL: only the rows inside the visible period
     // are ever loaded, and Room re-emits automatically on any table change.
@@ -144,6 +157,7 @@ class DashboardViewModel(
 
                 DashboardState(
                     filteredTransactions = txs,
+                    dayGroups = buildDayGroups(txs),
                     totalIncome = income,
                     totalExpenses = expenses,
                     periodLabel = label,
@@ -172,6 +186,27 @@ class DashboardViewModel(
 
     fun toggleListExpanded() {
         _isListExpanded.value = !_isListExpanded.value
+    }
+
+    fun hasCurrentMonthTarget(): Boolean {
+        return PesaTimeConfiguration.hasMonthlySpendingTarget(YearMonth.now())
+    }
+
+    fun refreshMonthlyContext() {
+        _monthPaceRefresh.value += 1
+    }
+
+    fun saveCurrentMonthTarget(amount: Double) {
+        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
+        refreshMonthlyContext()
+    }
+
+    fun useLastMonthSpendAsCurrentTarget(): Boolean {
+        val amount = previousMonthSpend.value
+        if (amount <= 0.0) return false
+        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
+        refreshMonthlyContext()
+        return true
     }
 
     private fun computeRange(

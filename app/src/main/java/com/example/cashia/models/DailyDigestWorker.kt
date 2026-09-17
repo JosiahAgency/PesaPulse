@@ -7,7 +7,9 @@ import com.example.cashia.AppDatabase
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.utility.BalanceAlertService
 import com.example.cashia.utility.NotificationHelper
+import com.example.cashia.utility.NotificationRuntimeStore
 import com.example.cashia.utility.NotificationScheduler
+import com.example.cashia.utility.NotificationStream
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,6 +25,7 @@ class DailyDigestWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        NotificationRuntimeStore.recordAttempt(context, NotificationStream.DAILY)
         try {
             val db = AppDatabase.getDatabase(context)
             // Daily safety-net: catches balance dips even on days with no new SMS sync.
@@ -64,7 +67,11 @@ class DailyDigestWorker(
                 body = body,
                 deepLinkRoute = AppDestinations.SummaryReport.buildRoute("day", today)
             )
+            NotificationRuntimeStore.recordSuccess(context, NotificationStream.DAILY)
             return Result.success()
+        } catch (e: Exception) {
+            NotificationRuntimeStore.recordError(context, NotificationStream.DAILY, e.localizedMessage)
+            return Result.failure()
         } finally {
             // Queue tomorrow's run even when disabled or on failure, so the chain
             // never dies. APPEND keeps this running instance from cancelling itself.

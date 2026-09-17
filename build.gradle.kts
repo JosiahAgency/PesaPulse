@@ -9,17 +9,41 @@ plugins {
 
 // AGP's bundled lint-gradle / android-test-plugin-result-listener-gradle pull in
 // org.bouncycastle:bcprov-jdk18on:1.79, vulnerable to GOST 28147-2015 CTR keystream
-// reuse (fixed 1.80.2/1.81.1/1.84+). AGP itself also pulls org.jdom:jdom2:2.0.6,
+// reuse (fixed 1.84+). AGP/UTP also pull older Netty and AGP pulls jose4j on
+// tooling paths; pin those to patched versions. AGP itself also pulls
+// org.jdom:jdom2:2.0.6,
 // vulnerable to XXE-triggered DoS in SAXBuilder (fixed 2.0.6.1). Force both up to a
 // patched release on the build-tooling classpath until AGP bumps them upstream.
 buildscript {
     configurations.classpath {
         resolutionStrategy {
             force(
-                "org.bouncycastle:bcprov-jdk18on:1.81.1",
-                "org.bouncycastle:bcpkix-jdk18on:1.81.1",
-                "org.bouncycastle:bcutil-jdk18on:1.81.1",
+                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcpkix-jdk18on:1.84",
+                "org.bouncycastle:bcutil-jdk18on:1.84",
+                "io.netty:netty-codec:4.1.122.Final",
+                "io.netty:netty-codec-http:4.1.122.Final",
+                "io.netty:netty-codec-http2:4.1.122.Final",
+                "io.netty:netty-handler:4.1.122.Final",
+                "org.bitbucket.b_c:jose4j:0.9.6",
                 "org.jdom:jdom2:2.0.6.1"
+            )
+        }
+    }
+}
+
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy {
+            force(
+                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcpkix-jdk18on:1.84",
+                "org.bouncycastle:bcutil-jdk18on:1.84",
+                "io.netty:netty-codec:4.1.122.Final",
+                "io.netty:netty-codec-http:4.1.122.Final",
+                "io.netty:netty-codec-http2:4.1.122.Final",
+                "io.netty:netty-handler:4.1.122.Final",
+                "org.bitbucket.b_c:jose4j:0.9.6"
             )
         }
     }
