@@ -1,70 +1,20 @@
 package com.example.cashia.ui.screens.allTransactions
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.HelpOutline
-import androidx.compose.material.icons.rounded.AutoFixHigh
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.UnmatchedSms
-import com.example.cashia.ui.reusedElements.SectionLabel
-import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
-import com.example.cashia.utility.partialFieldsFromJson
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.cashia.utility.TransactionCorrection
+import kotlinx.coroutines.launch
 
 @Composable
 fun UnmatchedSmsModal(
@@ -72,408 +22,83 @@ fun UnmatchedSmsModal(
     pendingCount: Int,
     allCategories: List<ResolvedCategory>,
     categoryViewModel: CategoryViewModel,
-    onSave: (type: String, category: String) -> Unit,
+    onSave: suspend (TransactionCorrection) -> String?,
     onSkip: () -> Unit,
     onIgnore: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val colorScheme = MaterialTheme.colorScheme
+    val initial = remember(sms.id) { TransactionCorrection.fromSms(sms) }
+    var amount by rememberSaveable(sms.id) { mutableStateOf(initial.amount) }
+    var recipient by rememberSaveable(sms.id) { mutableStateOf(initial.recipient) }
+    var date by rememberSaveable(sms.id) { mutableStateOf(initial.date) }
+    var time by rememberSaveable(sms.id) { mutableStateOf(initial.time) }
+    var fees by rememberSaveable(sms.id) { mutableStateOf(initial.fees) }
+    var balance by rememberSaveable(sms.id) { mutableStateOf(initial.balance) }
+    var reference by rememberSaveable(sms.id) { mutableStateOf(initial.reference) }
+    var type by rememberSaveable(sms.id) { mutableStateOf(initial.type) }
+    var category by rememberSaveable(sms.id) { mutableStateOf(initial.category) }
+    var picker by remember { mutableStateOf(false) }
+    var ignoreConfirm by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
-    val partial = remember(sms.extractedFields) { partialFieldsFromJson(sms.extractedFields) }
-
-    // [OPT] These three were recomputed on every recomposition; memoize on their inputs
-    val hasPartialData = remember(partial) {
-        partial != null && (partial.amount != null || partial.date != null || partial.transactionId != null)
-    }
-    val confidenceLabel = remember(sms.confidence) {
-        when {
-            sms.confidence >= 0.65f -> "Partial match · some fields extracted"
-            sms.confidence >= 0.35f -> "Low confidence · verify details"
-            else -> "Unrecognised · fill in manually"
-        }
-    }
-    val confidenceColor: Color = remember(sms.confidence, colorScheme) {
-        when {
-            sms.confidence >= 0.65f -> colorScheme.tertiary
-            sms.confidence >= 0.35f -> colorScheme.secondary
-            else -> colorScheme.onSurfaceVariant
-        }
-    }
-
-    var selectedType by remember(sms.id) { mutableStateOf(partial?.likelyType ?: "expense") }
-    var selectedCategory by remember(sms.id) {
-        mutableStateOf(allCategories.firstOrNull()?.id ?: "")
-    }
-    var showCategoryPicker by remember { mutableStateOf(false) }
-    var showIgnoreConfirm by remember { mutableStateOf(false) }
-
-    val resolvedCategory = remember(selectedCategory, allCategories) {
-        allCategories.find { it.id == selectedCategory }
-    }
-    val receivedDate = remember(sms.receivedAt) {
-        SimpleDateFormat("dd MMM yyyy, h:mm a", Locale.getDefault()).format(Date(sms.receivedAt))
-    }
-
-    if (showCategoryPicker) {
-        CategoryPickerSheet(
-            allCategories = allCategories,
-            currentCategoryId = selectedCategory,
-            onPick = { newId -> selectedCategory = newId; showCategoryPicker = false },
-            onDismiss = { showCategoryPicker = false },
-            categoryViewModel = categoryViewModel,
-        )
-    }
-
-    // [OPT] Fixed AnimatedVisibility(visible = true) anti-pattern. When visible starts
-    //        as true, Compose skips the enter animation entirely — the dialog just pops
-    //        in without the intended fade+scale. Drive it via a LaunchedEffect instead.
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.92f),
-            exit = fadeOut(tween(150)) + scaleOut(tween(150))
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = colorScheme.surface,
-                tonalElevation = 6.dp
-            ) {
+    if (picker) CategoryPickerSheet(
+        allCategories = allCategories, currentCategoryId = category,
+        onPick = { category = it; picker = false }, onDismiss = { picker = false },
+        categoryViewModel = categoryViewModel
+    )
+    if (ignoreConfirm) AlertDialog(
+        onDismissRequest = { ignoreConfirm = false }, title = { Text("Ignore this message?") },
+        text = { Text("Messages with the same content will be hidden from review.") },
+        confirmButton = { TextButton(onClick = onIgnore) { Text("Ignore") } },
+        dismissButton = { TextButton(onClick = { ignoreConfirm = false }) { Text("Cancel") } }
+    )
+    Dialog(onDismissRequest = { if (!saving) onDismiss() }) {
+        Surface(shape = MaterialTheme.shapes.extraLarge) {
+            Column(Modifier.padding(20.dp).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Correct transaction", style = MaterialTheme.typography.titleLarge)
                 Column(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // ── Header ─────────────────────────────────────────────
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(
-                                        colorScheme.primary.copy(alpha = 0.12f),
-                                        CircleShape
-                                    )
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.HelpOutline,
-                                    tint = colorScheme.primary,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Column {
-                                SectionLabel("unrecognised message")
-                                if (pendingCount > 1) Subtitles("$pendingCount messages need review")
-                            }
-                        }
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.background(colorScheme.surfaceVariant, CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = null,
-                                tint = colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                    Text("$pendingCount messages need review", style = MaterialTheme.typography.bodySmall)
+                    Text(sms.rawBody, style = MaterialTheme.typography.bodySmall)
+                    Text("Amount, recipient, date and direction are required. Leave other values blank if unknown.")
+                    OutlinedTextField(amount, { amount = it }, label = { Text("Amount (KES) *") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(recipient, { recipient = it }, label = { Text("Recipient / sender *") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(date, { date = it }, label = { Text("Date (YYYY-MM-DD) *") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(time, { time = it }, label = { Text("Time (HH:mm, 24-hour)") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(fees, { fees = it }, label = { Text("Fees (KES)") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(balance, { balance = it }, label = { Text("Balance after (KES)") }, enabled = !saving, singleLine = true)
+                    OutlinedTextField(reference, { reference = it }, label = { Text("M-PESA reference") }, enabled = !saving, singleLine = true)
+                    Text("Direction *")
+                    for ((value, label) in listOf("expense" to "Money out", "income" to "Money in", "neutral" to "No money movement")) {
+                        FilterChip(selected = type == value, onClick = { type = value }, label = { Text(label) }, enabled = !saving)
                     }
-
-                    // ── Raw SMS body ───────────────────────────────────────
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                0.5.dp,
-                                colorScheme.onSurface.copy(alpha = 0.08f),
-                                RoundedCornerShape(14.dp)
-                            )
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = sms.rawBody,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    lineHeight = 18.sp
-                                ),
-                                color = colorScheme.onSurface.copy(alpha = 0.75f)
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Subtitles("Received $receivedDate")
-                        }
+                    OutlinedButton(onClick = { picker = true }, enabled = !saving) {
+                        Text("Category: ${allCategories.find { it.id == category }?.label ?: category}")
                     }
-
-                    // ── Confidence / partial data banner ───────────────────
-                    if (hasPartialData || sms.confidence > 0f) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = confidenceColor.copy(alpha = 0.08f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(
-                                    0.5.dp,
-                                    confidenceColor.copy(alpha = 0.2f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.AutoFixHigh,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = confidenceColor
-                                    )
-                                    Text(
-                                        confidenceLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = confidenceColor,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                if (hasPartialData) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        partial?.amount?.let {
-                                            ExtractedFieldPill(
-                                                "Ksh $it",
-                                                confidenceColor
-                                            )
-                                        }
-                                        partial?.date?.let {
-                                            ExtractedFieldPill(
-                                                it,
-                                                confidenceColor
-                                            )
-                                        }
-                                        partial?.likelyType?.let {
-                                            ExtractedFieldPill(
-                                                if (it == "income") "💰 income" else "💸 expense",
-                                                confidenceColor
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    Row {
+                        TextButton(onClick = onSkip, enabled = !saving) { Text("Skip") }
+                        TextButton(onClick = { ignoreConfirm = true }, enabled = !saving) { Text("Ignore") }
                     }
-
-                    HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.07f))
-
-                    // ── Type toggle ────────────────────────────────────────
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Transaction type",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onSurfaceVariant
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            listOf("income" to "💰 Income", "expense" to "💸 Expense")
-                                .forEach { (value, label) ->
-                                    val selected = selectedType == value
-                                    val chipColor =
-                                        if (value == "income") colorScheme.tertiary else colorScheme.error
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = { selectedType = value },
-                                        label = {
-                                            Text(
-                                                label,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = chipColor.copy(alpha = 0.15f),
-                                            selectedLabelColor = chipColor,
-                                            selectedLeadingIconColor = chipColor
-                                        ),
-                                        border = FilterChipDefaults.filterChipBorder(
-                                            enabled = true, selected = selected,
-                                            selectedBorderColor = chipColor.copy(alpha = 0.4f),
-                                            borderColor = colorScheme.onSurface.copy(alpha = 0.12f)
-                                        )
-                                    )
-                                }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+                    Button(enabled = !saving, onClick = {
+                        saving = true
+                        error = null
+                        scope.launch {
+                            try {
+                                error = onSave(TransactionCorrection(amount, recipient, date, time, fees, balance, reference, type, category))
+                                if (error == null) onDismiss()
+                            } finally { saving = false }
                         }
-                    }
-
-                    // ── Category picker ────────────────────────────────────
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Category",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onSurfaceVariant
-                        )
-                        Surface(
-                            onClick = { showCategoryPicker = true },
-                            shape = RoundedCornerShape(12.dp),
-                            color = colorScheme.primary.copy(alpha = 0.07f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    0.5.dp,
-                                    colorScheme.primary.copy(alpha = 0.2f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(resolvedCategory?.emoji ?: "❓", fontSize = 20.sp)
-                                Text(
-                                    resolvedCategory?.label ?: "Pick a category",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colorScheme.primary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    "Change →",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colorScheme.primary.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    // ── Actions ────────────────────────────────────────────
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onSkip,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text("Skip", fontWeight = FontWeight.SemiBold) }
-
-                        Button(
-                            onClick = { onSave(selectedType, selectedCategory) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            enabled = selectedCategory.isNotBlank()
-                        ) { Text("Save", fontWeight = FontWeight.Bold) }
-                    }
-
-                    if (!showIgnoreConfirm) {
-                        TextButton(
-                            onClick = { showIgnoreConfirm = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                Icons.Rounded.VisibilityOff,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(15.dp)
-                                    .padding(end = 4.dp),
-                                tint = colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                "Ignore this message",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            )
-                        }
-                    } else {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = colorScheme.errorContainer.copy(alpha = 0.35f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(
-                                    0.5.dp,
-                                    colorScheme.error.copy(alpha = 0.2f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    "Permanently ignore?",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colorScheme.onErrorContainer
-                                )
-                                Text(
-                                    "This message won't appear again. Use this for failed transactions, promos, or duplicate alerts.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colorScheme.onErrorContainer.copy(alpha = 0.75f)
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = { showIgnoreConfirm = false },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) { Text("Cancel") }
-
-                                    Button(
-                                        onClick = onIgnore,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = colorScheme.error
-                                        )
-                                    ) { Text("Ignore", fontWeight = FontWeight.Bold) }
-                                }
-                            }
-                        }
-                    }
+                    }) { Text(if (saving) "Saving..." else "Save transaction") }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ExtractedFieldPill(text: String, color: Color) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = color.copy(alpha = 0.12f),
-        modifier = Modifier.border(0.5.dp, color.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontWeight = FontWeight.Medium
-        )
     }
 }

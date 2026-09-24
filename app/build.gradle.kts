@@ -37,7 +37,7 @@ android {
     }
     lint {
         checkReleaseBuilds = false
-        abortOnError = false
+        abortOnError = true
     }
 
     buildFeatures {

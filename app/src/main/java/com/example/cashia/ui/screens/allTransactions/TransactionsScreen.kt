@@ -19,11 +19,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -45,16 +49,16 @@ import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.ActionBanner
-import com.example.cashia.ui.reusedElements.DataSyncBanner
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.HarmonizedActionFab
-import com.example.cashia.ui.reusedElements.standardScreenPadding
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.ui.theme.LocalNavigationDockHeight
+import com.example.cashia.ui.theme.screenContentPadding
+import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -110,6 +114,8 @@ fun TransactionScreen(
         if (nearListEnd && state.hasMore) viewModel.loadMore()
     }
 
+    val pullToRefreshState = rememberPullToRefreshState()
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
             swipeCategoryTarget?.let { tx ->
@@ -127,14 +133,21 @@ fun TransactionScreen(
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = standardScreenPadding(bottom = 100.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pullToRefresh(
+                        isRefreshing = isSyncing,
+                        state = pullToRefreshState,
+                        onRefresh = viewModel::refreshFromSms
+                    ),
+                contentPadding = screenContentPadding(),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                if (isSyncing) {
-                    item(key = "history_sync_banner") {
-                        DataSyncBanner(modifier = Modifier.padding(bottom = 8.dp))
-                    }
+                item(key = "known_fees_notice") {
+                    Text(
+                        "Totals include known fees only; blank fees remain unknown.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 item(key = "search") {
@@ -184,13 +197,7 @@ fun TransactionScreen(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Ksh ${
-                                        String.format(
-                                            Locale.US,
-                                            "%,.2f",
-                                            state.fulizaLimit
-                                        )
-                                    }",
+                                    text = PesaTimeConfiguration.formatCurrency(state.fulizaLimit),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -248,7 +255,16 @@ fun TransactionScreen(
 
                 if (state.filteredTransactions.isEmpty()) {
                     item(key = "empty") {
-                        if (hasFilters) {
+                        if (!state.hasLoaded) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (hasFilters) {
                             EmptyStateMessage(
                                 title = "No matching transactions",
                                 message = "Try adjusting your search or filters.",
@@ -313,6 +329,12 @@ fun TransactionScreen(
             )
         }
 
+        PullToRefreshDefaults.Indicator(
+            state = pullToRefreshState,
+            isRefreshing = isSyncing,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
         AnimatedVisibility(
             visible = showBackToTop,
             modifier = Modifier
@@ -320,7 +342,7 @@ fun TransactionScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(bottom = 95.dp)
+                .padding(bottom = LocalNavigationDockHeight.current)
         ) {
             HarmonizedActionFab(
                 icon = Icons.Rounded.KeyboardArrowUp,

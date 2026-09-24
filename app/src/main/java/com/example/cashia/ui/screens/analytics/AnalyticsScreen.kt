@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -16,7 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.AnalyticsViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
-import com.example.cashia.ui.reusedElements.standardScreenPadding
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -31,9 +30,9 @@ fun AnalyticsScreen(
     val weekdayPattern by analyticsViewModel.weekdayPatternFlow.collectAsStateWithLifecycle()
     val recurringMerchants by analyticsViewModel.recurringMerchantsFlow.collectAsStateWithLifecycle()
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
+    val budgetProgress by analyticsViewModel.monthlyBudget.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
-    LaunchedEffect(Unit) { analyticsViewModel.refreshCurrentScopeRange() }
 //    val transactions = allTransactions
 //    var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
 //    var selectedScope by remember { mutableStateOf(TimeScope.MONTH) }
@@ -95,9 +94,14 @@ fun AnalyticsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = standardScreenPadding(),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        budgetProgress?.let { progress ->
+            item(key = "monthly_budget") {
+                MonthlyBudgetCard(progress)
+            }
+        }
         // 1. Period picker
         item {
             PeriodSelectorCard(

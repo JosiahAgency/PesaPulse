@@ -8,14 +8,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +27,7 @@ import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -40,15 +38,10 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,14 +62,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cashia.models.SettingsViewModel
+import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.reusedElements.PesaDialog
+import com.example.cashia.ui.reusedElements.SectionCard
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.BiometricAuthenticator
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.DayOfWeek
-
-private enum class NotificationTimeTarget { DAILY, MONTHLY, UPCOMING }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,23 +91,9 @@ fun SettingsScreen(
     )
 
     // Collect all state flows from ViewModel — this is the single source of truth
-    val isDailyDigestOn by settingsViewModel.isDailyDigestEnabled.collectAsStateWithLifecycle()
-    val isMonthlySummaryOn by settingsViewModel.isMonthlySummaryEnabled.collectAsStateWithLifecycle()
-    val isUpcomingReminderOn by settingsViewModel.isUpcomingReminderEnabled.collectAsStateWithLifecycle()
-    val notificationDiagnostics by settingsViewModel.notificationDiagnostics.collectAsStateWithLifecycle()
-    val notificationSchedule by settingsViewModel.notificationSchedule.collectAsStateWithLifecycle()
     val is24Hour by settingsViewModel.use24Hour.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        settingsViewModel.refreshNotificationSettings()
-        settingsViewModel.refreshNotificationSchedule()
-        settingsViewModel.refreshNotificationDiagnostics()
-    }
-
     val biometricAuthenticator = remember { BiometricAuthenticator(context) }
-    var timePickerTarget by remember { mutableStateOf<NotificationTimeTarget?>(null) }
-    var showMonthlyDayPicker by remember { mutableStateOf(false) }
-    var monthlyDayDraft by remember { mutableStateOf(PesaTimeConfiguration.monthlySummaryDayOfMonth) }
 
     // Day picker dialog
     if (showDayPicker) {
@@ -211,140 +191,16 @@ fun SettingsScreen(
         }
     }
 
-    // Notification time picker dialog
-    if (timePickerTarget != null) {
-        val initialHour = when (timePickerTarget) {
-            NotificationTimeTarget.DAILY -> PesaTimeConfiguration.dailyDigestHour
-            NotificationTimeTarget.MONTHLY -> PesaTimeConfiguration.monthlySummaryHour
-            NotificationTimeTarget.UPCOMING -> PesaTimeConfiguration.upcomingReminderHour
-            else -> {
-                0
-            }
-        }
-        val initialMinute = when (timePickerTarget) {
-            NotificationTimeTarget.DAILY -> PesaTimeConfiguration.dailyDigestMinute
-            NotificationTimeTarget.MONTHLY -> PesaTimeConfiguration.monthlySummaryMinute
-            NotificationTimeTarget.UPCOMING -> PesaTimeConfiguration.upcomingReminderMinute
-            null -> 0
-        }
-        val timePickerState = rememberTimePickerState(
-            initialHour = initialHour,
-            initialMinute = initialMinute,
-            is24Hour = is24Hour  // Respect the user's time format preference
-        )
-        PesaDialog(onDismissRequest = { timePickerTarget = null }) {
-            TimePicker(state = timePickerState)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = { timePickerTarget = null }) { Text("Cancel") }
-                TextButton(
-                    onClick = {
-                        when (timePickerTarget) {
-                            NotificationTimeTarget.DAILY -> settingsViewModel.updateReminderTime(
-                                timePickerState.hour,
-                                timePickerState.minute
-                            )
-
-                            NotificationTimeTarget.MONTHLY -> settingsViewModel.updateMonthlySummarySchedule(
-                                dayOfMonth = PesaTimeConfiguration.monthlySummaryDayOfMonth,
-                                hour = timePickerState.hour,
-                                minute = timePickerState.minute
-                            )
-
-                            NotificationTimeTarget.UPCOMING -> settingsViewModel.updateUpcomingReminderTime(
-                                timePickerState.hour,
-                                timePickerState.minute
-                            )
-
-                            null -> Unit
-                        }
-                        timePickerTarget = null
-                    }
-                ) { Text("Confirm") }
-            }
-        }
-    }
-
-    if (showMonthlyDayPicker) {
-        PesaDialog(onDismissRequest = { showMonthlyDayPicker = false }) {
-            Text(
-                "Monthly Summary Day",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "Choose which day of month to send your summary.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 280.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items((1..28).toList()) { day ->
-                    val selected = day == monthlyDayDraft
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                else Color.Transparent
-                            )
-                            .clickable { monthlyDayDraft = day }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Day $day",
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                        )
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = { showMonthlyDayPicker = false }) { Text("Cancel") }
-                TextButton(onClick = {
-                    settingsViewModel.updateMonthlySummarySchedule(
-                        dayOfMonth = monthlyDayDraft,
-                        hour = PesaTimeConfiguration.monthlySummaryHour,
-                        minute = PesaTimeConfiguration.monthlySummaryMinute
-                    )
-                    showMonthlyDayPicker = false
-                }) { Text("Confirm") }
-            }
-        }
-    }
+    // Time picker dialog and reminder-time preview moved to NotificationsSettingsScreen.
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 115.dp,
-            bottom = 120.dp
-        ),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Categories
         item {
-            SettingsSection(title = "Categories") {
+            SectionCard(title = "Categories") {
                 SettingsActionItem(
                     label = "Manage Categories",
                     subtitle = "Add or update categories",
@@ -360,7 +216,7 @@ fun SettingsScreen(
 
         // Appearance
         item {
-            SettingsSection(title = "Appearance") {
+            SectionCard(title = "Appearance") {
                 SettingsToggleItem(
                     label = "App Theme",
                     subtitle = "Switch between Light & Dark Modes.",
@@ -398,7 +254,7 @@ fun SettingsScreen(
 
         // Security
         item {
-            SettingsSection(title = "Security") {
+            SectionCard(title = "Security") {
                 SettingsToggleItem(
                     label = "App Lock",
                     subtitle = "Secure your financial data with biometrics or device PIN.",
@@ -429,186 +285,40 @@ fun SettingsScreen(
 
         // Notifications
         item {
-            SettingsSection("Notifications") {
-                NotificationStreamCard {
-                    SettingsToggleItem(
-                        label = "Daily Payment Digest",
-                        subtitle = "Get a morning summary of upcoming bills and dues.",
-                        icon = Icons.Rounded.NotificationsActive,
-                        checked = isDailyDigestOn,
-                        onCheckedChange = { enable ->
-                            PesaActions.playClick(haptic)
-                            settingsViewModel.setDailyDigestEnabled(enable)
-                            if (enable) {
-                                Toast.makeText(
-                                    context,
-                                    "Daily digest set for ${notificationSchedule.dailyTimeText}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    )
-                    SettingsActionItem(
-                        label = "Digest Time",
-                        subtitle = "Daily at ${notificationSchedule.dailyTimeText}",
-                        icon = Icons.Rounded.Schedule,
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            timePickerTarget = NotificationTimeTarget.DAILY
-                        },
-                        isExpanded = false
-                    )
-                }
-                NotificationStreamCard {
-                    SettingsToggleItem(
-                        label = "Monthly Summary",
-                        subtitle = "Get a recap on your selected date and time.",
-                        icon = Icons.Rounded.NotificationsActive,
-                        checked = isMonthlySummaryOn,
-                        onCheckedChange = {
-                            PesaActions.playClick(haptic)
-                            settingsViewModel.setMonthlySummaryEnabled(it)
-                        }
-                    )
-                    SettingsActionItem(
-                        label = "Summary Date",
-                        subtitle = "Day ${notificationSchedule.monthlyDayOfMonth} of each month",
-                        icon = Icons.Rounded.CalendarViewWeek,
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            monthlyDayDraft = notificationSchedule.monthlyDayOfMonth
-                            showMonthlyDayPicker = true
-                        },
-                        isExpanded = false
-                    )
-                    SettingsActionItem(
-                        label = "Summary Time",
-                        subtitle = "At ${notificationSchedule.monthlyTimeText}",
-                        icon = Icons.Rounded.Schedule,
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            timePickerTarget = NotificationTimeTarget.MONTHLY
-                        },
-                        isExpanded = false
-                    )
-                }
-                NotificationStreamCard {
-                    SettingsToggleItem(
-                        label = "Upcoming Reminders",
-                        subtitle = "Get alerts for upcoming and overdue commitments.",
-                        icon = Icons.Rounded.NotificationsActive,
-                        checked = isUpcomingReminderOn,
-                        onCheckedChange = {
-                            PesaActions.playClick(haptic)
-                            settingsViewModel.setUpcomingReminderEnabled(it)
-                        }
-                    )
-                    SettingsActionItem(
-                        label = "Reminder Time",
-                        subtitle = "Daily at ${notificationSchedule.upcomingTimeText}",
-                        icon = Icons.Rounded.Schedule,
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            timePickerTarget = NotificationTimeTarget.UPCOMING
-                        },
-                        isExpanded = false
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "Diagnostics",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "Last refresh: ${notificationDiagnostics.lastRefreshedAt}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "Permission: ${if (notificationDiagnostics.permissionGranted) "Granted" else "Denied"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (notificationDiagnostics.permissionGranted)
-                            MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.error
-                    )
-                    notificationDiagnostics.streams.forEach { stream ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    "${stream.label} • ${if (stream.enabled) "Enabled" else "Disabled"}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Work: ${stream.workState}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Next: ${stream.nextRunAt} (${stream.nextRunIn})",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Last attempt: ${stream.lastAttemptAt}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Last success: ${stream.lastSuccessAt}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Last error: ${stream.lastErrorAt}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Error detail: ${stream.lastErrorMessage}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Text(
-                                    "Channel: ${if (stream.channelHealthy) "Healthy" else "Missing"}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (stream.channelHealthy)
-                                        MaterialTheme.colorScheme.tertiary
-                                    else MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                    TextButton(
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            settingsViewModel.refreshNotificationDiagnostics()
-                        },
-                        contentPadding = PaddingValues(0.dp)
-                    ) { Text("Refresh diagnostics") }
-                    TextButton(
-                        onClick = {
-                            PesaActions.playClick(haptic)
-                            settingsViewModel.repairNotificationSchedules()
-                        },
-                        contentPadding = PaddingValues(0.dp)
-                    ) { Text("Repair schedules now") }
-                }
+            SectionCard("Notifications") {
+                SettingsActionItem(
+                    label = "Reminders & Alerts",
+                    subtitle = "Digests, upcoming/overdue payments, low balance & monthly targets",
+                    icon = Icons.Rounded.NotificationsActive,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        navController.navigate(AppDestinations.NotificationsSettings.route)
+                    },
+                    isExpanded = false
+                )
+            }
+        }
+
+        // Data
+        item {
+            SectionCard(title = "Data") {
+                SettingsActionItem(
+                    label = "Export Transactions",
+                    subtitle = "Export your history to CSV",
+                    icon = Icons.Rounded.FileDownload,
+                    onClick = {
+                        PesaActions.playClick(haptic)
+                        navController.navigate(AppDestinations.Export.route)
+                    },
+                    isExpanded = false
+                )
             }
         }
 
         // About
         item {
             var showSummary by remember { mutableStateOf(false) }
-            SettingsSection(title = "About") {
+            SectionCard(title = "About") {
                 SettingsActionItem(
                     label = "PesaPulse Version",
                     subtitle = appVersion,
@@ -673,27 +383,6 @@ fun FeatureSmallBadge(text: String, icon: ImageVector) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-    }
-}
-
-@Composable
-fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
-            letterSpacing = 1.5.sp
-        )
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column { content() }
-        }
     }
 }
 
@@ -772,25 +461,11 @@ fun SettingsActionItem(
                 fontWeight = FontWeight.Light
             )
         }
-
         Icon(
             imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.ChevronRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-fun NotificationStreamCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-    ) {
-        Column { content() }
     }
 }
 
@@ -811,3 +486,5 @@ fun SettingsIconBox(icon: ImageVector) {
         )
     }
 }
+
+

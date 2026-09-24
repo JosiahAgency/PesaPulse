@@ -46,7 +46,7 @@ interface TransactionDao {
             NOT (category = 'FULIZA' AND type = 'neutral' AND recipient = 'Fuliza Limit Update')
             AND (:query = ''
                  OR recipient LIKE '%' || :query || '%'
-                 OR id LIKE '%' || :query || '%'
+                 OR reference LIKE '%' || :query || '%'
                  OR (:amountQuery IS NOT NULL AND amount = :amountQuery)
                  OR category IN (:queryCategoryIds))
             AND (:category IS NULL OR category = :category)
@@ -82,7 +82,7 @@ interface TransactionDao {
         """
         SELECT COUNT(*) AS count,
                COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
-               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + transactionCost ELSE 0 END), 0) AS expenses,
+               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS expenses,
                COALESCE(SUM(transactionCost), 0) AS transactionCost
         FROM MpesaTransactions
         WHERE $HISTORY_FILTER
@@ -144,7 +144,10 @@ interface TransactionDao {
     suspend fun getLatestTransactionOnce(): MpesaTransactions?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertTransactions(transactions: List<MpesaTransactions>)
+    suspend fun insertTransactions(transactions: List<MpesaTransactions>): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertCorrection(transaction: MpesaTransactions)
 
     @Query("SELECT MAX(timestamp) FROM MpesaTransactions")
     suspend fun getLastTransactionTimestamp(): Long?
@@ -178,7 +181,7 @@ interface TransactionDao {
     /** Used by summary workers — pure suspend, no Flow overhead */
     @Query("""SELECT * FROM MpesaTransactions WHERE date >= :start AND date <= :end ORDER BY date DESC""")
     suspend fun getTransactionsForDateRange(start: String, end: String): List<MpesaTransactions>
-    @Query("SELECT balance FROM MpesaTransactions ORDER BY date DESC LIMIT 1")
+    @Query("SELECT balance FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestBalance(): Double?
     @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId = :txId LIMIT 1")
     suspend fun getReversalFor(txId: String): MpesaTransactions?

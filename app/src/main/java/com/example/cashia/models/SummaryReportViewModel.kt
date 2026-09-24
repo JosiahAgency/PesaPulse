@@ -12,15 +12,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 enum class ReportPeriod { DAY, MONTH }
-
 data class CategorySpend(val categoryId: String, val amount: Double)
+
 
 data class MerchantSpend(val recipient: String, val amount: Double, val count: Int)
 
@@ -138,12 +137,12 @@ class SummaryReportViewModel(
         var biggest: MpesaTransactions? = null
 
         for (tx in txs) {
-            cost += tx.transactionCost
+            cost += tx.knownFees
             when (tx.type) {
                 "income" -> income += tx.amount
 
                 "expense" -> {
-                    val total = tx.amount + tx.transactionCost
+                    val total = tx.amount + tx.knownFees
                     expenses += total
                     categoryTotals.merge(tx.category, total, Double::plus)
                     merchantTotals.merge(tx.recipient, total to 1) { (a, n), (b, m) ->
@@ -159,7 +158,7 @@ class SummaryReportViewModel(
         for (tx in prevTxs) {
             when (tx.type) {
                 "income" -> prevIncome += tx.amount
-                "expense" -> prevExpenses += tx.amount + tx.transactionCost
+                "expense" -> prevExpenses += tx.amount + tx.knownFees
             }
         }
 
@@ -198,10 +197,10 @@ class SummaryReportViewModel(
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                val p = if (period.equals("month", ignoreCase = true)) ReportPeriod.MONTH
+                require(period in setOf("day", "month")) { "Unsupported report period" }
+                val p = if (period == "month") ReportPeriod.MONTH
                 else ReportPeriod.DAY
-                val anchor = runCatching { LocalDate.parse(isoDate) }
-                    .getOrDefault(LocalDate.now())
+                val anchor = LocalDate.parse(isoDate)
                 return SummaryReportViewModel(dao, p, anchor) as T
             }
         }

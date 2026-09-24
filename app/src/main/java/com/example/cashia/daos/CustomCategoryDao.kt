@@ -25,4 +25,7 @@ interface CustomCategoryDao {
 
     @Query("DELETE FROM CustomCategories WHERE id = :id")
     suspend fun deleteCategoryById(id: String)
+
+    @Query("UPDATE CustomCategories SET parentId = NULL WHERE parentId = :parentId")
+    suspend fun detachChildren(parentId: String)
 }

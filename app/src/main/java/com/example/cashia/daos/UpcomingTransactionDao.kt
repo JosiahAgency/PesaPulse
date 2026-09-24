@@ -20,6 +20,15 @@ interface UpcomingTransactionDao {
     @Query("SELECT * FROM UpcomingTransactions WHERE status = 'PENDING' ORDER BY dueDate ASC")
     suspend fun getPendingOnce(): List<UpcomingTransaction>
 
+    @Query("SELECT * FROM UpcomingTransactions WHERE id = :id")
+    suspend fun getById(id: String): UpcomingTransaction?
+
+    @Query("SELECT EXISTS(SELECT 1 FROM UpcomingTransactions WHERE matchedTransactionId = :transactionId)")
+    suspend fun isTransactionMatched(transactionId: String): Boolean
+
+    @Query("UPDATE UpcomingTransactions SET status = :status, matchedTransactionId = :transactionId WHERE id = :id AND status = 'PENDING'")
+    suspend fun completePending(id: String, status: String, transactionId: String?): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(tx: UpcomingTransaction)
 
@@ -28,6 +37,9 @@ interface UpcomingTransactionDao {
 
     @Query("DELETE FROM UpcomingTransactions WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("UPDATE UpcomingTransactions SET categoryId = 'OTHER' WHERE categoryId = :categoryId")
+    suspend fun resetDeletedCategory(categoryId: String)
 
     @Query("UPDATE UpcomingTransactions SET status = :status, matchedTransactionId = :matchedId WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, matchedId: String? = null)

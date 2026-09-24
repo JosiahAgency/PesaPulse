@@ -8,7 +8,7 @@ import com.example.cashia.models.parseMpesaMessage
 import org.json.JSONObject
 import java.security.MessageDigest
 
-const val PARSER_VERSION = 2
+const val PARSER_VERSION = 3
 const val CONFIDENCE_FULL = 0.85f
 const val LOW_CONFIDENCE_THRESHOLD = 0.35f
 

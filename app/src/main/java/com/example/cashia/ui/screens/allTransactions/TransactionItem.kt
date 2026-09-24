@@ -91,8 +91,6 @@ fun TransactionItem(
         ReversalPairItem(
             reversalTx = tx,
             originalTx = originalTx,
-            allCategories = allCategories,
-            categoryViewModel = categoryViewModel,
             hapticFeedback = hapticFeedback,
         )
     } else {
@@ -116,8 +114,6 @@ fun TransactionItem(
 private fun ReversalPairItem(
     reversalTx: MpesaTransactions,
     originalTx: MpesaTransactions?,
-    allCategories: List<ResolvedCategory>,
-    categoryViewModel: CategoryViewModel,
     hapticFeedback: HapticFeedback,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -221,13 +217,13 @@ private fun ReversalPairItem(
                         color = accentColor.copy(alpha = 0.6f),
                         fontWeight = FontWeight.Bold
                     )
-                    InlineDetailRow("REF", reversalTx.id, monospace = true)
+                    InlineDetailRow("REF", reversalTx.reference ?: "Unknown", monospace = true)
                     InlineDetailRow(
                         "AMOUNT CREDITED",
                         PesaTimeConfiguration.formatCurrency(reversalTx.amount),
                         bold = true
                     )
-                    if (reversalTx.balance > 0) {
+                    if (reversalTx.balance != null) {
                         InlineDetailRow(
                             "BALANCE AFTER",
                             PesaTimeConfiguration.formatCurrency(reversalTx.balance),
@@ -243,7 +239,12 @@ private fun ReversalPairItem(
                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             fontWeight = FontWeight.Bold
                         )
-                        InlineDetailRow("REF", orig.id, monospace = true, strikethrough = true)
+                        InlineDetailRow(
+                            "REF",
+                            orig.reference ?: "Unknown",
+                            monospace = true,
+                            strikethrough = true
+                        )
                         InlineDetailRow(
                             "RECIPIENT",
                             orig.recipientName.ifBlank { orig.recipient },
@@ -271,17 +272,19 @@ private fun ReversalPairItem(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        QuickActionChip(
-                            label = "Reversal Ref",
-                            icon = Icons.Rounded.ContentCopy,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            PesaActions.copyToClipboard(
-                                context, clipboard, hapticFeedback,
-                                "Reversal Reference", reversalTx.id
-                            )
+                        reversalTx.reference?.let { reference ->
+                            QuickActionChip(
+                                label = "Reversal Ref",
+                                icon = Icons.Rounded.ContentCopy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                PesaActions.copyToClipboard(
+                                    context, clipboard, hapticFeedback,
+                                    "Reversal Reference", reference
+                                )
+                            }
                         }
-                        originalTx?.let {
+                        originalTx?.reference?.let { reference ->
                             QuickActionChip(
                                 label = "Original Ref",
                                 icon = Icons.Rounded.ContentCopy,
@@ -289,7 +292,7 @@ private fun ReversalPairItem(
                             ) {
                                 PesaActions.copyToClipboard(
                                     context, clipboard, hapticFeedback,
-                                    "Original Reference", it.id
+                                    "Original Reference", reference
                                 )
                             }
                         }
@@ -381,9 +384,11 @@ private fun NormalTransactionItem(
                     onTap = { expanded = !expanded },
                     onLongPress = {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        PesaActions.copyToClipboard(
-                            context, clipboard, hapticFeedback, "Reference", tx.id
-                        )
+                        tx.reference?.let { reference ->
+                            PesaActions.copyToClipboard(
+                                context, clipboard, hapticFeedback, "Reference", reference
+                            )
+                        } ?: run { expanded = true }
                     }
                 )
             },
@@ -532,22 +537,25 @@ private fun NormalTransactionItem(
                 ) {
                     HorizontalDivider(color = accentColor.copy(alpha = 0.1f))
 
-                    InlineDetailRow("REF", tx.id, monospace = true)
-                    if (!isIncome && tx.transactionCost > 0) {
+                    InlineDetailRow("REF", tx.reference ?: "Unknown", monospace = true)
+                    if (!isIncome) {
                         InlineDetailRow(
                             "FEES",
-                            PesaTimeConfiguration.formatCurrency(tx.transactionCost)
+                            tx.transactionCost?.let { PesaTimeConfiguration.formatCurrency(it) }
+                                ?: "Unknown"
                         )
                         InlineDetailRow(
                             "TOTAL",
-                            PesaTimeConfiguration.formatCurrency(tx.amount + tx.transactionCost),
+                            if (tx.transactionCost == null) "Unknown (fees missing)"
+                            else PesaTimeConfiguration.formatCurrency(tx.amount + tx.knownFees),
                             bold = true
                         )
                     }
-                    if (tx.balance > 0) {
+                    run {
                         InlineDetailRow(
                             "BALANCE AFTER",
-                            PesaTimeConfiguration.formatCurrency(tx.balance),
+                            tx.balance?.let { PesaTimeConfiguration.formatCurrency(it) }
+                                ?: "Unknown",
                             bold = true
                         )
                     }
@@ -562,7 +570,7 @@ private fun NormalTransactionItem(
                             color = colorScheme.tertiary.copy(alpha = 0.6f),
                             fontWeight = FontWeight.Bold
                         )
-                        InlineDetailRow("REF", rev.id, monospace = true)
+                        InlineDetailRow("REF", rev.reference ?: "Unknown", monospace = true)
                         InlineDetailRow(
                             "CREDITED BACK",
                             PesaTimeConfiguration.formatCurrency(rev.amount),
@@ -578,14 +586,16 @@ private fun NormalTransactionItem(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        QuickActionChip(
-                            label = "Reference",
-                            icon = Icons.Rounded.ContentCopy,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            PesaActions.copyToClipboard(
-                                context, clipboard, hapticFeedback, "Reference", tx.id
-                            )
+                        tx.reference?.let { reference ->
+                            QuickActionChip(
+                                label = "Reference",
+                                icon = Icons.Rounded.ContentCopy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                PesaActions.copyToClipboard(
+                                    context, clipboard, hapticFeedback, "Reference", reference
+                                )
+                            }
                         }
                         QuickActionChip(
                             label = "Amount",

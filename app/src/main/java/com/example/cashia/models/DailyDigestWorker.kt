@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.cashia.AppDatabase
 import com.example.cashia.ui.navigation.AppDestinations
+import com.example.cashia.utility.BalanceAlertService
 import com.example.cashia.utility.NotificationHelper
 import com.example.cashia.utility.NotificationRuntimeStore
 import com.example.cashia.utility.NotificationScheduler
@@ -26,22 +27,25 @@ class DailyDigestWorker(
     override suspend fun doWork(): Result {
         NotificationRuntimeStore.recordAttempt(context, NotificationStream.DAILY)
         try {
+            val db = AppDatabase.getDatabase(context)
+            // Daily safety-net: catches balance dips even on days with no new SMS sync.
+            BalanceAlertService.checkAndNotify(context, db)
+
             if (!PesaTimeConfiguration.isDailyDigestEnabled) return Result.success()
 
             val today = LocalDate.now().toString()
-            val db = AppDatabase.getDatabase(context)
             val txs = withContext(Dispatchers.IO) {
                 db.transactionDao().getTransactionsForDateRange(today, today)
             }
             val balance =
-                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() } ?: 0.0
+                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() }
 
             var income = 0.0
             var expense = 0.0
             txs.forEach {
                 when (it.type) {
                     "income" -> income += it.amount
-                    "expense" -> expense += it.amount + it.transactionCost
+                    "expense" -> expense += it.amount + it.knownFees
                 }
             }
             val net = income - expense
@@ -50,7 +54,10 @@ class DailyDigestWorker(
                 append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
                 append("💸 Spent:    ${NotificationHelper.ksh(expense)}\n")
                 append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
-                append("🏦 Balance:  ${NotificationHelper.ksh(balance)}")
+                append("🏦 Balance:  ${balance?.let { NotificationHelper.ksh(it) } ?: "Unknown"}")
+                if (txs.any { it.type == "expense" && it.transactionCost == null }) {
+                    append("\nTotals exclude unknown fees.")
+                }
                 if (txs.isNotEmpty()) append("\n📋 ${txs.size} transaction(s) today · tap for details")
                 else append("\n🌿 No M-Pesa activity today")
             }

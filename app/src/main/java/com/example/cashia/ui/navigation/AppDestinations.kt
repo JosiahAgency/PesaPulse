@@ -4,11 +4,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class AppDestinations(val route: String, val label: String, val icon: ImageVector) {
@@ -17,7 +19,12 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
     object Calendar : AppDestinations("calendar", "Calendar", Icons.Outlined.CalendarMonth)
     object Analytics : AppDestinations("analytics", "Insights", Icons.Outlined.BarChart)
     object Settings : AppDestinations("settings", "Settings", Icons.Outlined.Settings)
+    object NotificationsSettings : AppDestinations(
+        "notifications_settings", "Notifications", Icons.Rounded.NotificationsActive
+    )
+
     object Categories : AppDestinations("categories", "categories", Icons.Outlined.Category)
+    object Export : AppDestinations("export", "Export Transactions", Icons.Outlined.FileDownload)
 
     /** Full CRUD list of upcoming payments — moved out of History into its own screen. */
     object UpcomingPayments :

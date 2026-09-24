@@ -32,6 +32,9 @@ interface UnmatchedSmsDao {
     @Query("UPDATE UnmatchedSms SET status = :status WHERE id = :id")
     suspend fun setStatus(id: Long, status: SmsStatus)
 
+    @Query("UPDATE UnmatchedSms SET status = 'SAVED' WHERE id = :id AND status IN ('PENDING', 'SKIPPED')")
+    suspend fun claimForCorrection(id: Long): Int
+
     /** Ignore all messages sharing the same content hash — one tap clears duplicates. */
     @Query("UPDATE UnmatchedSms SET status = 'IGNORED' WHERE contentHash = :hash AND contentHash != ''")
     suspend fun ignoreAllByHash(hash: String)

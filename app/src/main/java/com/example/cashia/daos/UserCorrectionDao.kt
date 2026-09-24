@@ -29,6 +29,9 @@ interface UserCorrectionDao {
     @Query("DELETE FROM UserCorrections WHERE recipient = :recipient")
     suspend fun deleteCorrectionByRecipient(recipient: String)
 
+    @Query("DELETE FROM UserCorrections WHERE categoryId = :categoryId")
+    suspend fun deleteCorrectionsForCategory(categoryId: String)
+
     /** Wipe everything – useful for a "reset all corrections" settings action. */
     @Query("DELETE FROM UserCorrections")
     suspend fun clearAll()

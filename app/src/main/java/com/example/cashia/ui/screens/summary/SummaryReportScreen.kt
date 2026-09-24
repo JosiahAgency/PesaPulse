@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,15 +30,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.ReportPeriod
 import com.example.cashia.models.SummaryReportUiState
 import com.example.cashia.models.SummaryReportViewModel
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlin.math.abs
@@ -64,7 +64,7 @@ fun SummaryReportScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 115.dp, bottom = 120.dp),
+        contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item(key = "picker") {
@@ -77,6 +77,11 @@ fun SummaryReportScreen(
         }
 
         item(key = "totals") { TotalsCard(state) }
+        if (state.transactions.any { it.type == "expense" && it.transactionCost == null }) {
+            item(key = "unknown_fees") {
+                Text("Totals exclude unknown fees and may understate spending.", color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
 
         if (state.prevIncome != 0.0 || state.prevExpenses != 0.0) {
             item(key = "comparison") { ComparisonCard(state) }
@@ -173,7 +178,7 @@ private fun TotalsCard(state: SummaryReportUiState) {
             )
             Text(
                 text = "${state.txCount} transaction${if (state.txCount == 1) "" else "s"}" +
-                        " · ${PesaTimeConfiguration.formatCurrency(state.transactionCost)} in fees",
+                        " · ${PesaTimeConfiguration.formatCurrency(state.transactionCost)} in known fees",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
@@ -201,7 +206,12 @@ private fun TotalsCard(state: SummaryReportUiState) {
 }
 
 @Composable
-private fun AmountColumn(label: String, amount: Double, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+private fun AmountColumn(
+    label: String,
+    amount: Double,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,

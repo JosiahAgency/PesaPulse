@@ -2,6 +2,10 @@ package com.example.cashia.ui.screens.calendar
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,16 +51,16 @@ import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
-import com.example.cashia.ui.reusedElements.DataSyncBanner
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.reusedElements.SectionLabel
-import com.example.cashia.ui.reusedElements.standardScreenPadding
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.ui.theme.LocalNavigationDockHeight
 import com.example.cashia.ui.theme.primaryGradient
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
-import com.example.cashia.utility.dashboardDayBucket
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -69,6 +74,7 @@ fun CalendarScreen(
     upcomingViewModel: UpcomingViewModel,
     calendarViewModel: CalendarViewModel
 ) {
+    val today = remember { LocalDate.now() }
     val windowedTransactions by calendarViewModel.windowedTransactionsFlow.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
@@ -76,7 +82,6 @@ fun CalendarScreen(
     val upcomingAll by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
     val hapticFeedback = LocalHapticFeedback.current
     val calendarState by calendarViewModel.uiState.collectAsStateWithLifecycle()
-    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -99,15 +104,10 @@ fun CalendarScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = standardScreenPadding(),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            if (isSyncing) {
-                item(key = "calendar_sync_banner") {
-                    DataSyncBanner()
-                }
-            }
             item {
                 FinancialOverviewCards(
                     windowedTransactions, calendarState.selectedDate, calendarState.selectedFilter,
@@ -149,50 +149,44 @@ fun CalendarScreen(
                         key = { it.id }
                     ) { upcomingTx ->
                         CalendarUpcomingItem(
+                            title = "Scheduled Commitment",
                             dateStr = upcomingTx.dueDate
                         )
                     }
                 }
-                calendarState.dayGroups.forEach { dayGroup ->
-                    item(key = "calendar_day_header_${dayGroup.date}") {
-                        SectionLabel(dashboardDayBucket(dayGroup.date))
-                    }
-                    items(dayGroup.transactions, key = { it.id }) { tx ->
-                        TransactionItem(
-                            tx,
-                            allCategories,
-                            categoryViewModel,
-                            upcomingViewModel,
-                            hapticFeedback,
-                            reversalIndex
-                        )
-                    }
+                items(calendarState.filteredTransactions, key = { it.id }) { tx ->
+                    TransactionItem(
+                        tx,
+                        allCategories,
+                        categoryViewModel,
+                        upcomingViewModel,
+                        hapticFeedback,
+                        reversalIndex
+                    )
                 }
             }
         }
 
-//        val showFab = YearMonth.from(calendarState.selectedDate) != YearMonth.from(today) ||
-//                !calendarState.filterByDay
-//
-//        AnimatedVisibility(
-//            visible = showFab,
-//            enter = fadeIn(tween(200)),
-//            exit = fadeOut(tween(150)),
-//            modifier = Modifier
-//                .align(Alignment.BottomCenter)
-//                .fillMaxWidth()
-//                .padding(horizontal = 24.dp)
-//                .navigationBarsPadding()
-//                .padding(bottom = 98.dp)
-//        ) {
-//            HarmonizedActionFab(
-//                onClick = calendarViewModel::resetToToday,
-//                icon = Icons.Default.Today,
-//                text = "Today",
-//                contentDescription = "Today",
-//                fullWidth = true
-//            )
-//        }
+        val showFab = calendarState.selectedDate != today || !calendarState.filterByDay
+        AnimatedVisibility(
+            visible = showFab,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding()
+                .padding(bottom = LocalNavigationDockHeight.current)
+        ) {
+            HarmonizedActionFab(
+                onClick = calendarViewModel::resetToToday,
+                icon = Icons.Default.Today,
+                text = "Today",
+                contentDescription = "Today",
+                fullWidth = true
+            )
+        }
     }
 }
 
@@ -286,7 +280,7 @@ private fun ListHeader(
 }
 
 @Composable
-private fun CalendarUpcomingItem(dateStr: String) {
+private fun CalendarUpcomingItem(title: String, dateStr: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -311,7 +305,7 @@ private fun CalendarUpcomingItem(dateStr: String) {
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(
-                "Scheduled Commitment",
+                title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold
             )

@@ -1,6 +1,5 @@
 package com.example.cashia.ui.reusedElements
 
-import android.app.DatePickerDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -38,7 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,28 +61,20 @@ fun EnhancedSearchBar(
     onCategoryPick: (String?) -> Unit,
     onDateRange: (LocalDate?, LocalDate?) -> Unit,
 ) {
-    val context = LocalContext.current
     var showFilterPanel by remember { mutableStateOf(false) }
+    var showDateRangeDialog by remember { mutableStateOf(false) }
     val hasActiveFilter = selectedCategory != null || dateRangeStart != null
 
-    fun launchDateRangePicker() {
-        val start = dateRangeStart ?: LocalDate.now().minusMonths(1)
-        val end = dateRangeEnd ?: LocalDate.now()
-        // Show start picker → on pick show end picker
-        DatePickerDialog(
-            context,
-            { _, y, m, d ->
-                val s = LocalDate.of(y, m + 1, d)
-                DatePickerDialog(
-                    context,
-                    { _, y2, m2, d2 ->
-                        onDateRange(s, LocalDate.of(y2, m2 + 1, d2))
-                    },
-                    end.year, end.monthValue - 1, end.dayOfMonth
-                ).show()
-            },
-            start.year, start.monthValue - 1, start.dayOfMonth
-        ).show()
+    if (showDateRangeDialog) {
+        DateRangePickerDialog(
+            initialStart = dateRangeStart ?: LocalDate.now().minusMonths(1),
+            initialEnd = dateRangeEnd ?: LocalDate.now(),
+            onDismiss = { showDateRangeDialog = false },
+            onConfirm = { start, end ->
+                onDateRange(start, end)
+                showDateRangeDialog = false
+            }
+        )
     }
 
     Column {
@@ -280,7 +270,7 @@ fun EnhancedSearchBar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { launchDateRangePicker() }
+                            .clickable { showDateRangeDialog = true }
                             .padding(horizontal = 8.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)

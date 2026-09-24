@@ -39,6 +39,8 @@ data class DashboardState(
     val periodLabel: String = "",
     val dateRangeStart: LocalDate? = null,
     val dateRangeEnd: LocalDate? = null,
+    /** False until the first Room emission arrives; distinguishes "loading" from "loaded but empty". */
+    val hasLoaded: Boolean = false,
 )
 
 /** "Pace this month" against the user's saved monthly target for the current month. */
@@ -82,22 +84,24 @@ class DashboardViewModel(
 
     private val _monthPaceRefresh = MutableStateFlow(0)
 
-    val previousMonthSpend: StateFlow<Double> = _monthPaceRefresh
-        .flatMapLatest {
-            val previousMonth = YearMonth.now().minusMonths(1)
-            dao.getTransactionsInRange(
-                previousMonth.atDay(1).toString(),
-                previousMonth.atEndOfMonth().toString()
-            )
-        }
-        .map { txs ->
-            txs.filter { it.type == "expense" && it.reversedTxId == null }
-                .sumOf { it.amount + it.transactionCost }
-        }
-        .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+//    val previousMonthSpend: StateFlow<Double> = _monthPaceRefresh
+//        .flatMapLatest {
+//            val previousMonth = YearMonth.now().minusMonths(1)
+//            dao.getTransactionsInRange(
+//                previousMonth.atDay(1).toString(),
+//                previousMonth.atEndOfMonth().toString()
+//            )
+//        }
+//        .map { txs ->
+//            txs.filter { it.type == "expense" && it.reversedTxId == null }
+//                .sumOf { it.amount + it.knownFees }
+//        }
+//        .flowOn(Dispatchers.Default)
+//        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
-    val monthPace: StateFlow<MonthPaceState> = _monthPaceRefresh
+    val monthPace: StateFlow<MonthPaceState> = combine(
+        _monthPaceRefresh, PesaTimeConfiguration.changes
+    ) { refresh, _ -> refresh }
         .flatMapLatest {
             val today = LocalDate.now()
             val monthStart = today.with(TemporalAdjusters.firstDayOfMonth())
@@ -105,7 +109,7 @@ class DashboardViewModel(
             dao.getTransactionsInRange(monthStart.toString(), monthEnd.toString()).map { txs ->
                 val totalSpend = txs
                     .filter { it.type == "expense" && it.reversedTxId == null }
-                    .sumOf { it.amount + it.transactionCost }
+                    .sumOf { it.amount + it.knownFees }
                 val target = PesaTimeConfiguration.getMonthlySpendingTarget(YearMonth.from(today))
                 if (target == null || target <= 0.0) {
                     MonthPaceState(hasTarget = false, spentAmount = totalSpend)
@@ -149,7 +153,7 @@ class DashboardViewModel(
                 for (tx in txs) {
                     when (tx.type) {
                         "income" -> income += tx.amount
-                        "expense" -> expenses += (tx.amount + tx.transactionCost)
+                        "expense" -> expenses += (tx.amount + tx.knownFees)
                     }
                 }
 
@@ -161,6 +165,7 @@ class DashboardViewModel(
                     periodLabel = label,
                     dateRangeStart = start,
                     dateRangeEnd = end,
+                    hasLoaded = true,
                 )
             }
         }
@@ -185,26 +190,26 @@ class DashboardViewModel(
         _isListExpanded.value = !_isListExpanded.value
     }
 
-    fun hasCurrentMonthTarget(): Boolean {
-        return PesaTimeConfiguration.hasMonthlySpendingTarget(YearMonth.now())
-    }
+//    fun hasCurrentMonthTarget(): Boolean {
+//        return PesaTimeConfiguration.hasMonthlySpendingTarget(YearMonth.now())
+//    }
+//
+//    fun refreshMonthlyContext() {
+//        _monthPaceRefresh.value += 1
+//    }
 
-    fun refreshMonthlyContext() {
-        _monthPaceRefresh.value += 1
-    }
-
-    fun saveCurrentMonthTarget(amount: Double) {
-        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
-        refreshMonthlyContext()
-    }
-
-    fun useLastMonthSpendAsCurrentTarget(): Boolean {
-        val amount = previousMonthSpend.value
-        if (amount <= 0.0) return false
-        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
-        refreshMonthlyContext()
-        return true
-    }
+//    fun saveCurrentMonthTarget(amount: Double) {
+//        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
+//        refreshMonthlyContext()
+//    }
+//
+//    fun useLastMonthSpendAsCurrentTarget(): Boolean {
+//        val amount = previousMonthSpend.value
+//        if (amount <= 0.0) return false
+//        PesaTimeConfiguration.saveMonthlySpendingTarget(YearMonth.now(), amount)
+//        refreshMonthlyContext()
+//        return true
+//    }
 
     private fun computeRange(
         date: LocalDate,

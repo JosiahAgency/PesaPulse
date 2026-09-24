@@ -34,7 +34,7 @@ import com.example.cashia.utility.PesaTimeConfiguration
 
 @Composable
 fun BalanceHeroCard(
-    balance: Double,
+    balance: Double?,
     latestBalanceDate: String,
     isVisible: Boolean,
     onToggleVisibility: () -> Unit,
@@ -61,7 +61,7 @@ fun BalanceHeroCard(
                 ) { visible ->
                     Text(
                         text = if (visible)
-                            PesaTimeConfiguration.formatCurrency(balance)
+                            balance?.let { PesaTimeConfiguration.formatCurrency(it) } ?: "Unknown"
                         else
                             "••••••",
                         style = MaterialTheme.typography.displaySmall.copy(
@@ -82,6 +82,7 @@ fun BalanceHeroCard(
             }
             Spacer(Modifier.height(2.dp))
             Subtitles("Latest Updated: $latestBalanceDate")
+            Subtitles("Spending totals include known fees only.")
             Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),

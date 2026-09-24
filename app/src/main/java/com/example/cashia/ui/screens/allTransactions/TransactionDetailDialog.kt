@@ -147,25 +147,28 @@ fun TransactionDetailDialog(
                     Spacer(Modifier.height(14.dp))
                     HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.07f))
                     Spacer(Modifier.height(12.dp))
-                    InlineDetailRow("Reference", tx.id, monospace = true)
+                    InlineDetailRow("Reference", tx.reference ?: "Unknown", monospace = true)
                     Spacer(Modifier.height(6.dp))
-                    if (isExpense && tx.transactionCost > 0) {
+                    if (isExpense) {
                         InlineDetailRow(
                             "Transaction Fee",
-                            PesaTimeConfiguration.formatCurrency(tx.transactionCost)
+                            tx.transactionCost?.let { PesaTimeConfiguration.formatCurrency(it) }
+                                ?: "Unknown"
                         )
                         Spacer(Modifier.height(6.dp))
                         InlineDetailRow(
                             "Total Deducted",
-                            PesaTimeConfiguration.formatCurrency(tx.amount + tx.transactionCost),
+                            if (tx.transactionCost == null) "Unknown (fees missing)"
+                            else PesaTimeConfiguration.formatCurrency(tx.amount + tx.knownFees),
                             bold = true
                         )
                     }
                     Spacer(Modifier.height(6.dp))
-                    if (tx.balance > 0) {
+                    run {
                         InlineDetailRow(
                             "Balance After",
-                            PesaTimeConfiguration.formatCurrency(tx.balance),
+                            tx.balance?.let { PesaTimeConfiguration.formatCurrency(it) }
+                                ?: "Unknown",
                             bold = true
                         )
                     }
@@ -181,18 +184,20 @@ fun TransactionDetailDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        QuickActionChip(
-                            label = "Reference",
-                            icon = Icons.Rounded.ContentCopy,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            PesaActions.copyToClipboard(
-                                context,
-                                clipboard,
-                                hapticFeedback,
-                                "Reference",
-                                tx.id
-                            )
+                        tx.reference?.let { reference ->
+                            QuickActionChip(
+                                label = "Reference",
+                                icon = Icons.Rounded.ContentCopy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                PesaActions.copyToClipboard(
+                                    context,
+                                    clipboard,
+                                    hapticFeedback,
+                                    "Reference",
+                                    reference
+                                )
+                            }
                         }
 
                         tx.recipientPhone?.takeIf { !it.contains("*") }?.let { phone ->

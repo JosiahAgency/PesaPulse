@@ -2,7 +2,6 @@ package com.example.cashia.ui.screens.allTransactions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +17,7 @@ import com.example.cashia.models.CategoryViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UnmatchedSms
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
+import com.example.cashia.ui.theme.screenContentPadding
 
 /**
  * Full list of unmatched SMS for review — moved out of History (which now only shows a
@@ -38,7 +38,7 @@ fun UnmatchedReviewScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 115.dp, bottom = 32.dp),
+            contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (allUnmatched.isEmpty()) {
@@ -67,9 +67,8 @@ fun UnmatchedReviewScreen(
             pendingCount = pendingCount,
             allCategories = allCategories,
             categoryViewModel = categoryViewModel,
-            onSave = { type, category ->
-                viewModel.saveTransactionFromSms(target, type, category)
-                modalTarget = null
+            onSave = { correction ->
+                viewModel.saveTransactionFromSms(target, correction)
             },
             onSkip = {
                 viewModel.markSkipped(target.id)

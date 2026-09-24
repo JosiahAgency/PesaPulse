@@ -12,10 +12,17 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.edit
 import com.example.cashia.ui.navigation.AppDestinations
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import java.time.DayOfWeek
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+data class MonthlyBudget(val month: YearMonth, val spendingCap: Double?, val savingsGoal: Double?)
 
 enum class TimeScope {
     DAY, WEEK, MONTH, CUSTOM, YEAR
@@ -48,6 +55,38 @@ object PesaActions {
 }
 
 object PesaTimeConfiguration {
+    private val _changes = MutableStateFlow(0L)
+    val changes = _changes.asStateFlow()
+    fun refreshCalendarContext() {
+        _changes.update { it + 1 }
+    }
+
+    fun <T> observe(read: () -> T) = changes.map { read() }.distinctUntilChanged()
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        reloadAppearance()
+        _changes.update { it + 1 }
+    }
+
+    fun getMonthlyBudget(month: YearMonth = YearMonth.now()) = MonthlyBudget(
+        month,
+        prefs.getString(monthlyTargetKey(month), null)?.toDoubleOrNull(),
+        prefs.getString("monthly_savings_$month", null)?.toDoubleOrNull()
+    )
+
+    fun saveMonthlyBudget(budget: MonthlyBudget) {
+        require(
+            listOfNotNull(
+                budget.spendingCap,
+                budget.savingsGoal
+            ).all { it.isFinite() && it > 0 }) {
+            "Targets must be finite amounts greater than zero."
+        }
+        prefs.edit {
+            putString(monthlyTargetKey(budget.month), budget.spendingCap?.toString())
+            putString("monthly_savings_${budget.month}", budget.savingsGoal?.toString())
+        }
+    }
+
     var use24HrsFormat by mutableStateOf(false)
     var datePattern: String = "dd MMM yyyy"
     var firstDayOfWeek by mutableStateOf(DayOfWeek.SUNDAY)
@@ -65,63 +104,71 @@ object PesaTimeConfiguration {
             prefs.edit { putInt("reminder_minute", v) }
         }
 
-    var dailyDigestHour: Int
-        get() = prefs.getInt("daily_digest_hour", reminderHour)
-        set(v) {
-            prefs.edit { putInt("daily_digest_hour", v) }
+    fun saveReminderTime(hour: Int, minute: Int) {
+        require(hour in 0..23 && minute in 0..59) { "Invalid reminder time." }
+        prefs.edit {
+            putInt("reminder_hour", hour)
+            putInt("reminder_minute", minute)
         }
-
-    var dailyDigestMinute: Int
-        get() = prefs.getInt("daily_digest_minute", reminderMinute)
-        set(v) {
-            prefs.edit { putInt("daily_digest_minute", v) }
-        }
-
-    fun saveDailyDigestTime(hour: Int, minute: Int) {
-        dailyDigestHour = hour
-        dailyDigestMinute = minute
     }
 
-    var monthlySummaryDayOfMonth: Int
-        get() = prefs.getInt("monthly_summary_day", 1).coerceIn(1, 28)
-        set(v) {
-            prefs.edit { putInt("monthly_summary_day", v.coerceIn(1, 28)) }
-        }
+//    var dailyDigestHour: Int
+//        get() = prefs.getInt("daily_digest_hour", reminderHour)
+//        set(v) {
+//            prefs.edit { putInt("daily_digest_hour", v) }
+//        }
+//
+//    var dailyDigestMinute: Int
+//        get() = prefs.getInt("daily_digest_minute", reminderMinute)
+//        set(v) {
+//            prefs.edit { putInt("daily_digest_minute", v) }
+//        }
 
-    var monthlySummaryHour: Int
-        get() = prefs.getInt("monthly_summary_hour", 9)
-        set(v) {
-            prefs.edit { putInt("monthly_summary_hour", v) }
-        }
+//    fun saveDailyDigestTime(hour: Int, minute: Int) {
+//        dailyDigestHour = hour
+//        dailyDigestMinute = minute
+//    }
 
-    var monthlySummaryMinute: Int
-        get() = prefs.getInt("monthly_summary_minute", 0)
-        set(v) {
-            prefs.edit { putInt("monthly_summary_minute", v) }
-        }
+//    var monthlySummaryDayOfMonth: Int
+//        get() = prefs.getInt("monthly_summary_day", 1).coerceIn(1, 28)
+//        set(v) {
+//            prefs.edit { putInt("monthly_summary_day", v.coerceIn(1, 28)) }
+//        }
+//
+//    var monthlySummaryHour: Int
+//        get() = prefs.getInt("monthly_summary_hour", 9)
+//        set(v) {
+//            prefs.edit { putInt("monthly_summary_hour", v) }
+//        }
+//
+//    var monthlySummaryMinute: Int
+//        get() = prefs.getInt("monthly_summary_minute", 0)
+//        set(v) {
+//            prefs.edit { putInt("monthly_summary_minute", v) }
+//        }
 
-    fun saveMonthlySummarySchedule(dayOfMonth: Int, hour: Int, minute: Int) {
-        monthlySummaryDayOfMonth = dayOfMonth
-        monthlySummaryHour = hour
-        monthlySummaryMinute = minute
-    }
+//    fun saveMonthlySummarySchedule(dayOfMonth: Int, hour: Int, minute: Int) {
+//        monthlySummaryDayOfMonth = dayOfMonth
+//        monthlySummaryHour = hour
+//        monthlySummaryMinute = minute
+//    }
 
-    var upcomingReminderHour: Int
-        get() = prefs.getInt("upcoming_reminder_hour", (reminderHour - 1).coerceAtLeast(0))
-        set(v) {
-            prefs.edit { putInt("upcoming_reminder_hour", v) }
-        }
+//    var upcomingReminderHour: Int
+//        get() = prefs.getInt("upcoming_reminder_hour", (reminderHour - 1).coerceAtLeast(0))
+//        set(v) {
+//            prefs.edit { putInt("upcoming_reminder_hour", v) }
+//        }
+//
+//    var upcomingReminderMinute: Int
+//        get() = prefs.getInt("upcoming_reminder_minute", reminderMinute)
+//        set(v) {
+//            prefs.edit { putInt("upcoming_reminder_minute", v) }
+//        }
 
-    var upcomingReminderMinute: Int
-        get() = prefs.getInt("upcoming_reminder_minute", reminderMinute)
-        set(v) {
-            prefs.edit { putInt("upcoming_reminder_minute", v) }
-        }
-
-    fun saveUpcomingReminderTime(hour: Int, minute: Int) {
-        upcomingReminderHour = hour
-        upcomingReminderMinute = minute
-    }
+//    fun saveUpcomingReminderTime(hour: Int, minute: Int) {
+//        upcomingReminderHour = hour
+//        upcomingReminderMinute = minute
+//    }
 
     var isDailyDigestEnabled: Boolean
         get() = prefs.getBoolean("daily_digest_enabled", true)
@@ -159,22 +206,89 @@ object PesaTimeConfiguration {
             prefs.edit { putInt("upcoming_reminder_days", v) }
         }
 
+    fun saveUpcomingReminderDays(days: Int) {
+        require(days in 0..30) { "Reminder window must be between 0 and 30 days." }
+        upcomingReminderDaysBefore = days
+    }
+
 
     private fun monthlyTargetKey(month: YearMonth): String {
         return "$MONTHLY_TARGET_KEY_PREFIX${month}"
     }
 
     fun getMonthlySpendingTarget(month: YearMonth): Double? {
-        return prefs.getString(monthlyTargetKey(month), null)?.toDoubleOrNull()
+        return getMonthlyBudget(month).spendingCap
     }
 
-    fun hasMonthlySpendingTarget(month: YearMonth): Boolean {
-        return getMonthlySpendingTarget(month) != null
-    }
+//    fun hasMonthlySpendingTarget(month: YearMonth): Boolean {
+//        return getMonthlySpendingTarget(month) != null
+//    }
 
     fun saveMonthlySpendingTarget(month: YearMonth, amount: Double) {
-        require(amount > 0.0) { "Monthly spending target must be greater than zero." }
-        prefs.edit { putString(monthlyTargetKey(month), amount.toString()) }
+        saveMonthlyBudget(getMonthlyBudget(month).copy(spendingCap = amount))
+    }
+
+    // ── Low balance alerts ───────────────────────────────────────────────────
+
+    var isLowBalanceAlertEnabled: Boolean
+        get() = prefs.getBoolean("low_balance_alert_enabled", true)
+        set(v) {
+            prefs.edit { putBoolean("low_balance_alert_enabled", v) }
+        }
+
+    var lowBalanceThreshold: Double
+        get() = prefs.getFloat("low_balance_threshold", 50f).toDouble()
+        set(v) {
+            prefs.edit { putFloat("low_balance_threshold", v.toFloat()) }
+        }
+
+    fun saveLowBalanceAlert(enabled: Boolean) {
+        isLowBalanceAlertEnabled = enabled
+    }
+
+    fun saveLowBalanceThreshold(amount: Double) {
+        lowBalanceThreshold = amount
+    }
+
+    /** ISO date (yyyy-MM-dd) of the last posted low-balance alert; avoids re-notifying every sync while balance stays low. */
+    var lastLowBalanceAlertDate: String?
+        get() = prefs.getString("last_low_balance_alert_date", null)
+        set(v) {
+            prefs.edit { putString("last_low_balance_alert_date", v) }
+        }
+
+    // ── Monthly target (spending cap / savings goal) ────────────────────────
+
+    var isMonthlyTargetReminderEnabled: Boolean
+        get() = prefs.getBoolean("monthly_target_reminder_enabled", true)
+        set(v) {
+            prefs.edit { putBoolean("monthly_target_reminder_enabled", v) }
+        }
+
+    /** KSh; null/<=0 means "not set". */
+    var monthlySpendingCap: Double?
+        get() = getMonthlyBudget().spendingCap
+        set(v) {
+            saveMonthlyBudget(getMonthlyBudget().copy(spendingCap = v))
+        }
+
+    /** KSh; null/<=0 means "not set". */
+    var monthlySavingsGoal: Double?
+        get() = getMonthlyBudget().savingsGoal
+        set(v) {
+            saveMonthlyBudget(getMonthlyBudget().copy(savingsGoal = v))
+        }
+
+    /** True once the user has configured either a spending cap or a savings goal. */
+    val hasMonthlyTargetSet: Boolean
+        get() = monthlySpendingCap != null || monthlySavingsGoal != null
+
+    fun saveMonthlyTargetReminder(enabled: Boolean) {
+        isMonthlyTargetReminderEnabled = enabled
+    }
+
+    fun saveMonthlyTargets(spendingCap: Double?, savingsGoal: Double?) {
+        saveMonthlyBudget(MonthlyBudget(YearMonth.now(), spendingCap, savingsGoal))
     }
 
     private const val PREFS_NAME = "pesa_prefs"
@@ -196,12 +310,41 @@ object PesaTimeConfiguration {
     private lateinit var prefs: SharedPreferences
 
     fun initialize(context: Context) {
+        if (::prefs.isInitialized) prefs.unregisterOnSharedPreferenceChangeListener(
+            preferenceListener
+        )
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        reloadAppearance()
+        if (!prefs.getBoolean("monthly_budget_migrated", false)) {
+            val month = YearMonth.now()
+            val cap = prefs.getFloat("monthly_spending_cap", -1f).toDouble()
+                .takeIf { it.isFinite() && it > 0 }
+            val goal = prefs.getFloat("monthly_savings_goal", -1f).toDouble()
+                .takeIf { it.isFinite() && it > 0 }
+            prefs.edit {
+                if (!prefs.contains(monthlyTargetKey(month)) && cap != null) {
+                    putString(monthlyTargetKey(month), cap.toString())
+                }
+                if (!prefs.contains("monthly_savings_$month") && goal != null) {
+                    putString("monthly_savings_$month", goal.toString())
+                }
+                putBoolean("monthly_budget_migrated", true)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
+        _changes.update { it + 1 }
+        migrateNotificationPreferences()
+    }
+
+    private fun reloadAppearance() {
         use24HrsFormat = prefs.getBoolean("use_24h", false)
         isBiometricEnabled = prefs.getBoolean("biometric_on", false)
         isDarkTheme = prefs.getBoolean("dark_theme", true)
         val dayName = prefs.getString("start_day", DayOfWeek.SUNDAY.name)
         firstDayOfWeek = DayOfWeek.valueOf(dayName ?: DayOfWeek.SUNDAY.name)
+    }
+
+    private fun migrateNotificationPreferences() {
         // Notification prefs (daily digest, reminder time) are read lazily by their
         // getters — do NOT write them back here: an earlier version round-tripped
         // them through setters with mismatched keys, force-disabling the digest and
@@ -249,6 +392,8 @@ object PesaTimeConfiguration {
         AppDestinations.SummaryReport.route -> "Daily & monthly reports"
         AppDestinations.UpcomingPayments.route -> "Manage your scheduled bills and income"
         AppDestinations.UnmatchedReview.route -> "Confirm or ignore unrecognised messages"
+        AppDestinations.NotificationsSettings.route -> "Reminders, alerts & monthly targets"
+        AppDestinations.Export.route -> "Choose columns & a period to export"
         else -> ""
     }
 
@@ -262,6 +407,8 @@ object PesaTimeConfiguration {
         AppDestinations.SummaryReport.route -> "Summary"
         AppDestinations.UpcomingPayments.route -> "Upcoming Payments"
         AppDestinations.UnmatchedReview.route -> "Review Unmatched SMS"
+        AppDestinations.NotificationsSettings.route -> "Notifications"
+        AppDestinations.Export.route -> "Export Transactions"
         else -> "PesaPulse"
     }
 
