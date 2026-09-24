@@ -70,7 +70,7 @@ fun DashboardScreen(
             .toSortedMap(compareByDescending { it })
     }
 
-    // Mirrors ProjectionViewModel's dueSoon bucketing (pending, due within 8 days, not overdue).
+    // Pending payments due within 8 days, excluding overdue items.
     val dueSoon = remember(upcoming) {
         val today = LocalDate.now()
         val cutoff = today.plusDays(8)

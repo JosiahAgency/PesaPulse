@@ -28,7 +28,7 @@ data class CalendarUiState(
     val selectedFilter: TransactionType = TransactionType.ALL,
     val filteredTransactions: List<MpesaTransactions> = emptyList(),
     val dayGroups: List<DayGroup> = emptyList(),
-    val upcomingForDay: List<UpcomingTransaction> = emptyList() // Adjust type based on your Upcoming model
+    val upcomingForDay: List<UpcomingTransaction> = emptyList()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -118,12 +118,16 @@ class CalendarViewModel(
         _filterByDay.value = false
     }
 
+    fun resetToToday() {
+        _selectedDate.value = LocalDate.now()
+        _filterByDay.value = true
+    }
 
     // ── Factory ──────────────────────────────────────────────────────────────
     companion object {
         fun provideFactory(
             dao: TransactionDao,
-            upcomingFlow: StateFlow<List<UpcomingTransaction>> // Adjust type
+            upcomingFlow: StateFlow<List<UpcomingTransaction>>
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {

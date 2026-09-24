@@ -57,6 +57,7 @@ import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
+import com.example.cashia.ui.theme.LocalNavigationDockHeight
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
@@ -176,7 +177,7 @@ fun CalendarScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(bottom = 98.dp)
+                .padding(bottom = LocalNavigationDockHeight.current)
         ) {
             HarmonizedActionFab(
                 onClick = calendarViewModel::resetToToday,

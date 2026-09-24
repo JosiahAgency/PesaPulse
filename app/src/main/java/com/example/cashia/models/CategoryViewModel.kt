@@ -1,12 +1,15 @@
 package com.example.cashia.models
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,6 +20,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 data class CategoryManageState(
@@ -26,12 +30,14 @@ data class CategoryManageState(
     val draftLabel: String = "",
     val draftEmoji: String = "📦",
     val draftKeywords: String = "",
-    val error: String? = null
+    val error: String? = null,
+    val isSaving: Boolean = false
 )
 
-class CategoryViewModel(private val context: Context) : ViewModel() {
-
-    private val db = AppDatabase.getDatabase(context)
+class CategoryViewModel(
+    context: Context,
+    private val db: AppDatabase = AppDatabase.getDatabase(context)
+) : ViewModel() {
     private val categoryDao = db.customCategoryDao()
     private val txDao = db.transactionDao()
     private val overrideDao = db.systemCategoryOverrideDao()
@@ -100,10 +106,23 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
     var uiState by mutableStateOf(CategoryManageState())
         private set
 
+    var isProcessing by mutableStateOf(false)
+        private set
+    var operationMessage by mutableStateOf<String?>(null)
+        private set
+    var showDiscardConfirmation by mutableStateOf(false)
+        private set
+    private var initialDraft = CategoryManageState()
+
+    fun clearOperationMessage() {
+        operationMessage = null
+    }
+
     // ── Sheet open / close ────────────────────────────────────────────────
 
     fun openCreateSheet() {
         uiState = CategoryManageState(showCreateSheet = true)
+        initialDraft = uiState
     }
 
     fun openEditSheet(category: CustomCategory) {
@@ -114,6 +133,7 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
             draftEmoji = category.emoji,
             draftKeywords = category.keywords
         )
+        initialDraft = uiState
     }
 
     fun openEditSystemSheet(category: TransactionCategory) {
@@ -125,15 +145,34 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
             draftEmoji = existing?.emoji ?: category.emoji,
             draftKeywords = ""
         )
+        initialDraft = uiState
     }
 
     fun resetSystemCategory(category: TransactionCategory) {
-        viewModelScope.launch(Dispatchers.IO) {
-            overrideDao.deleteOverride(category.name)
+        runCategoryOperation("Could not restore category details. Please try again.") {
+            withContext(Dispatchers.IO) { overrideDao.deleteOverride(category.name) }
+            "Built-in category restored."
         }
     }
 
     fun closeSheet() {
+        if (uiState.isSaving) return
+        if (uiState.draftLabel != initialDraft.draftLabel ||
+            uiState.draftEmoji != initialDraft.draftEmoji ||
+            uiState.draftKeywords != initialDraft.draftKeywords
+        ) {
+            showDiscardConfirmation = true
+        } else {
+            discardDraft()
+        }
+    }
+
+    fun keepEditing() {
+        showDiscardConfirmation = false
+    }
+
+    fun discardDraft() {
+        showDiscardConfirmation = false
         uiState = CategoryManageState()
     }
 
@@ -164,68 +203,119 @@ class CategoryViewModel(private val context: Context) : ViewModel() {
 
     fun deleteResolvedCategory(cat: ResolvedCategory) {
         if (!cat.isSystem) {
-            viewModelScope.launch(Dispatchers.IO) {
-                txDao.resetDeletedCategory(cat.id)
-                categoryDao.deleteCategoryById(cat.id)
-            }
+            deleteCustomCategory(cat.id)
         }
     }
 
     fun saveCategory() {
-        val label = uiState.draftLabel.trim()
+        if (uiState.isSaving || isProcessing) return
+        val draft = uiState
+        val label = draft.draftLabel.trim()
         if (label.isBlank()) {
             uiState = uiState.copy(error = "Category name cannot be empty")
             return
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val systemCat = uiState.editingSystemCategory
-            if (systemCat != null) {
-                overrideDao.upsertOverride(
-                    SystemCategoryOverride(
-                        id = systemCat.name,
-                        label = label,
-                        emoji = uiState.draftEmoji.ifBlank { systemCat.emoji }
-                    )
-                )
-            } else {
-                val keywords = uiState.draftKeywords.trim()
-                val id = uiState.editingCategory?.id
-                    ?: "custom_${UUID.randomUUID().toString().replace("-", "").take(8)}"
-                val category = CustomCategory(
-                    id = id,
-                    label = label,
-                    emoji = uiState.draftEmoji.ifBlank { "📦" },
-                    keywords = keywords,
-                    createdAt = uiState.editingCategory?.createdAt ?: System.currentTimeMillis()
-                )
-                categoryDao.upsertCategory(category)
-                if (keywords.isNotBlank()) reclassifyWithCustomCategory(category)
+        uiState = draft.copy(isSaving = true, error = null)
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    db.withTransaction {
+                        val systemCat = draft.editingSystemCategory
+                        if (systemCat != null) {
+                            overrideDao.upsertOverride(
+                                SystemCategoryOverride(
+                                    id = systemCat.name,
+                                    label = label,
+                                    emoji = draft.draftEmoji.ifBlank { systemCat.emoji }
+                                )
+                            )
+                        } else {
+                            val keywords = draft.draftKeywords.split(",")
+                                .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                                .joinToString(", ")
+                            val category = CustomCategory(
+                                id = draft.editingCategory?.id
+                                    ?: "custom_${UUID.randomUUID().toString().replace("-", "").take(8)}",
+                                label = label,
+                                emoji = draft.draftEmoji.ifBlank { "📦" },
+                                keywords = keywords,
+                                parentId = draft.editingCategory?.parentId,
+                                createdAt = draft.editingCategory?.createdAt ?: System.currentTimeMillis()
+                            )
+                            categoryDao.upsertCategory(category)
+                            if (keywords.isNotBlank()) reclassifyWithCustomCategory(category)
+                        }
+                    }
+                }
+                uiState = CategoryManageState()
+                operationMessage = if (draft.editingCategory != null || draft.editingSystemCategory != null)
+                    "Category updated." else "Category created."
+            } catch (e: SQLiteException) {
+                Log.e("CategoryViewModel", "Could not save category", e)
+                uiState = draft.copy(error = "Could not save your category. Please try again.")
             }
-            uiState = CategoryManageState()
         }
     }
 
     fun deleteCategory(category: CustomCategory) {
-        viewModelScope.launch(Dispatchers.IO) {
-            txDao.resetDeletedCategory(category.id)
-            categoryDao.deleteCategoryById(category.id)
+        deleteCustomCategory(category.id)
+    }
+
+    private fun deleteCustomCategory(id: String) {
+        runCategoryOperation("Could not delete category. Please try again.") {
+            withContext(Dispatchers.IO) {
+                db.withTransaction {
+                    txDao.resetDeletedCategory(id)
+                    db.upcomingTransactionDao().resetDeletedCategory(id)
+                    correctionDao.deleteCorrectionsForCategory(id)
+                    categoryDao.detachChildren(id)
+                    categoryDao.deleteCategoryById(id)
+                }
+            }
+            "Category deleted. Its transactions are now in Other."
         }
     }
 
     // ── Reclassify ────────────────────────────────────────────────────────
 
     fun reclassifyAll() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val customs = categoryDao.getAllCustomCategoriesOnce()
-            val corrections = correctionDao.getAllCorrectionsOnce()
-                .associate { it.recipient to it.categoryId }
-            val uncategorized = txDao.getUncategorizedTransactions()
-            val updates = uncategorized.mapNotNull { tx ->
-                val guessed = guessCategory(tx.recipient, tx.type, customs, corrections)
-                if (guessed != TransactionCategory.OTHER.name) tx.id to guessed else null
+        runCategoryOperation("Could not organise payments. Please try again.") {
+            val count = withContext(Dispatchers.IO) {
+                db.withTransaction {
+                    val customs = categoryDao.getAllCustomCategoriesOnce()
+                    val corrections = correctionDao.getAllCorrectionsOnce()
+                        .associate { it.recipient to it.categoryId }
+                    val uncategorized = txDao.getUncategorizedTransactions()
+                    val updates = uncategorized.mapNotNull { tx ->
+                        val guessed = guessCategory(tx.recipient, tx.type, customs, corrections)
+                        if (guessed != TransactionCategory.OTHER.name) tx.id to guessed else null
+                    }
+                    updates.forEach { (id, cat) -> txDao.updateCategoryById(id, cat) }
+                    updates.size
+                }
             }
-            updates.forEach { (id, cat) -> txDao.updateCategoryById(id, cat) }
+            when (count) {
+                0 -> "Auto-sort complete: 0 transactions updated. No new matches found."
+                1 -> "Auto-sort complete: 1 transaction updated."
+                else -> "Auto-sort complete: $count transactions updated."
+            }
+        }
+    }
+
+    private fun runCategoryOperation(errorMessage: String, operation: suspend () -> String) {
+        if (isProcessing || uiState.isSaving) return
+        isProcessing = true
+        operationMessage = null
+        viewModelScope.launch {
+            try {
+                operationMessage = operation()
+            } catch (e: SQLiteException) {
+                Log.e("CategoryViewModel", errorMessage, e)
+                operationMessage = errorMessage
+            } finally {
+                isProcessing = false
+            }
         }
     }
 

@@ -1,35 +1,37 @@
 package com.example.cashia.ui.screens.category
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -40,10 +42,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cashia.models.CategoryManageState
 import com.example.cashia.utility.EmojiPicker
 import com.example.cashia.utility.PesaActions
-import com.example.cashia.models.CategoryManageState
-
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -56,149 +57,166 @@ fun CategoryEditorSheet(
     onDismiss: () -> Unit,
     haptic: HapticFeedback
 ) {
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
-    val isKeyboardVisible = WindowInsets.isImeVisible
-    val isEditing = uiState.editingCategory != null
-    val isSystemEdit = uiState.editingSystemCategory != null
+    val isSystem = uiState.editingSystemCategory != null
+    val isEditing = isSystem || uiState.editingCategory != null
+    var showEmojiPicker by rememberSaveable { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val keywords = uiState.draftKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
-    val colorScheme = MaterialTheme.colorScheme
-    val previewEmoji = uiState.draftEmoji.ifBlank { "📦" }
-
-    BackHandler(enabled = isKeyboardVisible) {
-        keyboardController?.hide()
-        focusManager.clearFocus()
-    }
+    BackHandler { onDismiss() }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .imePadding()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 36.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        Modifier.fillMaxWidth().fillMaxHeight(0.9f).imePadding().navigationBarsPadding()
     ) {
-        // ── Title row ─────────────────────────────────────────────────────
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = when {
-                    isSystemEdit -> "Edit Built-in Category"
-                    isEditing -> "Edit Category"
-                    else -> "New Category"
-                },
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Rounded.Close, null)
-            }
-        }
-
-        // ── Name field (hidden for system edits) ──────────────────────────
-        if (!isSystemEdit) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .background(
-                            colorScheme.primaryContainer.copy(alpha = 0.35f),
-                            RoundedCornerShape(16.dp)
-                        )
-                        .border(
-                            1.dp,
-                            colorScheme.primary.copy(alpha = 0.2f),
-                            RoundedCornerShape(16.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(previewEmoji, fontSize = 26.sp)
-                }
-                OutlinedTextField(
-                    value = uiState.draftLabel,
-                    onValueChange = onLabelChange,
-                    label = { Text("Category Name") },
-                    placeholder = { Text("e.g. Family Expenses") },
-                    isError = uiState.error != null,
-                    supportingText = uiState.error?.let {
-                        { Text(it, color = colorScheme.error) }
-                    },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Next
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f)
-                    )
-                )
-            }
-        }
-
-        // ── Keywords ───────────────────────────────────────────────────────
-        OutlinedTextField(
-            value = uiState.draftKeywords,
-            onValueChange = onKeywordsChange,
-            label = {
-                Text(if (isSystemEdit) "Extra Keywords (optional)" else "Auto-match Keywords (optional)")
-            },
-            placeholder = { Text("e.g. wife, mum, school, church") },
-            supportingText = {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    if (isSystemEdit)
-                        "Transactions whose recipient contains any of these words will be assigned here"
-                    else
-                        "Comma-separated — transactions matching any keyword are auto-assigned here",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    if (isEditing) "Make it yours" else "Create a category",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
                 )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2,
-            maxLines = 3,
-            shape = RoundedCornerShape(14.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = colorScheme.onSurface.copy(alpha = 0.15f)
+                Text(
+                    if (isSystem) "Personalise a built-in category" else "A little organisation goes a long way",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDismiss, enabled = !uiState.isSaving) {
+                Icon(Icons.Rounded.Close, "Close category editor")
+            }
+        }
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Surface(
+                onClick = { showEmojiPicker = !showEmojiPicker },
+                enabled = !uiState.isSaving,
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(uiState.draftEmoji.ifBlank { "📦" }, fontSize = 36.sp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            uiState.draftLabel.ifBlank { "Your category" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (showEmojiPicker) "Hide icon picker" else "Tap to choose an icon",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            AnimatedVisibility(showEmojiPicker && !uiState.isSaving) {
+                EmojiPicker(
+                    selected = uiState.draftEmoji,
+                    onSelect = { onEmojiChange(it); showEmojiPicker = false }
+                )
+            }
+            OutlinedTextField(
+                value = uiState.draftLabel,
+                onValueChange = onLabelChange,
+                enabled = !uiState.isSaving,
+                label = { Text("Category name") },
+                placeholder = { Text("e.g. Family or Side hustle") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                    imeAction = if (isSystem) ImeAction.Done else ImeAction.Next
+                )
             )
-        )
-
-        // ── Emoji picker (hidden for system edits) ─────────────────────────
-        if (!isSystemEdit) {
-            EmojiPicker(
-                selected = uiState.draftEmoji,
-                onSelect = onEmojiChange
+            if (isSystem) {
+                Text(
+                    "Only the name and icon change. Built-in matching rules and existing transactions stay intact. You can restore the original details at any time.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Let keywords do the sorting", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Optional. A recipient containing any of these words matches this category. Separate words or phrases with commas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = uiState.draftKeywords,
+                        onValueChange = onKeywordsChange,
+                        enabled = !uiState.isSaving,
+                        label = { Text("Matching keywords") },
+                        placeholder = { Text("e.g. mum, school fees, family") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                    )
+                    if (keywords.isNotEmpty()) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            keywords.forEach { keyword ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Text(keyword, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        if (keywords.isEmpty()) "No keywords? You can assign payments to this category yourself."
+                        else "Saving also applies these keywords to payments currently in Other.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(
+                if (isSystem) "Built-in category" else "Your custom category",
+                modifier = Modifier.padding(bottom = 16.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-
-        // ── Save button ───────────────────────────────────────────────────
-        Button(
-            onClick = {
-                PesaActions.playSuccess(haptic)
-                onSave()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                when {
-                    isSystemEdit -> "Save Customisation"
-                    isEditing -> "Save Changes"
-                    else -> "Create Category"
-                },
-                fontWeight = FontWeight.Bold
-            )
+        Surface(tonalElevation = 3.dp) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                uiState.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
+                Button(
+                    onClick = {
+                        keyboard?.hide()
+                        focus.clearFocus()
+                        PesaActions.playClick(haptic)
+                        onSave()
+                    },
+                    enabled = !uiState.isSaving && uiState.draftLabel.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+                ) {
+                    if (uiState.isSaving) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(if (isEditing) "Save changes" else "Create category")
+                    }
+                }
+            }
         }
     }
 }

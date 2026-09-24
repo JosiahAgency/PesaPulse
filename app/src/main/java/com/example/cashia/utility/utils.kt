@@ -65,6 +65,14 @@ object PesaTimeConfiguration {
             prefs.edit { putInt("reminder_minute", v) }
         }
 
+    fun saveReminderTime(hour: Int, minute: Int) {
+        require(hour in 0..23 && minute in 0..59) { "Invalid reminder time." }
+        prefs.edit {
+            putInt("reminder_hour", hour)
+            putInt("reminder_minute", minute)
+        }
+    }
+
     var dailyDigestHour: Int
         get() = prefs.getInt("daily_digest_hour", reminderHour)
         set(v) {
@@ -158,6 +166,11 @@ object PesaTimeConfiguration {
         set(v) {
             prefs.edit { putInt("upcoming_reminder_days", v) }
         }
+
+    fun saveUpcomingReminderDays(days: Int) {
+        require(days in 0..30) { "Reminder window must be between 0 and 30 days." }
+        upcomingReminderDaysBefore = days
+    }
 
 
     private fun monthlyTargetKey(month: YearMonth): String {

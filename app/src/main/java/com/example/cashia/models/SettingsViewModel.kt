@@ -9,10 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
 import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -88,26 +85,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val monthlySavingsGoal = snapshotFlow { PesaTimeConfiguration.monthlySavingsGoal }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.monthlySavingsGoal)
 
-
-    private val _linkedGoogleEmail = MutableStateFlow<String?>(
-        PesaTimeConfiguration.linkedGoogleEmail
-    )
-
-    val linkedGoogleEmail: StateFlow<String?> = _linkedGoogleEmail.asStateFlow()
-
-    fun linkGoogleAccount(email: String) {
-        setLinkedGoogleEmail(email)
-    }
-
-    fun unlinkGoogleAccount() {
-        setLinkedGoogleEmail(null)
-    }
-
-    fun setLinkedGoogleEmail(email: String?) {
-        _linkedGoogleEmail.value = email
-        PesaTimeConfiguration.linkedGoogleEmail = email
-    }
-
     fun setDarkTheme(enabled: Boolean) {
         PesaTimeConfiguration.saveTheme(enabled)
     }
@@ -153,8 +130,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateReminderTime(hour: Int, minute: Int) {
         PesaTimeConfiguration.saveReminderTime(hour, minute)
-        if (PesaTimeConfiguration.isDailyDigestEnabled)      NotificationScheduler.scheduleDailyDigest(context)
-        if (PesaTimeConfiguration.isUpcomingReminderEnabled) NotificationScheduler.scheduleUpcomingReminders(context)
+        if (PesaTimeConfiguration.isDailyDigestEnabled) NotificationScheduler.scheduleDailyDigest(
+            context
+        )
+        if (PesaTimeConfiguration.isUpcomingReminderEnabled) NotificationScheduler.scheduleUpcomingReminders(
+            context
+        )
     }
 
     fun setLowBalanceAlertEnabled(enabled: Boolean) {
@@ -168,7 +149,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setMonthlyTargetReminderEnabled(enabled: Boolean) {
         PesaTimeConfiguration.saveMonthlyTargetReminder(enabled)
         if (enabled) NotificationScheduler.scheduleMonthlyTargetReminder(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(MonthlyTargetReminderWorker.WORK_NAME)
+        else WorkManager.getInstance(context)
+            .cancelUniqueWork(MonthlyTargetReminderWorker.WORK_NAME)
     }
 
     fun setMonthlyTargets(spendingCap: Double?, savingsGoal: Double?) {

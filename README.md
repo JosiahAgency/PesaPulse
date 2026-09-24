@@ -4,7 +4,8 @@
   <img src="app/src/main/pesapulse_logo-playstore.png" alt="PesaPulse logo" width="140" />
 </p>
 
-Cashia is an Android personal finance app that reads M-PESA SMS messages, parses them into structured transactions, and turns them into live insights, forecasts, and reminders.
+Cashia is an Android personal finance app that reads M-PESA SMS messages, parses them into
+structured transactions, and turns them into live insights and reminders.
 
 ## ✨ What the app currently does
 
@@ -13,11 +14,18 @@ Cashia is an Android personal finance app that reads M-PESA SMS messages, parses
 - 🏠 **Dashboard**: balance and period summaries, due-soon context, and quick financial status.
 - 📆 **Calendar view**: spending and activity over time with week/day context.
 - 📈 **Insights (Analytics)**: trends, category breakdowns, weekday patterns, and merchant analysis.
-- 🔮 **Forecasts (Projections)**: projected balance, upcoming impact, and due-soon grouping.
-- ⏰ **Upcoming payments**: full CRUD for future expenses/income/savings with recurrence and status tracking.
-- 🏷️ **Category management**: manage custom categories and apply categorization controls.
-- 🛡️ **Security & privacy**: optional biometric/PIN app lock and privacy-aware home screen widget state.
-- 🔔 **Smart reminders**: daily digest, upcoming reminders, and monthly summary notifications via WorkManager.
+- ⏰ **Upcoming payments**: full CRUD for future expenses/income/savings with recurrence and status
+  tracking.
+- 🏷️ **Category management**: search names and custom keywords, filter your categories and the
+  built-in library, and expand subcategory groups. Create categories with optional auto-match
+  keywords, personalise built-in names/icons, and auto-sort payments in Other without changing
+  already-categorised payments.
+  Auto-sort shows a dismissible completion message with the number of transactions updated,
+  including zero when nothing changed.
+- 🛡️ **Security & privacy**: optional biometric/PIN app lock and privacy-aware home screen widget
+  state.
+- 🔔 **Smart reminders**: daily digest, upcoming reminders, and monthly summary notifications via
+  WorkManager.
 
 ## 🧭 Main navigation
 
@@ -27,7 +35,10 @@ Bottom navigation includes:
 2. **History**
 3. **Calendar**
 4. **Insights**
-5. **Forecast**
+
+The floating navigation dock keeps all four labels visible, highlights the active tab,
+and restores each tab's saved state. It is hidden on secondary pages such as Settings
+and Categories.
 
 Additional routes:
 
@@ -50,34 +61,42 @@ Additional routes:
 ## 🔐 Permissions used
 
 ```xml
-<uses-permission android:name="android.permission.READ_SMS" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+<uses-permission android:name="android.permission.READ_SMS" /><uses-permission
+android:name="android.permission.RECEIVE_SMS" /><uses-permission
+android:name="android.permission.POST_NOTIFICATIONS" /><uses-permission
+android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 ```
 
 SMS processing is local to the device.
 
 ## 🧪 Testing
 
-The project includes local unit tests and instrumentation tests, including parser quality/performance coverage and DAO equivalence checks.
+The project includes local unit tests and instrumentation tests, including parser
+quality/performance coverage and DAO equivalence checks.
 
 Run locally:
 
 ```bash
 ./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug :app:lintDebug
 ./gradlew :app:assembleDebugAndroidTest
 ```
+
+`assembleDebugAndroidTest` compiles the instrumentation tests; running them with
+`connectedDebugAndroidTest` requires a connected device or emulator.
 
 CI quality workflow:
 
 - `.github/workflows/quality-gates.yml`
+- Runs unit tests, builds the debug app and instrumentation tests, and fails on lint errors.
 
 ## 🚀 Setup
 
 1. Clone:
 
 ```bash
-git clone https://github.com/JosiahAgency/Cashia.git
+git clone https://github.com/JosiahAgency/PesaPulse.git
 ```
 
 2. Open in Android Studio.

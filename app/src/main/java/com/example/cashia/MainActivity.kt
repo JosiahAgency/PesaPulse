@@ -38,9 +38,6 @@ class MainActivity : FragmentActivity() {
         PesaTimeConfiguration.initialize(this)
         NotificationHelper.createChannels(this)
         NotificationScheduler.scheduleAll(this)
-        lifecycleScope.launch(Dispatchers.IO) {
-            NotificationScheduler.ensureHealthySchedules(this@MainActivity)
-        }
         fireWelcomeNotificationIfFirstRun()
 
         if (!PesaTimeConfiguration.isBiometricEnabled) {
@@ -63,7 +60,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handlePermissions() {
-        val permissions = mutableListOf(Manifest.permission.READ_SMS)
+        val permissions = mutableListOf(
+            Manifest.permission.READ_SMS,
+            Manifest.permission.RECEIVE_SMS
+        )
 
         // 1. ADD all required permissions FIRST
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

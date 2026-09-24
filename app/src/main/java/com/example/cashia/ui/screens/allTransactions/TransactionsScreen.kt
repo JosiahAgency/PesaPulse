@@ -56,6 +56,7 @@ import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.screenContentPadding
+import com.example.cashia.ui.theme.LocalNavigationDockHeight
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.launch
 
@@ -335,7 +336,7 @@ fun TransactionScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(bottom = 98.dp)
+                .padding(bottom = LocalNavigationDockHeight.current)
         ) {
             HarmonizedActionFab(
                 icon = Icons.Rounded.KeyboardArrowUp,

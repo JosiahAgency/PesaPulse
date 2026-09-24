@@ -29,6 +29,9 @@ interface UpcomingTransactionDao {
     @Query("DELETE FROM UpcomingTransactions WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    @Query("UPDATE UpcomingTransactions SET categoryId = 'OTHER' WHERE categoryId = :categoryId")
+    suspend fun resetDeletedCategory(categoryId: String)
+
     @Query("UPDATE UpcomingTransactions SET status = :status, matchedTransactionId = :matchedId WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, matchedId: String? = null)
 }
