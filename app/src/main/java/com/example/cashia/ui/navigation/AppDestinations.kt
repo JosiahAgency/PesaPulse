@@ -22,6 +22,7 @@ sealed class AppDestinations(val route: String, val label: String, val icon: Ima
     object NotificationsSettings : AppDestinations(
         "notifications_settings", "Notifications", Icons.Rounded.NotificationsActive
     )
+
     object Categories : AppDestinations("categories", "categories", Icons.Outlined.Category)
     object Export : AppDestinations("export", "Export Transactions", Icons.Outlined.FileDownload)
 
