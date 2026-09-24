@@ -1,6 +1,7 @@
 package com.example.cashia.utility
 
 import android.util.Log
+import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import com.example.cashia.daos.UnmatchedSmsDao
 import com.example.cashia.models.UnmatchedSms
@@ -60,10 +61,23 @@ object ParserLearningService {
 
                     is RichParseResult.FullMatch -> {
                         // 🎉 New regex picked it up — promote to real transaction
-                        txDao.insertTransactions(listOf(result.transaction))
-                        dao.delete(row)
-                        promoted++
-                        Log.d(TAG, "Promoted: ${row.id} → tx ${result.transaction.id}")
+                        val inserted = db.withTransaction {
+                            val inserted = txDao.insertTransactions(listOf(result.transaction)).single() != -1L
+                            if (inserted) {
+                                UpcomingPaymentService(db).suggest(listOf(result.transaction))
+                                dao.delete(row)
+                            } else {
+                                dao.update(row.copy(parserVersion = PARSER_VERSION))
+                            }
+                            inserted
+                        }
+                        if (inserted) {
+                            promoted++
+                            Log.d(TAG, "Promoted: ${row.id} → tx ${result.transaction.id}")
+                        } else {
+                            unchanged++
+                            Log.w(TAG, "Promotion conflict; SMS ${row.id} remains in review")
+                        }
                     }
 
                     is RichParseResult.LowConfidence -> {

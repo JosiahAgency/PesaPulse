@@ -77,6 +77,11 @@ fun SummaryReportScreen(
         }
 
         item(key = "totals") { TotalsCard(state) }
+        if (state.transactions.any { it.type == "expense" && it.transactionCost == null }) {
+            item(key = "unknown_fees") {
+                Text("Totals exclude unknown fees and may understate spending.", color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
 
         if (state.prevIncome != 0.0 || state.prevExpenses != 0.0) {
             item(key = "comparison") { ComparisonCard(state) }
@@ -173,7 +178,7 @@ private fun TotalsCard(state: SummaryReportUiState) {
             )
             Text(
                 text = "${state.txCount} transaction${if (state.txCount == 1) "" else "s"}" +
-                        " · ${PesaTimeConfiguration.formatCurrency(state.transactionCost)} in fees",
+                        " · ${PesaTimeConfiguration.formatCurrency(state.transactionCost)} in known fees",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )

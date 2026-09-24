@@ -68,6 +68,8 @@ import com.example.cashia.models.ExportViewModel
 import com.example.cashia.models.SettingsViewModel
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.models.SummaryReportViewModel
+import com.example.cashia.ui.screens.summary.SummaryReportScreen
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.navigation.IslandNavigationBar
 import com.example.cashia.ui.reusedElements.HarmonizedActionFab
@@ -92,7 +94,7 @@ import java.time.LocalDate
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
 @Composable
-fun PesaPulseApp() {
+fun PesaPulseApp(notificationRoute: String? = null, onNotificationConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val navItems = remember {
@@ -123,6 +125,12 @@ fun PesaPulseApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val isTabDestination = navItems.any { it.route == currentRoute }
+    LaunchedEffect(notificationRoute) {
+        notificationRoute?.let { route ->
+            navController.navigate(route)
+            onNotificationConsumed()
+        }
+    }
 
     // Dashboard FAB state — lives here since there's no Scaffold in DashboardScreen
     val today = remember { LocalDate.now() }
@@ -130,16 +138,18 @@ fun PesaPulseApp() {
     val showBackToTodayFab = currentRoute == AppDestinations.Dashboard.route
             && dashboardSelectedDate != today
 
-    LaunchedEffect(sharedViewModel, upcomingViewModel) {
-        sharedViewModel.newTransactionsSynced.collect { newTxs ->
-            newTxs.forEach { upcomingViewModel.tryAutoMatch(it) }
-        }
-    }
-
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(sharedViewModel) {
         sharedViewModel.syncError.collect { message ->
             snackbarHostState.showSnackbar(message)
+        }
+    }
+    LaunchedEffect(upcomingViewModel) {
+        upcomingViewModel.operationMessage.collect { message ->
+            if (message != null) {
+                snackbarHostState.showSnackbar(message)
+                upcomingViewModel.clearOperationMessage(message)
+            }
         }
     }
 
@@ -248,6 +258,17 @@ fun PesaPulseApp() {
                 }
                 composable(AppDestinations.UnmatchedReview.route) {
                     UnmatchedReviewScreen(sharedViewModel, categoryViewModel)
+                }
+                composable(AppDestinations.SummaryReport.route) { entry ->
+                    val period = requireNotNull(entry.arguments?.getString("period"))
+                    val date = requireNotNull(entry.arguments?.getString("date"))
+                    val reportViewModel: SummaryReportViewModel = viewModel(
+                        key = "report:$period:$date",
+                        factory = SummaryReportViewModel.provideFactory(
+                            AppDatabase.getDatabase(context).transactionDao(), period, date
+                        )
+                    )
+                    SummaryReportScreen(reportViewModel, categoryViewModel)
                 }
             }
 

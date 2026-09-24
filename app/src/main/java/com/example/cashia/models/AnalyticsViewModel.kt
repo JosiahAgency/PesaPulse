@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.cashia.daos.TransactionDao
+import com.example.cashia.utility.MonthlyBudget
+import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.RecurringMerchant
 import com.example.cashia.utility.TimeScope
 import com.example.cashia.utility.TransactionType
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
@@ -36,6 +39,13 @@ data class AnalyticsUiState(
     val filteredTransactions: List<MpesaTransactions> = emptyList()
 )
 
+data class BudgetProgress(
+    val budget: MonthlyBudget,
+    val spent: Double,
+    val netSaved: Double,
+    val unknownFeeCount: Int
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModel(
     private val dao: TransactionDao
@@ -45,6 +55,23 @@ class AnalyticsViewModel(
     private val _selectedScope = MutableStateFlow(TimeScope.MONTH)
     private val _startDate = MutableStateFlow(LocalDate.now().withDayOfMonth(1))
     private val _endDate = MutableStateFlow(LocalDate.now())
+    val monthlyBudget =
+        combine(_startDate, PesaTimeConfiguration.changes) { date, _ -> YearMonth.from(date) }
+            .flatMapLatest { month ->
+                dao.getTransactionsInRange(
+                    month.atDay(1).toString(),
+                    month.atEndOfMonth().toString()
+                ).map { rows ->
+                    val spending = rows.filter { it.type == "expense" && it.reversedTxId == null }
+                    val spent = spending.sumOf { it.amount + it.knownFees }
+                    BudgetProgress(
+                        PesaTimeConfiguration.getMonthlyBudget(month), spent,
+                        rows.filter { it.type == "income" && it.reversedTxId == null }
+                            .sumOf { it.amount } - spent,
+                        spending.count { it.transactionCost == null }
+                    )
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /**
      * Bounded to the selected period (both transaction types) instead of the full table —
@@ -140,7 +167,9 @@ class AnalyticsViewModel(
 
     private fun periodLabel(scope: TimeScope, start: LocalDate, end: LocalDate): String =
         when (scope) {
-            TimeScope.DAY -> LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+            TimeScope.DAY -> LocalDate.now()
+                .format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy"))
+
             TimeScope.WEEK -> "${start.format(DateTimeFormatter.ofPattern("dd MMM"))} – ${
                 end.format(
                     DateTimeFormatter.ofPattern("dd MMM yyyy")
@@ -182,10 +211,10 @@ class AnalyticsViewModel(
         }
     }
 
-    fun refreshCurrentScopeRange() {
-        val scope = _selectedScope.value
-        if (scope != TimeScope.CUSTOM) setScope(scope)
-    }
+//    fun refreshCurrentScopeRange() {
+//        val scope = _selectedScope.value
+//        if (scope != TimeScope.CUSTOM) setScope(scope)
+//    }
 
     fun setCustomStartDate(date: LocalDate) {
         _startDate.value = date

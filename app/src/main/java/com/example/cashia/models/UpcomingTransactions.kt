@@ -5,6 +5,7 @@ import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.cashia.utility.PesaTimeConfiguration
+import com.example.cashia.utility.nextRecurringDate
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -38,7 +39,9 @@ data class UpcomingTransaction(
     val notes: String = "",
     val status: UpcomingStatus = UpcomingStatus.PENDING,
     val createdAt: Long = System.currentTimeMillis(),
-    val matchedTransactionId: String? = null
+    val matchedTransactionId: String? = null,
+    /** Original date anchors monthly/yearly recurrence through short months and leap years. */
+    val recurrenceAnchor: String = dueDate
 ) {
 
     // ─────────────────────────────────────────────
@@ -79,29 +82,29 @@ data class UpcomingTransaction(
     // State predicates
     // ─────────────────────────────────────────────
 
-    @get:Ignore
-    val isPending: Boolean get() = status == UpcomingStatus.PENDING
+//    @get:Ignore
+//    val isPending: Boolean get() = status == UpcomingStatus.PENDING
 
-    @get:Ignore
-    val isPaid: Boolean get() = status == UpcomingStatus.PAID
-
-    @get:Ignore
-    val isSkipped: Boolean get() = status == UpcomingStatus.SKIPPED
-
-    @get:Ignore
-    val isOverdue: Boolean
-        get() = isPending && (dueDateParsed?.isBefore(LocalDate.now()) == true)
-
-    @get:Ignore
-    val isDueToday: Boolean
-        get() = dueDateParsed == LocalDate.now()
-
-    /** True if due within the next [withinDays] days (inclusive of today). */
-    fun isDueWithin(withinDays: Int): Boolean {
-        val date = dueDateParsed ?: return false
-        val today = LocalDate.now()
-        return !date.isBefore(today) && !date.isAfter(today.plusDays(withinDays.toLong()))
-    }
+//    @get:Ignore
+//    val isPaid: Boolean get() = status == UpcomingStatus.PAID
+//
+//    @get:Ignore
+//    val isSkipped: Boolean get() = status == UpcomingStatus.SKIPPED
+//
+//    @get:Ignore
+//    val isOverdue: Boolean
+//        get() = isPending && (dueDateParsed?.isBefore(LocalDate.now()) == true)
+//
+//    @get:Ignore
+//    val isDueToday: Boolean
+//        get() = dueDateParsed == LocalDate.now()
+//
+//    /** True if due within the next [withinDays] days (inclusive of today). */
+//    fun isDueWithin(withinDays: Int): Boolean {
+//        val date = dueDateParsed ?: return false
+//        val today = LocalDate.now()
+//        return !date.isBefore(today) && !date.isAfter(today.plusDays(withinDays.toLong()))
+//    }
 
     // ─────────────────────────────────────────────
     // Recurrence helpers
@@ -110,55 +113,44 @@ data class UpcomingTransaction(
     @get:Ignore
     val isRecurring: Boolean get() = recurrence != RecurrenceType.NONE
 
-    /** The next occurrence after [from] (defaults to today). */
-    fun nextOccurrence(from: LocalDate = LocalDate.now()): LocalDate? {
+    /** Next scheduled occurrence, even when still overdue; retains the series anchor. */
+    fun nextOccurrence(): LocalDate? {
         if (!isRecurring) return null
-        val base = dueDateParsed ?: return null
-        return when (recurrence) {
-            RecurrenceType.WEEKLY -> base.plusWeeks(
-                ChronoUnit.WEEKS.between(base, from).coerceAtLeast(0) + 1
-            )
-
-            RecurrenceType.MONTHLY -> base.plusMonths(
-                ChronoUnit.MONTHS.between(base, from).coerceAtLeast(0) + 1
-            )
-
-            RecurrenceType.YEARLY -> base.plusYears(
-                ChronoUnit.YEARS.between(base, from).coerceAtLeast(0) + 1
-            )
-
-            RecurrenceType.NONE -> null
-        }
+        return nextRecurringDate(
+            LocalDate.parse(dueDate),
+            recurrence,
+            LocalDate.parse(recurrenceAnchor)
+        )
     }
 
     /** Human-readable recurrence label, e.g. "Weekly", "Every month". */
-    @get:Ignore
-    val recurrenceLabel: String
-        get() = when (recurrence) {
-            RecurrenceType.NONE -> "One-time"
-            RecurrenceType.WEEKLY -> "Weekly"
-            RecurrenceType.MONTHLY -> "Monthly"
-            RecurrenceType.YEARLY -> "Yearly"
-        }
+//    @get:Ignore
+//    val recurrenceLabel: String
+//        get() = when (recurrence) {
+//            RecurrenceType.NONE -> "One-time"
+//            RecurrenceType.WEEKLY -> "Weekly"
+//            RecurrenceType.MONTHLY -> "Monthly"
+//            RecurrenceType.YEARLY -> "Yearly"
+//        }
 
     // ─────────────────────────────────────────────
     // Financial helpers
     // ─────────────────────────────────────────────
 
     /** Signed amount: positive for income/savings, negative for expenses. */
-    @get:Ignore
-    val signedAmount: Double
-        get() = when (type) {
-            UpcomingType.EXPENSE -> -amount
-            UpcomingType.INCOME, UpcomingType.SAVING -> amount
-        }
-
-    @get:Ignore
-    val isExpense: Boolean get() = type == UpcomingType.EXPENSE
-
-    @get:Ignore
-    val isIncome: Boolean get() = type == UpcomingType.INCOME
-
-    @get:Ignore
-    val isSaving: Boolean get() = type == UpcomingType.SAVING
+//    @get:Ignore
+//    val signedAmount: Double
+//        get() = when (type) {
+//            UpcomingType.EXPENSE -> -amount
+//            UpcomingType.INCOME, UpcomingType.SAVING -> amount
+//        }
+//
+//    @get:Ignore
+//    val isExpense: Boolean get() = type == UpcomingType.EXPENSE
+//
+//    @get:Ignore
+//    val isIncome: Boolean get() = type == UpcomingType.INCOME
+//
+//    @get:Ignore
+//    val isSaving: Boolean get() = type == UpcomingType.SAVING
 }

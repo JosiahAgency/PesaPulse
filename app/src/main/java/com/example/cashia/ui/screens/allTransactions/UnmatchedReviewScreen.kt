@@ -67,9 +67,8 @@ fun UnmatchedReviewScreen(
             pendingCount = pendingCount,
             allCategories = allCategories,
             categoryViewModel = categoryViewModel,
-            onSave = { type, category ->
-                viewModel.saveTransactionFromSms(target, type, category)
-                modalTarget = null
+            onSave = { correction ->
+                viewModel.saveTransactionFromSms(target, correction)
             },
             onSkip = {
                 viewModel.markSkipped(target.id)

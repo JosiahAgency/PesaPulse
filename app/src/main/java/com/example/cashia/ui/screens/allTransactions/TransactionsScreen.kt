@@ -55,8 +55,8 @@ import com.example.cashia.ui.reusedElements.HarmonizedActionFab
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
-import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.ui.theme.LocalNavigationDockHeight
+import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.launch
 
@@ -143,6 +143,12 @@ fun TransactionScreen(
                 contentPadding = screenContentPadding(),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                item(key = "known_fees_notice") {
+                    Text(
+                        "Totals include known fees only; blank fees remain unknown.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 item(key = "search") {
                     EnhancedSearchBar(

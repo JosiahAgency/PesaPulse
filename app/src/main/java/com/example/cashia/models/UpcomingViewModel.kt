@@ -1,19 +1,24 @@
 package com.example.cashia.models
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
+import com.example.cashia.utility.UpcomingPaymentService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.util.UUID
 
 data class UpcomingUiState(
     val showSheet: Boolean = false,
@@ -28,341 +33,171 @@ data class UpcomingUiState(
     val error: String? = null
 )
 
-class UpcomingViewModel(context: Context) : ViewModel() {
-
-    private val dao = AppDatabase.getDatabase(context.applicationContext).upcomingTransactionDao()
-
-    val upcoming: StateFlow<List<UpcomingTransaction>> = dao.getPending()
+class UpcomingViewModel(
+    context: Context,
+    private val db: AppDatabase = AppDatabase.getDatabase(context.applicationContext)
+) : ViewModel() {
+    private val dao = db.upcomingTransactionDao()
+    private val service = UpcomingPaymentService(db)
+    val upcoming = dao.getPending()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val all: StateFlow<List<UpcomingTransaction>> = dao.getAll()
+    val all = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
+    val possibleMatches = db.paymentMatchDao().pendingReviews()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _uiState = MutableStateFlow(UpcomingUiState())
-    val uiState: StateFlow<UpcomingUiState> = _uiState.asStateFlow()
+    val uiState = _uiState.asStateFlow()
+    private val _operationMessage = MutableStateFlow<String?>(null)
+    val operationMessage = _operationMessage.asStateFlow()
+    private val _isWorking = MutableStateFlow(false)
+    val isWorking = _isWorking.asStateFlow()
 
-    fun openCreate() {
-        _uiState.value = UpcomingUiState(showSheet = true)
+    init {
+        runOperation("Could not check for possible payment matches.") {
+            service.reconcilePending()
+            null
+        }
     }
+
+    fun clearOperationMessage(message: String) { _operationMessage.compareAndSet(message, null) }
+    fun openCreate() { _uiState.value = UpcomingUiState(showSheet = true) }
+    fun closeSheet() { if (!_isWorking.value) _uiState.value = UpcomingUiState() }
+    fun onTitleChange(v: String) { _uiState.update { it.copy(draftTitle = v, error = null) } }
+    fun onAmountChange(v: String) { _uiState.update { it.copy(draftAmount = v, error = null) } }
+    fun onCategoryChange(v: String) { _uiState.update { it.copy(draftCategory = v) } }
+    fun onDueDateChange(v: LocalDate) { _uiState.update { it.copy(draftDueDate = v) } }
+    fun onTypeChange(v: UpcomingType) { _uiState.update { it.copy(draftType = v) } }
+    fun onRecurrenceChange(v: RecurrenceType) { _uiState.update { it.copy(draftRecurrence = v) } }
+    fun onNotesChange(v: String) { _uiState.update { it.copy(draftNotes = v) } }
 
     fun openEdit(tx: UpcomingTransaction) {
         _uiState.value = UpcomingUiState(
-            showSheet = true,
-            editing = tx,
-            draftTitle = tx.title,
-            draftAmount = tx.amount.toString(),
-            draftCategory = tx.categoryId,
-            draftDueDate = LocalDate.parse(tx.dueDate),
-            draftType = tx.type,
-            draftRecurrence = tx.recurrence,
-            draftNotes = tx.notes
+            showSheet = true, editing = tx, draftTitle = tx.title,
+            draftAmount = tx.amount.toString(), draftCategory = tx.categoryId,
+            draftDueDate = LocalDate.parse(tx.dueDate), draftType = tx.type,
+            draftRecurrence = tx.recurrence, draftNotes = tx.notes
         )
     }
 
-    fun closeSheet() {
-        _uiState.value = UpcomingUiState()
-    }
-
-    fun onTitleChange(v: String) {
-        _uiState.update {
-            it.copy(draftTitle = v, error = null)
-        }
-    }
-
-    fun onAmountChange(v: String) {
-        _uiState.update {
-            it.copy(draftAmount = v, error = null)
-        }
-    }
-
-    fun onCategoryChange(v: String) {
-        _uiState.update {
-            it.copy(draftCategory = v)
-        }
-    }
-
-    fun onDueDateChange(v: LocalDate) {
-        _uiState.update {
-            it.copy(draftDueDate = v)
-        }
-    }
-
-    fun onTypeChange(v: UpcomingType) {
-        _uiState.update {
-            it.copy(draftType = v)
-        }
-    }
-
-    fun onRecurrenceChange(v: RecurrenceType) {
-        _uiState.update {
-            it.copy(draftRecurrence = v)
-        }
-    }
-
-    fun onNotesChange(v: String) {
-        _uiState.update {
-            it.copy(draftNotes = v)
-        }
-    }
-
-    // ── Save ──────────────────────────────────────────────────────────────
     fun save() {
-        val title = _uiState.value.draftTitle.trim()
-        val amountText = _uiState.value.draftAmount.trim().replace(",", "")
-
+        val draft = _uiState.value
+        val title = draft.draftTitle.trim()
+        val amount = draft.draftAmount.trim().replace(",", "").toDoubleOrNull()
         if (title.isBlank()) {
             _uiState.update { it.copy(error = "Title cannot be empty") }
             return
         }
-        val validAmount = amountText.toDoubleOrNull()
-        if (validAmount == null || validAmount <= 0.0) {
+        if (amount == null || !amount.isFinite() || amount <= 0.0) {
             _uiState.update { it.copy(error = "Enter a valid amount") }
             return
         }
-
-        val txToSave = UpcomingTransaction(
-            id = _uiState.value.editing?.id ?: java.util.UUID.randomUUID().toString(),
-            title = title,
-            amount = validAmount,
-            categoryId = _uiState.value.draftCategory,
-            dueDate = _uiState.value.draftDueDate.toString(),
-            type = _uiState.value.draftType,
-            recurrence = _uiState.value.draftRecurrence,
-            notes = _uiState.value.draftNotes.trim(),
-            status = _uiState.value.editing?.status ?: UpcomingStatus.PENDING,
-            createdAt = _uiState.value.editing?.createdAt ?: System.currentTimeMillis()
+        val existing = draft.editing
+        val dueDate = draft.draftDueDate.toString()
+        val anchor = if (existing != null && existing.dueDate == dueDate &&
+            existing.recurrence == draft.draftRecurrence) existing.recurrenceAnchor else dueDate
+        val tx = UpcomingTransaction(
+            id = existing?.id ?: UUID.randomUUID().toString(),
+            title = title, amount = amount, categoryId = draft.draftCategory,
+            dueDate = dueDate, type = draft.draftType, recurrence = draft.draftRecurrence,
+            notes = draft.draftNotes.trim(), status = existing?.status ?: UpcomingStatus.PENDING,
+            createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+            matchedTransactionId = existing?.matchedTransactionId, recurrenceAnchor = anchor
         )
-
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.upsert(txToSave)
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
-                _uiState.value = UpcomingUiState()
+        runOperation("Could not save this payment. Please try again.") {
+            val saved = db.withTransaction {
+                val current = existing?.let { dao.getById(it.id) }
+                if (existing != null && current?.status != existing.status) false
+                else {
+                    dao.upsert(tx)
+                    db.paymentMatchDao().clearActive(tx.id)
+                    service.reconcilePending()
+                    true
+                }
             }
+            if (saved) {
+                withContext(Dispatchers.Main) { _uiState.value = UpcomingUiState() }
+                "Payment saved."
+            } else "This payment changed while you were editing. Close the editor and reopen it."
         }
     }
 
-    // ── Mark paid / skip ──────────────────────────────────────────────────
-
     fun markPaid(tx: UpcomingTransaction) {
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.updateStatus(tx.id, UpcomingStatus.PAID.name)
-            // If recurring, spawn the next occurrence
-            if (tx.recurrence != RecurrenceType.NONE) {
-                val nextDate = nextDueDate(LocalDate.parse(tx.dueDate), tx.recurrence)
-                dao.upsert(
-                    tx.copy(
-                        id = java.util.UUID.randomUUID().toString(),
-                        dueDate = nextDate.toString(),
-                        status = UpcomingStatus.PENDING,
-                        matchedTransactionId = null
-                    )
-                )
-            }
+        runOperation("Could not mark this payment paid. Please try again.") {
+            if (service.complete(tx.id, UpcomingStatus.PAID)) "Payment marked paid."
+            else "This payment has already been completed or removed."
         }
     }
 
     fun skip(tx: UpcomingTransaction) {
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.updateStatus(tx.id, UpcomingStatus.SKIPPED.name)
-            if (tx.recurrence != RecurrenceType.NONE) {
-                val nextDate = nextDueDate(LocalDate.parse(tx.dueDate), tx.recurrence)
-                dao.upsert(
-                    tx.copy(
-                        id = java.util.UUID.randomUUID().toString(),
-                        dueDate = nextDate.toString(),
-                        status = UpcomingStatus.PENDING,
-                        matchedTransactionId = null
-                    )
-                )
-            }
+        runOperation("Could not skip this payment. Please try again.") {
+            if (service.complete(tx.id, UpcomingStatus.SKIPPED)) "Payment skipped."
+            else "This payment has already been completed or removed."
         }
     }
 
     fun delete(tx: UpcomingTransaction) {
-        viewModelScope.launch(Dispatchers.IO) { dao.deleteById(tx.id) }
+        runOperation("Could not delete this payment. Please try again.") {
+            dao.deleteById(tx.id)
+            "Payment deleted."
+        }
     }
 
-// Replace tryAutoMatch and add the new helpers in UpcomingViewModel:
+    fun confirmMatch(match: PaymentMatchReview) {
+        runOperation("Could not confirm this payment. Please try again.") {
+            if (service.confirm(match.upcomingId, match.transactionId)) "Payment confirmed."
+            else "This match is no longer available. Please review the payment again."
+        }
+    }
 
-    /**
-     * Called automatically after new M-Pesa transactions are synced.
-     * Runs the matcher against each new transaction.
-     */
-    fun tryAutoMatch(mpesaTx: MpesaTransactions) {
-        viewModelScope.launch(Dispatchers.IO) {
-            matchTransaction(mpesaTx)
+    fun dismissMatch(match: PaymentMatchReview) {
+        runOperation("Could not dismiss this match. Please try again.") {
+            db.paymentMatchDao().dismiss(match.upcomingId, match.transactionId)
+            "Suggestion dismissed. The payment remains pending."
+        }
+    }
+
+    private fun runOperation(errorMessage: String, block: suspend () -> String?) {
+        if (_isWorking.value) {
+            _operationMessage.value = "Please wait for the current operation to finish."
+            return
+        }
+        _isWorking.value = true
+        viewModelScope.launch {
+            try {
+                _operationMessage.value = withContext(Dispatchers.IO) { block() }
+            } catch (e: SQLiteException) {
+                Log.e("UpcomingViewModel", errorMessage, e)
+                _operationMessage.value = errorMessage
+                if (_uiState.value.showSheet) _uiState.update { it.copy(error = errorMessage) }
+            } finally {
+                _isWorking.value = false
+            }
         }
     }
 
     fun openCreateFromHistory(
-        txId: String,
-        recipient: String,
-        amount: Double,
-        category: String,
-        type: String,
-        txDate: String
+        txId: String, recipient: String, amount: Double, category: String, type: String, txDate: String
     ) {
-        val scheduledType = if (type.equals(
-                "income",
-                ignoreCase = true
-            )
-        ) UpcomingType.INCOME else UpcomingType.EXPENSE
-
-        val transactionDate = runCatching { LocalDate.parse(txDate) }
-            .getOrDefault(LocalDate.now())
-
-        // Next occurrence of the transaction's day-of-month that isn't in the
-        // past: this month if the day is still ahead (or today), else next month.
+        val transactionDate = LocalDate.parse(txDate)
         val today = LocalDate.now()
-        var dueDate = today.withDayOfMonth(
-            transactionDate.dayOfMonth.coerceAtMost(today.lengthOfMonth())
-        )
+        var dueDate = today.withDayOfMonth(transactionDate.dayOfMonth.coerceAtMost(today.lengthOfMonth()))
         if (dueDate.isBefore(today)) {
             val nextMonth = today.plusMonths(1)
-            dueDate = nextMonth.withDayOfMonth(
-                transactionDate.dayOfMonth.coerceAtMost(nextMonth.lengthOfMonth())
-            )
+            dueDate = nextMonth.withDayOfMonth(transactionDate.dayOfMonth.coerceAtMost(nextMonth.lengthOfMonth()))
         }
-
         _uiState.value = UpcomingUiState(
-            showSheet = true,
-            draftTitle = recipient,
-            draftAmount = amount.toString(),
-            draftCategory = category,
-            draftDueDate = dueDate,
-            draftType = scheduledType,
+            showSheet = true, draftTitle = recipient, draftAmount = amount.toString(),
+            draftCategory = category, draftDueDate = dueDate,
+            draftType = if (type.equals("income", true)) UpcomingType.INCOME else UpcomingType.EXPENSE,
             draftRecurrence = RecurrenceType.MONTHLY,
-            draftNotes = "Created automatically from transaction reference: $txId"
+            draftNotes = "Created from transaction: $txId"
         )
-    }
-
-    private suspend fun matchTransaction(mpesaTx: MpesaTransactions) {
-        val pending = dao.getPendingOnce()
-        if (pending.isEmpty()) return
-
-        val txDate = runCatching { LocalDate.parse(mpesaTx.date) }.getOrNull() ?: return
-
-        // Score every pending item against this M-Pesa transaction
-        data class Candidate(val upcoming: UpcomingTransaction, val score: Int)
-
-        val candidates = pending.mapNotNull { upcoming ->
-            val score = computeMatchScore(upcoming, mpesaTx, txDate)
-            if (score >= MATCH_THRESHOLD) Candidate(upcoming, score) else null
-        }
-
-        // Take the single best match only — never double-match
-        val best = candidates.maxByOrNull { it.score } ?: return
-
-        dao.updateStatus(best.upcoming.id, UpcomingStatus.PAID.name, mpesaTx.id)
-
-        if (best.upcoming.recurrence != RecurrenceType.NONE) {
-            val nextDate = nextDueDate(
-                LocalDate.parse(best.upcoming.dueDate),
-                best.upcoming.recurrence
-            )
-            dao.upsert(
-                best.upcoming.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    dueDate = nextDate.toString(),
-                    status = UpcomingStatus.PENDING,
-                    matchedTransactionId = null
-                )
-            )
-        }
-    }
-
-    /**
-     * Multi-signal scoring. Returns 0–100.
-     * MATCH_THRESHOLD = 40 means we need at least two medium signals to match.
-     *
-     * Signals:
-     *  - Amount closeness      0–35 pts  (exact=35, within 5%=25, within 15%=10)
-     *  - Date proximity        0–30 pts  (same day=30, ±1=25, ±3=15, ±7=5)
-     *  - Keyword overlap       0–25 pts  (each matching word = 8pts, capped at 25)
-     *  - Transaction type      0–10 pts  (income→INCOME/SAVING match, expense→EXPENSE)
-     */
-    private fun computeMatchScore(
-        upcoming: UpcomingTransaction,
-        mpesaTx: MpesaTransactions,
-        txDate: LocalDate
-    ): Int {
-        var score = 0
-
-        // ── Amount signal ─────────────────────────────────────────────────────
-        val amountDiff = kotlin.math.abs(upcoming.amount - mpesaTx.amount)
-        val amountRatio = if (upcoming.amount > 0) amountDiff / upcoming.amount else 1.0
-        score += when {
-            amountRatio < 0.01 -> 35   // within 1% — almost certainly the same payment
-            amountRatio < 0.05 -> 25   // within 5%
-            amountRatio < 0.15 -> 10   // within 15% — weak signal only
-            else -> 0
-        }
-
-        // ── Date proximity signal ─────────────────────────────────────────────
-        val dueDate = runCatching { LocalDate.parse(upcoming.dueDate) }.getOrNull() ?: return 0
-        val daysDiff = kotlin.math.abs(
-            java.time.temporal.ChronoUnit.DAYS.between(dueDate, txDate)
-        )
-        score += when {
-            daysDiff == 0L -> 30
-            daysDiff <= 1 -> 25
-            daysDiff <= 3 -> 15
-            daysDiff <= 7 -> 5
-            else -> 0
-        }
-
-        // ── Keyword overlap signal ────────────────────────────────────────────
-        // Tokenise both title and notes, filter short/common words
-        val upcomingWords = (upcoming.title + " " + upcoming.notes)
-            .lowercase()
-            .split(TOKEN_REGEX)
-            .filter { it.length >= 3 && it !in STOP_WORDS }
-            .toSet()
-
-        val recipientWords = mpesaTx.recipient
-            .lowercase()
-            .split(TOKEN_REGEX)
-            .filter { it.length >= 3 && it !in STOP_WORDS }
-            .toSet()
-
-        // Also check if any upcoming word is a substring of the recipient or vice versa
-        val exactMatches = upcomingWords.intersect(recipientWords).size
-        val substringMatches = upcomingWords.count { uw ->
-            recipientWords.any { rw -> rw.contains(uw) || uw.contains(rw) }
-        }
-        val keywordScore = ((exactMatches * 10) + (substringMatches * 6)).coerceAtMost(25)
-        score += keywordScore
-
-        // ── Transaction type signal ───────────────────────────────────────────
-        val typeMatch = when {
-            mpesaTx.type == "income" && upcoming.type in
-                    listOf(UpcomingType.INCOME, UpcomingType.SAVING) -> true
-
-            mpesaTx.type == "expense" && upcoming.type == UpcomingType.EXPENSE -> true
-            else -> false
-        }
-        if (typeMatch) score += 10
-
-        return score
-    }
-
-    private fun nextDueDate(from: LocalDate, recurrence: RecurrenceType) = when (recurrence) {
-        RecurrenceType.WEEKLY -> from.plusWeeks(1)
-        RecurrenceType.MONTHLY -> from.plusMonths(1)
-        RecurrenceType.YEARLY -> from.plusYears(1)
-        RecurrenceType.NONE -> from
     }
 
     companion object {
-        private const val MATCH_THRESHOLD = 40
-        private val TOKEN_REGEX = Regex("[\\s,.-]+")
-        private val STOP_WORDS =
-            setOf("the", "and", "for", "ltd", "inc", "plc", "pay", "ksh", "mpesa")
-
         fun provideFactory(context: Context) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                UpcomingViewModel(context) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = UpcomingViewModel(context) as T
         }
     }
 }

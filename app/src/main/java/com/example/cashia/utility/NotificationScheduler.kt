@@ -22,20 +22,37 @@ import java.util.concurrent.TimeUnit
 object NotificationScheduler {
 
     fun scheduleAll(context: Context) {
-        if (PesaTimeConfiguration.isDailyDigestEnabled) scheduleDailyDigest(context)
-        if (PesaTimeConfiguration.isMonthlySummaryEnabled) scheduleMonthly(context)
-        if (PesaTimeConfiguration.isUpcomingReminderEnabled) scheduleUpcomingReminders(context)
-        if (PesaTimeConfiguration.isMonthlyTargetReminderEnabled) scheduleMonthlyTargetReminder(context)
+        if (PesaTimeConfiguration.isDailyDigestEnabled) scheduleDailyDigest(
+            context,
+            keepExisting = true
+        )
+        if (PesaTimeConfiguration.isMonthlySummaryEnabled) scheduleMonthly(
+            context,
+            keepExisting = true
+        )
+        if (PesaTimeConfiguration.isUpcomingReminderEnabled) scheduleUpcomingReminders(
+            context,
+            keepExisting = true
+        )
+        if (PesaTimeConfiguration.isMonthlyTargetReminderEnabled) scheduleMonthlyTargetReminder(
+            context,
+            keepExisting = true
+        )
     }
 
     /**
      * [fromWorker] must be true when called from inside the worker itself:
      * REPLACE would cancel the running instance, APPEND_OR_REPLACE chains after it.
      */
-    fun scheduleDailyDigest(context: Context, fromWorker: Boolean = false) {
+    fun scheduleDailyDigest(
+        context: Context,
+        fromWorker: Boolean = false,
+        keepExisting: Boolean = false
+    ) {
+        if (!PesaTimeConfiguration.isDailyDigestEnabled) return
         WorkManager.getInstance(context).enqueueUniqueWork(
             DailyDigestWorker.WORK_NAME,
-            if (fromWorker) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
+            policy(fromWorker, keepExisting),
             OneTimeWorkRequestBuilder<DailyDigestWorker>()
                 .setInitialDelay(
                     minutesUntil(
@@ -48,22 +65,32 @@ object NotificationScheduler {
         )
     }
 
-    fun scheduleMonthly(context: Context, fromWorker: Boolean = false) {
+    fun scheduleMonthly(
+        context: Context,
+        fromWorker: Boolean = false,
+        keepExisting: Boolean = false
+    ) {
+        if (!PesaTimeConfiguration.isMonthlySummaryEnabled) return
         WorkManager.getInstance(context).enqueueUniqueWork(
             MonthlySummaryWorker.WORK_NAME,
-            if (fromWorker) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
+            policy(fromWorker, keepExisting),
             OneTimeWorkRequestBuilder<MonthlySummaryWorker>()
                 .setInitialDelay(minutesUntilFirstOfNextMonth(), TimeUnit.MINUTES)
                 .build()
         )
     }
 
-    fun scheduleUpcomingReminders(context: Context, fromWorker: Boolean = false) {
+    fun scheduleUpcomingReminders(
+        context: Context,
+        fromWorker: Boolean = false,
+        keepExisting: Boolean = false
+    ) {
+        if (!PesaTimeConfiguration.isUpcomingReminderEnabled) return
         // Run 1 hour before the main digest so reminders land first
         val h = (PesaTimeConfiguration.reminderHour - 1).coerceAtLeast(0)
         WorkManager.getInstance(context).enqueueUniqueWork(
             UpcomingReminderWorker.WORK_NAME,
-            if (fromWorker) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
+            policy(fromWorker, keepExisting),
             OneTimeWorkRequestBuilder<UpcomingReminderWorker>()
                 .setInitialDelay(
                     minutesUntil(h, PesaTimeConfiguration.reminderMinute),
@@ -74,25 +101,36 @@ object NotificationScheduler {
     }
 
     /** Weekly check; nags only while no monthly target is configured (see the worker). */
-    fun scheduleMonthlyTargetReminder(context: Context, fromWorker: Boolean = false) {
+    fun scheduleMonthlyTargetReminder(
+        context: Context,
+        fromWorker: Boolean = false,
+        keepExisting: Boolean = false
+    ) {
+        if (!PesaTimeConfiguration.isMonthlyTargetReminderEnabled) return
         WorkManager.getInstance(context).enqueueUniqueWork(
             MonthlyTargetReminderWorker.WORK_NAME,
-            if (fromWorker) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
+            policy(fromWorker, keepExisting),
             OneTimeWorkRequestBuilder<MonthlyTargetReminderWorker>()
                 .setInitialDelay(TimeUnit.DAYS.toMinutes(7), TimeUnit.MINUTES)
                 .build()
         )
     }
 
-    fun cancelAll(context: Context) {
-        val wm = WorkManager.getInstance(context)
-        listOf(
-            DailyDigestWorker.WORK_NAME,
-            MonthlySummaryWorker.WORK_NAME,
-            UpcomingReminderWorker.WORK_NAME,
-            MonthlyTargetReminderWorker.WORK_NAME,
-        ).forEach { wm.cancelUniqueWork(it) }
+    private fun policy(fromWorker: Boolean, keepExisting: Boolean) = when {
+        fromWorker -> ExistingWorkPolicy.APPEND_OR_REPLACE
+        keepExisting -> ExistingWorkPolicy.KEEP
+        else -> ExistingWorkPolicy.REPLACE
     }
+
+//    fun cancelAll(context: Context) {
+//        val wm = WorkManager.getInstance(context)
+//        listOf(
+//            DailyDigestWorker.WORK_NAME,
+//            MonthlySummaryWorker.WORK_NAME,
+//            UpcomingReminderWorker.WORK_NAME,
+//            MonthlyTargetReminderWorker.WORK_NAME,
+//        ).forEach { wm.cancelUniqueWork(it) }
+//    }
 
     // ── Scheduling helpers ─────────────────────────────────────────────────
 

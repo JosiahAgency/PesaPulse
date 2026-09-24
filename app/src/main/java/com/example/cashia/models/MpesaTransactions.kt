@@ -10,6 +10,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,7 +57,6 @@ private const val TXID = """([A-Z0-9]+)"""
 
 // ── Balance & cost helpers ────────────────────────────────────────────────────
 
-/** Matches "New M-PESA [account] balance is KshX" */
 private val regexNewBalance = Regex(
     """New\s+M-PESA\s+(?:account\s+)?balance\s+is\s+[Kk][Ss][Hh]\s*([\d,]+\.\d{2})""",
     RegexOption.IGNORE_CASE
@@ -90,10 +90,6 @@ private val regexBalanceInquiryAlt = Regex(
 
 // ── Outgoing: Send Money ──────────────────────────────────────────────────────
 
-/**
- * "KshX sent to NAME [PHONE] [for account ACCT] on D/M/YY at H:MM AM"
- * Groups: txId, amount, recipient (name + optional phone), [account], date, time
- */
 private val regexSentTo = Regex(
     """$TXID\s+[Cc]onfirmed\.\s*[Kk][Ss][Hh]$AMT\s+sent\s+to\s+(.+?)(?:\s+for\s+account\s+\S+)?\s+on\s+$DATE\s+at\s+$TIME""",
     RegexOption.IGNORE_CASE
@@ -128,7 +124,6 @@ private val regexAirtime = Regex(
 
 // ── Incoming: Received from person / B2C ─────────────────────────────────────
 
-/** "You have received KshX from NAME [PHONE] on D/M/YY at H:MM AM" */
 private val regexReceived = Regex(
     """$TXID\s+[Cc]onfirmed\.\s*You\s+have\s+received\s+[Kk][Ss][Hh]$AMT\s+from\s+(.+?)\s+on\s+$DATE\s+at\s+$TIME""",
     RegexOption.IGNORE_CASE
@@ -351,7 +346,7 @@ data class DayGroup(
     val transactions: List<MpesaTransactions>,
     val dayIncome: Double,
     val dayExpense: Double,
-    val dayBalance: Double
+    val dayBalance: Double?
 )
 
 data class WeekGroup(val bucket: String, val days: List<DayGroup>)
@@ -372,15 +367,16 @@ data class MpesaTransactions(
     val id: String,
     val smsId: Long = 0L,
     val amount: Double,
-    val transactionCost: Double,
+    val transactionCost: Double?,
     val recipient: String,
     val date: String,
     val type: String,
-    val balance: Double,
-    val time: String,
+    val balance: Double?,
+    val time: String?,
     val timestamp: Long,
     val category: String = TransactionCategory.OTHER.name,
     val reversedTxId: String? = null,
+    val reference: String? = id,
 ) {
     @get:androidx.room.Ignore
     val recipientName: String by lazy {
@@ -394,7 +390,7 @@ data class MpesaTransactions(
 
     @get:androidx.room.Ignore
     val displayTime: String
-        get() = try {
+        get() = if (time == null) "Unknown time" else try {
             LocalTime.parse(time, DateTimeFormatter.ofPattern("h:mm a", Locale.US))
                 .format(PesaTimeConfiguration.getTimeFormatter())
         } catch (_: Exception) {
@@ -413,12 +409,16 @@ data class MpesaTransactions(
     @get:androidx.room.Ignore
     val isIncome: Boolean get() = type == "income"
 
-    @get:androidx.room.Ignore
-    val isExpense: Boolean get() = type == "expense"
+//    @get:androidx.room.Ignore
+//    val isExpense: Boolean get() = type == "expense"
 
     /** Net impact on balance: positive for income, negative for expenses (incl. cost). */
     @get:androidx.room.Ignore
-    val netAmount: Double get() = if (isIncome) amount else -(amount + transactionCost)
+    val netAmount: Double get() = if (isIncome) amount else -(amount + knownFees)
+
+    /** Aggregations include known fees only; a missing fee is not a reported zero fee. */
+    @get:androidx.room.Ignore
+    val knownFees: Double get() = transactionCost ?: 0.0
 }
 
 sealed class ParseResult {
@@ -460,11 +460,11 @@ fun parseMpesaMessage(
         // Balance and cost extracted once, lazily, shared across whichever branch matches.
         val balance by lazy {
             (regexNewBalance.find(message) ?: balanceRegex.find(message))
-                ?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                ?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
         }
         val txCost by lazy {
             costRegex.find(message)?.groupValues?.get(1)
-                ?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                ?.replace(",", "")?.toDoubleOrNull()
         }
 
         // ── Outgoing ───────────────────────────────────────────────────────
@@ -563,21 +563,12 @@ fun parseMpesaMessage(
             )
         }
 
-        // ★ Fuliza repay (expense)
-        regexFulizaRepay.find(message)?.let { m ->
-            val (id, amount) = m.destructured
-            check(smsReceivedAt != System.currentTimeMillis()) {
-                "parseMpesaMessage: smsReceivedAt was not supplied for Fuliza repay $id"
-            }
-            val (fallbackDate, fallbackTime) = smsReceivedAt.toDateTimePair()
-            return ParseResult.Success(
-                buildTransaction(
-                    smsId, id, amount, "Fuliza M-PESA Repayment",
-                    fallbackDate, fallbackTime, "expense", balance, 0.0,
-                    forcedCategory = TransactionCategory.FULIZA.name
-                )
-            )
-        }
+        // These formats omit the payment date (or amount); delivery/due dates are not substitutes.
+        if (regexFulizaRepay.containsMatchIn(message) ||
+            regexBuyGoodsRefund.containsMatchIn(message) ||
+            regexFulizaBorrow.containsMatchIn(message) ||
+            regexReversalShort.containsMatchIn(message)
+        ) return ParseResult.Unmatched(message)
 
         // ── Incoming ───────────────────────────────────────────────────────
 
@@ -674,43 +665,8 @@ fun parseMpesaMessage(
             val time = m.groupValues[5]
             return ParseResult.Success(
                 buildTransaction(
-                    smsId, id, amount, "Hustler Fund Loan", date, time, "income", balance, 0.0,
+                    smsId, id, amount, "Hustler Fund Loan", date, time, "income", balance, txCost,
                     forcedCategory = TransactionCategory.HUSTLER_FUND.name
-                )
-            )
-        }
-
-        // ★ Buy Goods refund
-        regexBuyGoodsRefund.find(message)?.let { m ->
-            val (id, amount, merchant) = m.destructured
-            val (fallbackDate, fallbackTime) = smsReceivedAt.toDateTimePair()
-            return ParseResult.Success(
-                buildTransaction(
-                    smsId, id, amount, "Refund: $merchant",
-                    fallbackDate, fallbackTime, "income", balance, 0.0,
-                    forcedCategory = TransactionCategory.RECEIVED_MONEY.name
-                )
-            )
-        }
-
-        // ★ Fuliza borrow (neutral — just records overdraft usage)
-        regexFulizaBorrow.find(message)?.let { m ->
-            val (id, amount, fee, _, dueDate) = m.destructured
-            // Use due date as the date, time unknown
-            val fallbackTime =
-                LocalTime.NOON.format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-            return ParseResult.Success(
-                buildTransaction(
-                    smsId,
-                    id,
-                    amount,
-                    "Fuliza M-PESA (due $dueDate)",
-                    dueDate,
-                    fallbackTime,
-                    "expense",
-                    balance,
-                    fee.replace(",", "").toDoubleOrNull() ?: 0.0,
-                    forcedCategory = TransactionCategory.FULIZA.name
                 )
             )
         }
@@ -776,21 +732,6 @@ fun parseMpesaMessage(
             )
         }
 
-        // ★ Reversal short form
-        regexReversalShort.find(message)?.let { m ->
-            val (id, reversedTxId, newBalance) = m.destructured
-            val parsedBalance = newBalance.replace(",", "").toDoubleOrNull() ?: balance
-            val (fallbackDate, fallbackTime) = smsReceivedAt.toDateTimePair()
-            return ParseResult.Success(
-                buildTransaction(
-                    smsId, id, "0.00", "Reversal of $reversedTxId",
-                    fallbackDate, fallbackTime, "income", parsedBalance, 0.0,
-                    forcedCategory = TransactionCategory.RECEIVED_MONEY.name,
-                    reversedTxId = reversedTxId.trim()
-                )
-            )
-        }
-
         // ── Neutral ────────────────────────────────────────────────────────
 
         regexBalanceInquiry.find(message)?.let { m ->
@@ -808,12 +749,15 @@ fun parseMpesaMessage(
         // ★ Balance inquiry alternate format
         regexBalanceInquiryAlt.find(message)?.let { m ->
             val (id, balAmount, date, time) = m.destructured
-            val timeOrNow = time.ifBlank {
-                LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-            }
             return ParseResult.Success(
                 buildTransaction(
-                    smsId, id, "0.00", "Balance Inquiry", date, timeOrNow, "neutral",
+                    smsId,
+                    id,
+                    "0.00",
+                    "Balance Inquiry",
+                    date,
+                    time.takeIf { it.isNotBlank() },
+                    "neutral",
                     balance = balAmount.replace(",", "").toDouble(),
                     cost = txCost,
                     forcedCategory = TransactionCategory.BALANCE_INQUIRY.name
@@ -839,33 +783,32 @@ fun buildTransaction(
     amountStr: String,
     recipient: String,
     dateStr: String,
-    timeStr: String,
+    timeStr: String?,
     type: String,
-    balance: Double,
-    cost: Double,
+    balance: Double?,
+    cost: Double?,
     forcedCategory: String? = null,
     reversedTxId: String? = null
 ): MpesaTransactions {
-    val pattern = if (dateStr.length <= 8) "d/M/yy" else "d/M/yyyy"
-    val formattedDate = try {
-        LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern)).toString()
-    } catch (_: Exception) {
-        // If dateStr is already ISO (yyyy-MM-dd) — used by fallback paths above
-        dateStr
-    }
+    val dateFormatter = if ('/' in dateStr) DateTimeFormatter.ofPattern(
+        if (dateStr.substringAfterLast('/').length == 2) "d/M/uu" else "d/M/uuuu"
+    ).withResolverStyle(ResolverStyle.STRICT) else DateTimeFormatter.ISO_LOCAL_DATE
+    val formattedDate = LocalDate.parse(dateStr, dateFormatter).toString()
     val cleanRecipient = recipient.trim().removeSuffix(".")
-    val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
-    val cleanTime = timeStr.uppercase().trim().replace(".", "")
-    val standardizedTime = try {
-        LocalTime.parse(cleanTime, timeFormatter).format(timeFormatter)
-    } catch (_: Exception) {
-        cleanTime
+    require(cleanRecipient.isNotBlank()) { "Missing recipient" }
+    val timeFormatter =
+        DateTimeFormatter.ofPattern("h:mm a", Locale.US).withResolverStyle(ResolverStyle.STRICT)
+    val standardizedTime = timeStr?.let {
+        LocalTime.parse(it.uppercase(Locale.US).trim().replace(".", ""), timeFormatter)
+            .format(timeFormatter)
     }
+    val amount = amountStr.replace(",", "").toDouble()
+    require(amount.isFinite() && amount >= 0 && (type == "neutral" || amount > 0)) { "Invalid amount" }
 
     return MpesaTransactions(
         id = id.trim(),
         smsId = smsId,
-        amount = amountStr.replace(",", "").toDoubleOrNull() ?: 0.0,
+        amount = amount,
         transactionCost = cost,
         recipient = cleanRecipient,
         date = formattedDate,
@@ -874,25 +817,26 @@ fun buildTransaction(
         time = standardizedTime,
         timestamp = convertToTimestamp(formattedDate, standardizedTime),
         category = forcedCategory ?: guessCategory(cleanRecipient, type),
-        reversedTxId = reversedTxId
+        reversedTxId = reversedTxId,
+        reference = id.trim().takeUnless { it.startsWith("FLM-") }
     )
 }
 
-fun convertToTimestamp(dateStr: String, timeStr: String): Long = try {
-    LocalDateTime.parse(
+fun convertToTimestamp(dateStr: String, timeStr: String?): Long =
+    (if (timeStr == null) LocalDate.parse(dateStr).atStartOfDay()
+    else LocalDateTime.parse(
         "$dateStr $timeStr",
-        DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a", Locale.US)
-    ).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-} catch (_: Exception) {
-    System.currentTimeMillis()
-}
+        DateTimeFormatter.ofPattern("uuuu-MM-dd h:mm a", Locale.US)
+            .withResolverStyle(ResolverStyle.STRICT)
+    ))
+        .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
 /**
  * Converts a Unix epoch millisecond value (e.g. the SMS received-at timestamp) into the
  * date/time pair expected by [buildTransaction].
  *
- * Used by message types that carry no date/time in their body text (Fuliza repay,
- * Buy Goods refund, short-form reversals). Using the SMS delivery time is always more
+ * Used for non-payment limit snapshots with no date/time in their body text.
+ * Using the SMS delivery time is always more
  * accurate than falling back to the current wall-clock time at parse time.
  */
 private fun Long.toDateTimePair(): Pair<String, String> {

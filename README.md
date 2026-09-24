@@ -70,6 +70,39 @@ android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
 SMS processing is local to the device.
 
+## Financial data and payment reliability
+
+Unmatched SMS corrections require a positive amount, recipient, date and direction.
+Time, fees, balance and M-PESA reference may be left blank: details show **Unknown**
+and CSV exports leave those cells empty. Date-only records sort at the beginning of
+their day; that ordering timestamp is not a reported payment time. Spending totals
+include the principal and known fees, and may understate spending when fees are missing.
+SMS formats missing a payment date or amount go to review rather than using delivery
+dates, due dates or zero amounts as financial facts.
+Version 14 preserves existing records and returns old placeholder-based manual entries
+to SMS review rather than continuing to count invented values.
+
+Upcoming payments are **never automatically marked paid**. Foreground sync, background
+SMS ingestion, parser reprocessing and manual corrections create persisted suggestions.
+Existing transactions are also reconciled against pending payments. Suggestions require
+matching direction, recipient evidence, an amount within 5%, and a date within seven days.
+Confirm or dismiss them on Upcoming Payments; dismissed pairs stay dismissed.
+Savings items require manual completion because their wallet direction is unspecified.
+
+Completing or skipping a pending payment is atomic and repeat-safe. Monthly and yearly
+recurrences retain the original scheduled day (January 31 → February 28/29 → March 31).
+The next occurrence is created even if overdue; missed occurrences are not silently skipped.
+Existing recurring items use their stored due date as the initial anchor.
+
+Home, notification settings, Insights and target reminders share one budget per calendar
+month. Legacy global targets migrate into the current month, with an existing monthly
+spending target taking precedence. Targets do not silently carry into future months.
+Settings changes are observed through a retained preference listener.
+
+Daily/monthly notification taps open the requested report on cold or warm launch, after
+app authentication when enabled. Startup preserves pending reminder work instead of
+postponing it every time the app opens.
+
 ## 🧪 Testing
 
 The project includes local unit tests and instrumentation tests, including parser
@@ -99,8 +132,8 @@ CI quality workflow:
 git clone https://github.com/JosiahAgency/PesaPulse.git
 ```
 
-2. Open in Android Studio.
-3. Build/run on device or emulator (minSdk 26).
+1. Open in Android Studio.
+2. Build/run on device or emulator (minSdk 26).
 
 ## 🧩 Project layout (high level)
 
@@ -120,6 +153,6 @@ app/src/main/java/com/example/cashia/
 
 Cashia/PesaPulse is an independent app and is not affiliated with Safaricom or M-PESA.
 
-## 📄 License
+## 📄 Licence
 
-MIT License
+MIT Licence

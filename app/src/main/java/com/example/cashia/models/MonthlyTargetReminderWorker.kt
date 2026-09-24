@@ -35,7 +35,7 @@ class MonthlyTargetReminderWorker(
             )
             return Result.success()
         } finally {
-            // Always requeue, even when disabled/set/failed, so the weekly check never dies.
+            // The scheduler respects the latest enabled setting before chaining.
             NotificationScheduler.scheduleMonthlyTargetReminder(context, fromWorker = true)
         }
     }

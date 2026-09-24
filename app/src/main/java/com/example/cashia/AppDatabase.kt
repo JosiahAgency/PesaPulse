@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.cashia.daos.CustomCategoryDao
+import com.example.cashia.daos.PaymentMatchDao
 import com.example.cashia.daos.SyncStateDao
 import com.example.cashia.daos.SystemCategoryOverrideDao
 import com.example.cashia.daos.TransactionDao
@@ -15,6 +16,7 @@ import com.example.cashia.daos.UpcomingTransactionDao
 import com.example.cashia.daos.UserCorrectionDao
 import com.example.cashia.models.CustomCategory
 import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.PaymentMatch
 import com.example.cashia.models.SyncState
 import com.example.cashia.models.SystemCategoryOverride
 import com.example.cashia.models.UnmatchedSms
@@ -22,8 +24,8 @@ import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UserCorrection
 
 @Database(
-    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class],
-    version = 13,
+    entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class, PaymentMatch::class],
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun unmatchedSmsDao(): UnmatchedSmsDao
     abstract fun userCorrectionDao(): UserCorrectionDao
     abstract fun syncStateDao(): SyncStateDao
+    abstract fun paymentMatchDao(): PaymentMatchDao
 
     companion object {
         @Volatile
@@ -184,27 +187,27 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_9_10 = object : Migration(9, 10) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("""CREATE TABLE IF NOT EXISTS `UserCorrections` (`recipient`   TEXT    NOT NULL,`categoryId`  TEXT    NOT NULL,`hitCount`    INTEGER NOT NULL DEFAULT 1,`updatedAt`   INTEGER NOT NULL,PRIMARY KEY(`recipient`))""")
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `UserCorrections` (`recipient`   TEXT    NOT NULL,`categoryId`  TEXT    NOT NULL,`hitCount`    INTEGER NOT NULL DEFAULT 1,`updatedAt`   INTEGER NOT NULL,PRIMARY KEY(`recipient`))""")
             }
         }
 
         private val MIGRATION_10_11 = object : Migration(10, 11) {
-            override fun migrate(database: SupportSQLiteDatabase) {
+            override fun migrate(db: SupportSQLiteDatabase) {
 
                 // SyncState table
-                database.execSQL("""CREATE TABLE IF NOT EXISTS SyncState ( `key` TEXT NOT NULL PRIMARY KEY, `lastSmsId` INTEGER NOT NULL)""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS SyncState ( `key` TEXT NOT NULL PRIMARY KEY, `lastSmsId` INTEGER NOT NULL)""")
 
                 // Add smsId to UnmatchedSms
-                database.execSQL("""ALTER TABLE UnmatchedSms ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
+                db.execSQL("""ALTER TABLE UnmatchedSms ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
 
                 // Add smsId to MpesaTransactions
-                database.execSQL("""ALTER TABLE MpesaTransactions ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
+                db.execSQL("""ALTER TABLE MpesaTransactions ADD COLUMN smsId INTEGER NOT NULL DEFAULT 0""")
 
                 // Unique index for SMS deduplication
-                database.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_MpesaTransactions_smsId ON MpesaTransactions(smsId)""")
+                db.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_MpesaTransactions_smsId ON MpesaTransactions(smsId)""")
 
-                database.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_UnmatchedSms_smsId ON UnmatchedSms(smsId)""")
+                db.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS index_UnmatchedSms_smsId ON UnmatchedSms(smsId)""")
             }
         }
 
@@ -247,6 +250,68 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // The old correction path invented required fields. Keep its audit trail in review.
+                db.execSQL(
+                    """
+                    INSERT OR IGNORE INTO UnmatchedSms
+                        (smsId, rawBody, receivedAt, status, contentHash, parserVersion, confidence, extractedFields, patternGroup)
+                    SELECT smsId,
+                        'Legacy manual entry - verify against the original SMS. Unverified stored values: reference=' || id ||
+                        ', amount=' || amount || ', date=' || date || ', time=' || time ||
+                        ', fees=' || transactionCost || ', balance=' || balance || ', category=' || category,
+                        timestamp, 'PENDING', '', 3, 0, NULL, NULL
+                    FROM MpesaTransactions WHERE recipient = 'Manual Entry (from SMS)'
+                """
+                )
+                db.execSQL(
+                    """
+                    UPDATE UnmatchedSms SET status = 'PENDING', parserVersion = 3
+                    WHERE smsId IN (SELECT smsId FROM MpesaTransactions WHERE recipient = 'Manual Entry (from SMS)')
+                """
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE MpesaTransactions_new (
+                        id TEXT NOT NULL PRIMARY KEY, smsId INTEGER NOT NULL,
+                        amount REAL NOT NULL, transactionCost REAL, recipient TEXT NOT NULL,
+                        date TEXT NOT NULL, type TEXT NOT NULL, balance REAL, time TEXT,
+                        timestamp INTEGER NOT NULL, category TEXT NOT NULL,
+                        reversedTxId TEXT, reference TEXT
+                    )
+                """
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO MpesaTransactions_new
+                    SELECT id, smsId, amount, transactionCost, recipient, date, type,
+                        balance, time, timestamp, category, reversedTxId,
+                        CASE WHEN id LIKE 'FLM-%' THEN NULL ELSE id END
+                    FROM MpesaTransactions WHERE recipient != 'Manual Entry (from SMS)'
+                """
+                )
+                db.execSQL("DROP TABLE MpesaTransactions")
+                db.execSQL("ALTER TABLE MpesaTransactions_new RENAME TO MpesaTransactions")
+                for (column in listOf("timestamp", "date", "type", "category", "reversedTxId")) {
+                    db.execSQL("CREATE INDEX index_MpesaTransactions_$column ON MpesaTransactions($column)")
+                }
+                db.execSQL("CREATE UNIQUE INDEX index_MpesaTransactions_smsId ON MpesaTransactions(smsId)")
+                db.execSQL("ALTER TABLE UpcomingTransactions ADD COLUMN recurrenceAnchor TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE UpcomingTransactions SET recurrenceAnchor = dueDate")
+                db.execSQL(
+                    """
+                    CREATE TABLE PaymentMatches (
+                        upcomingId TEXT NOT NULL, transactionId TEXT NOT NULL,
+                        reason TEXT NOT NULL, dismissed INTEGER NOT NULL,
+                        PRIMARY KEY(upcomingId, transactionId)
+                    )
+                """
+                )
+                db.execSQL("CREATE INDEX index_PaymentMatches_transactionId ON PaymentMatches(transactionId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -266,6 +331,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_10_11,
                     MIGRATION_11_12,
                     MIGRATION_12_13,
+                    MIGRATION_13_14,
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

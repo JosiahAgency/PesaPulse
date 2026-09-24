@@ -49,7 +49,7 @@ class MonthlySummaryWorker(
                 when (it.type) {
                     "income" -> income += it.amount
                     "expense" -> {
-                        val total = it.amount + it.transactionCost
+                        val total = it.amount + it.knownFees
                         expense += total
                         categoryTotals[it.category] =
                             (categoryTotals[it.category] ?: 0.0) + total
@@ -68,6 +68,9 @@ class MonthlySummaryWorker(
                     append("\n🏷 Top spend: ${prettyCategory(it.key)} (${NotificationHelper.ksh(it.value)})")
                 }
                 append("\nTap for the full report")
+                if (txs.any { it.type == "expense" && it.transactionCost == null }) {
+                    append("\nTotals exclude unknown fees.")
+                }
             }
 
             NotificationHelper.post(

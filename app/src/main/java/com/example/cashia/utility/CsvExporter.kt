@@ -3,11 +3,6 @@ package com.example.cashia.utility
 import com.example.cashia.models.MpesaTransactions
 import java.util.Locale
 
-/**
- * One selectable CSV column for the transaction export feature. [header] is the CSV column
- * title, [extract] pulls the raw value for a row. [categoryLabelMap] resolves the stored
- * category id (system enum name or custom category id) to its human-readable label.
- */
 enum class ExportColumn(val header: String) {
     DATE("Date"),
     TIME("Time"),
@@ -22,14 +17,16 @@ enum class ExportColumn(val header: String) {
     fun extract(tx: MpesaTransactions, categoryLabelMap: Map<String, String>): String =
         when (this) {
             DATE -> tx.date
-            TIME -> tx.time
+            TIME -> tx.time.orEmpty()
             TYPE -> tx.type.replaceFirstChar { it.uppercase() }
             CATEGORY -> categoryLabelMap[tx.category] ?: tx.category
             RECIPIENT -> tx.recipient
             AMOUNT -> String.format(Locale.US, "%.2f", tx.amount)
-            TRANSACTION_COST -> String.format(Locale.US, "%.2f", tx.transactionCost)
-            BALANCE -> String.format(Locale.US, "%.2f", tx.balance)
-            TRANSACTION_ID -> tx.id
+            TRANSACTION_COST -> tx.transactionCost?.let { String.format(Locale.US, "%.2f", it) }
+                .orEmpty()
+
+            BALANCE -> tx.balance?.let { String.format(Locale.US, "%.2f", it) }.orEmpty()
+            TRANSACTION_ID -> tx.reference.orEmpty()
         }
 }
 

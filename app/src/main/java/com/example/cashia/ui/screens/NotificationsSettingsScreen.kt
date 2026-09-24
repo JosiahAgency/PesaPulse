@@ -44,7 +44,6 @@ import com.example.cashia.ui.reusedElements.PesaDialog
 import com.example.cashia.ui.reusedElements.SectionCard
 import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.BatteryOptimizationHelper
-import com.example.cashia.utility.PesaTimeConfiguration
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -66,6 +65,7 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
     val isTargetReminderOn by settingsViewModel.isMonthlyTargetReminderEnabled.collectAsStateWithLifecycle()
     val monthlySpendingCap by settingsViewModel.monthlySpendingCap.collectAsStateWithLifecycle()
     val monthlySavingsGoal by settingsViewModel.monthlySavingsGoal.collectAsStateWithLifecycle()
+    val reminderTime by settingsViewModel.reminderTime.collectAsStateWithLifecycle()
 
     var showTimePicker by remember { mutableStateOf(false) }
     var showDaysDialog by remember { mutableStateOf(false) }
@@ -92,17 +92,17 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
     }
 
     val reminderTimeText = remember(
-        PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute, is24Hour
+        reminderTime, is24Hour
     ) {
         val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
-        LocalTime.of(PesaTimeConfiguration.reminderHour, PesaTimeConfiguration.reminderMinute)
+        LocalTime.of(reminderTime.first, reminderTime.second)
             .format(DateTimeFormatter.ofPattern(pattern))
     }
 
     if (showTimePicker) {
         val timePickerState = rememberTimePickerState(
-            initialHour = PesaTimeConfiguration.reminderHour,
-            initialMinute = PesaTimeConfiguration.reminderMinute,
+            initialHour = reminderTime.first,
+            initialMinute = reminderTime.second,
             is24Hour = is24Hour
         )
         PesaDialog(onDismissRequest = { showTimePicker = false }) {
@@ -189,35 +189,35 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
     }
 
     if (showTargetsDialog) {
-        var capText by remember { mutableStateOf(monthlySpendingCap?.toInt()?.toString() ?: "") }
-        var goalText by remember { mutableStateOf(monthlySavingsGoal?.toInt()?.toString() ?: "") }
+        var capText by remember { mutableStateOf(monthlySpendingCap?.toString() ?: "") }
+        var goalText by remember { mutableStateOf(monthlySavingsGoal?.toString() ?: "") }
         PesaDialog(
             onDismissRequest = { showTargetsDialog = false }, modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                "Monthly Target",
+                "Monthly Target - ${java.time.YearMonth.now()}",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Set either (or both) — Cashia will stop nagging you once at least one is set.",
+                "Shared with Home and Insights for this month. Leave a field blank to clear it.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = capText,
-                onValueChange = { capText = it.filter(Char::isDigit) },
+                onValueChange = { capText = it },
                 label = { Text("Spending cap (KSh)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = goalText,
-                onValueChange = { goalText = it.filter(Char::isDigit) },
+                onValueChange = { goalText = it },
                 label = { Text("Savings goal (KSh)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
             Spacer(Modifier.height(12.dp))
@@ -228,6 +228,8 @@ fun NotificationsSettingsScreen(settingsViewModel: SettingsViewModel) {
                         capText.toDoubleOrNull(), goalText.toDoubleOrNull()
                     )
                     showTargetsDialog = false
+                }, enabled = listOf(capText, goalText).all { text ->
+                    text.isBlank() || text.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true
                 }) { Text("Save") }
             }
         }

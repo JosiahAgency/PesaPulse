@@ -30,6 +30,7 @@ fun AnalyticsScreen(
     val weekdayPattern by analyticsViewModel.weekdayPatternFlow.collectAsStateWithLifecycle()
     val recurringMerchants by analyticsViewModel.recurringMerchantsFlow.collectAsStateWithLifecycle()
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
+    val budgetProgress by analyticsViewModel.monthlyBudget.collectAsStateWithLifecycle()
 
     val hapticFeedback = LocalHapticFeedback.current
 //    val transactions = allTransactions
@@ -96,6 +97,11 @@ fun AnalyticsScreen(
         contentPadding = screenContentPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        budgetProgress?.let { progress ->
+            item(key = "monthly_budget") {
+                MonthlyBudgetCard(progress)
+            }
+        }
         // 1. Period picker
         item {
             PeriodSelectorCard(

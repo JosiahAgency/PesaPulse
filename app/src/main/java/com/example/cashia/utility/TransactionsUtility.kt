@@ -1,7 +1,7 @@
 package com.example.cashia.utility
 
-import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.DayGroup
+import com.example.cashia.models.MpesaTransactions
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -76,7 +76,7 @@ fun buildDayGroups(transactions: List<MpesaTransactions>): List<DayGroup> =
                 transactions = dayTxs.sortedByDescending { it.timestamp },
                 dayIncome = income,
                 dayExpense = expense,
-                dayBalance = dayTxs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
+                dayBalance = dayTxs.maxByOrNull { it.timestamp }?.balance
             )
         }
 

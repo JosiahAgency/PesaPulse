@@ -38,14 +38,14 @@ class DailyDigestWorker(
                 db.transactionDao().getTransactionsForDateRange(today, today)
             }
             val balance =
-                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() } ?: 0.0
+                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() }
 
             var income = 0.0
             var expense = 0.0
             txs.forEach {
                 when (it.type) {
                     "income" -> income += it.amount
-                    "expense" -> expense += it.amount + it.transactionCost
+                    "expense" -> expense += it.amount + it.knownFees
                 }
             }
             val net = income - expense
@@ -54,7 +54,10 @@ class DailyDigestWorker(
                 append("💰 Income:   ${NotificationHelper.ksh(income)}\n")
                 append("💸 Spent:    ${NotificationHelper.ksh(expense)}\n")
                 append("📊 Net:      ${if (net >= 0) "+" else ""}${NotificationHelper.ksh(net)}\n")
-                append("🏦 Balance:  ${NotificationHelper.ksh(balance)}")
+                append("🏦 Balance:  ${balance?.let { NotificationHelper.ksh(it) } ?: "Unknown"}")
+                if (txs.any { it.type == "expense" && it.transactionCost == null }) {
+                    append("\nTotals exclude unknown fees.")
+                }
                 if (txs.isNotEmpty()) append("\n📋 ${txs.size} transaction(s) today · tap for details")
                 else append("\n🌿 No M-Pesa activity today")
             }

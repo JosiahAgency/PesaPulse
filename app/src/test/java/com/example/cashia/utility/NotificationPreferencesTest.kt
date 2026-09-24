@@ -20,6 +20,9 @@ class NotificationPreferencesTest {
         every { context.getSharedPreferences("pesa_prefs", Context.MODE_PRIVATE) } returns prefs
         every { prefs.getBoolean(any(), any()) } answers { secondArg() }
         every { prefs.getBoolean("notif_prefs_migrated", false) } returns true
+        every { prefs.getBoolean("monthly_budget_migrated", false) } returns true
+        every { prefs.registerOnSharedPreferenceChangeListener(any()) } returns Unit
+        every { prefs.unregisterOnSharedPreferenceChangeListener(any()) } returns Unit
         every { prefs.getString(any(), any()) } answers { secondArg() }
         every { prefs.getInt(any(), any()) } answers { values[firstArg<String>()] ?: secondArg() }
         every { prefs.edit() } returns editor

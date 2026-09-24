@@ -20,6 +20,15 @@ interface UpcomingTransactionDao {
     @Query("SELECT * FROM UpcomingTransactions WHERE status = 'PENDING' ORDER BY dueDate ASC")
     suspend fun getPendingOnce(): List<UpcomingTransaction>
 
+    @Query("SELECT * FROM UpcomingTransactions WHERE id = :id")
+    suspend fun getById(id: String): UpcomingTransaction?
+
+    @Query("SELECT EXISTS(SELECT 1 FROM UpcomingTransactions WHERE matchedTransactionId = :transactionId)")
+    suspend fun isTransactionMatched(transactionId: String): Boolean
+
+    @Query("UPDATE UpcomingTransactions SET status = :status, matchedTransactionId = :transactionId WHERE id = :id AND status = 'PENDING'")
+    suspend fun completePending(id: String, status: String, transactionId: String?): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(tx: UpcomingTransaction)
 

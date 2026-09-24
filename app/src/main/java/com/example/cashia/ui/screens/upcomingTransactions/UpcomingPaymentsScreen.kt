@@ -47,6 +47,7 @@ import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.PesaActions
+import com.example.cashia.utility.PesaTimeConfiguration
 
 /**
  * Full CRUD "Upcoming Payments" screen — relocated out of History (which now only shows a
@@ -63,6 +64,8 @@ fun UpcomingPaymentsScreen(
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val upcoming by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
+    val matches by upcomingViewModel.possibleMatches.collectAsStateWithLifecycle()
+    val isWorking by upcomingViewModel.isWorking.collectAsStateWithLifecycle()
 
     var expanded by remember { mutableStateOf(true) }
     var deleteTarget by remember { mutableStateOf<UpcomingTransaction?>(null) }
@@ -73,6 +76,31 @@ fun UpcomingPaymentsScreen(
             contentPadding = screenContentPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (matches.isNotEmpty()) {
+                item(key = "matches_header") {
+                    SectionLabel("Possible matches - confirm payment")
+                    Text("Payments remain pending until you confirm.", color = MaterialTheme.colorScheme.onBackground)
+                }
+                items(matches, key = { "match_${it.upcomingId}_${it.transactionId}" }) { match ->
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(match.title, style = MaterialTheme.typography.titleMedium)
+                            Text("Due ${match.dueDate}: ${PesaTimeConfiguration.formatCurrency(match.expectedAmount)}")
+                            Text("${match.recipient} / ${match.date}: ${PesaTimeConfiguration.formatCurrency(match.amount)}")
+                            Text("Reference: ${match.reference ?: "Unknown"}")
+                            Text(match.reason, style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { upcomingViewModel.dismissMatch(match) }, enabled = !isWorking) {
+                                    Text("Not this payment")
+                                }
+                                Button(onClick = { upcomingViewModel.confirmMatch(match) }, enabled = !isWorking) {
+                                    Text("Confirm payment")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item(key = "upcoming_header") {
                 Row(
                     modifier = Modifier

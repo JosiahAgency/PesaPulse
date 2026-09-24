@@ -2,7 +2,6 @@ package com.example.cashia.models
 
 import android.annotation.SuppressLint
 import android.app.Application
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -24,66 +23,101 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val context = getApplication<Application>().applicationContext
+    val reminderTime = PesaTimeConfiguration.observe {
+        PesaTimeConfiguration.reminderHour to PesaTimeConfiguration.reminderMinute
+    }.stateIn(
+        viewModelScope, SharingStarted.Eagerly,
+        PesaTimeConfiguration.reminderHour to PesaTimeConfiguration.reminderMinute
+    )
 
-    val darkTheme = snapshotFlow { PesaTimeConfiguration.isDarkTheme }
+    val darkTheme = PesaTimeConfiguration.observe { PesaTimeConfiguration.isDarkTheme }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isDarkTheme)
 
-    val use24Hour = snapshotFlow { PesaTimeConfiguration.use24HrsFormat }
+    val use24Hour = PesaTimeConfiguration.observe { PesaTimeConfiguration.use24HrsFormat }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.use24HrsFormat)
 
-    val firstDayOfWeek = snapshotFlow { PesaTimeConfiguration.firstDayOfWeek }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.firstDayOfWeek)
+//    val firstDayOfWeek = PesaTimeConfiguration.observe { PesaTimeConfiguration.firstDayOfWeek }
+//        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.firstDayOfWeek)
+//
+//    val isBiometricEnabled =
+//        PesaTimeConfiguration.observe { PesaTimeConfiguration.isBiometricEnabled }
+//            .stateIn(
+//                viewModelScope,
+//                SharingStarted.Eagerly,
+//                PesaTimeConfiguration.isBiometricEnabled
+//            )
 
-    val isBiometricEnabled = snapshotFlow { PesaTimeConfiguration.isBiometricEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isBiometricEnabled)
+    val isDailyDigestEnabled =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.isDailyDigestEnabled }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.isDailyDigestEnabled
+            )
 
-    val isDailyDigestEnabled = snapshotFlow { PesaTimeConfiguration.isDailyDigestEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.isDailyDigestEnabled)
+    val isMonthlySummaryEnabled =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.isMonthlySummaryEnabled }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.isMonthlySummaryEnabled
+            )
 
-    val isMonthlySummaryEnabled = snapshotFlow { PesaTimeConfiguration.isMonthlySummaryEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isMonthlySummaryEnabled
-        )
+    val isUpcomingReminderEnabled =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.isUpcomingReminderEnabled }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.isUpcomingReminderEnabled
+            )
 
-    val isUpcomingReminderEnabled = snapshotFlow { PesaTimeConfiguration.isUpcomingReminderEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isUpcomingReminderEnabled
-        )
+    val upcomingReminderDays =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.upcomingReminderDaysBefore }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.upcomingReminderDaysBefore
+            )
 
-    val upcomingReminderDays = snapshotFlow { PesaTimeConfiguration.upcomingReminderDaysBefore }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.upcomingReminderDaysBefore
-        )
+    val isLowBalanceAlertEnabled =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.isLowBalanceAlertEnabled }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.isLowBalanceAlertEnabled
+            )
 
-    val isLowBalanceAlertEnabled = snapshotFlow { PesaTimeConfiguration.isLowBalanceAlertEnabled }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            PesaTimeConfiguration.isLowBalanceAlertEnabled
-        )
-
-    val lowBalanceThreshold = snapshotFlow { PesaTimeConfiguration.lowBalanceThreshold }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.lowBalanceThreshold)
+    val lowBalanceThreshold =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.lowBalanceThreshold }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.lowBalanceThreshold
+            )
 
     val isMonthlyTargetReminderEnabled =
-        snapshotFlow { PesaTimeConfiguration.isMonthlyTargetReminderEnabled }
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.isMonthlyTargetReminderEnabled }
             .stateIn(
                 viewModelScope,
                 SharingStarted.Eagerly,
                 PesaTimeConfiguration.isMonthlyTargetReminderEnabled
             )
 
-    val monthlySpendingCap = snapshotFlow { PesaTimeConfiguration.monthlySpendingCap }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.monthlySpendingCap)
+    val monthlySpendingCap =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.monthlySpendingCap }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.monthlySpendingCap
+            )
 
-    val monthlySavingsGoal = snapshotFlow { PesaTimeConfiguration.monthlySavingsGoal }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, PesaTimeConfiguration.monthlySavingsGoal)
+    val monthlySavingsGoal =
+        PesaTimeConfiguration.observe { PesaTimeConfiguration.monthlySavingsGoal }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                PesaTimeConfiguration.monthlySavingsGoal
+            )
 
     fun setDarkTheme(enabled: Boolean) {
         PesaTimeConfiguration.saveTheme(enabled)

@@ -68,7 +68,11 @@ sealed class ProcessedResult {
 }
 
 /** Syncs new M-Pesa SMS into the DB. Returns the newly parsed transactions. */
-suspend fun syncTransactions(context: Context, database: AppDatabase): List<MpesaTransactions> {
+suspend fun syncTransactions(
+    context: Context,
+    database: AppDatabase,
+    fetchMessages: (Context, Long) -> List<SmsRepository.SmsMessage> = ::fetchMpesaMessages
+): List<MpesaTransactions> {
     val startTime = System.currentTimeMillis()
     val dao = database.transactionDao()
     val unmatchedDao = database.unmatchedSmsDao()
@@ -80,10 +84,13 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
 
     // 1. Fetch Phase
     val fetchStart = System.currentTimeMillis()
-    val messages = fetchMpesaMessages(context, lastSmsId)
+    val messages = fetchMessages(context, lastSmsId)
     val fetchEnd = System.currentTimeMillis()
 
-    if (messages.isEmpty()) return emptyList()
+    if (messages.isEmpty()) {
+        UpcomingPaymentService(database).reconcilePending()
+        return emptyList()
+    }
 
     Log.d("SyncPerf", "Fetched ${messages.size} messages in ${fetchEnd - fetchStart}ms")
 
@@ -154,19 +161,22 @@ suspend fun syncTransactions(context: Context, database: AppDatabase): List<Mpes
 
     // 3. Database Insertion Phase
     val dbStart = System.currentTimeMillis()
-    database.withTransaction {
-        if (parsed.isNotEmpty()) dao.insertTransactions(parsed)
+    val inserted = database.withTransaction {
+        val results = if (parsed.isNotEmpty()) dao.insertTransactions(parsed) else emptyList()
         if (unmatched.isNotEmpty()) unmatchedDao.insertAll(unmatched)
-        syncDao.upsert(SyncState(key = "mpesa_sync", lastSmsId = newestSmsId))
+        UpcomingPaymentService(database).reconcilePending()
+        val currentCursor = syncDao.getLastSmsId("mpesa_sync") ?: 0L
+        syncDao.upsert(SyncState(key = "mpesa_sync", lastSmsId = maxOf(currentCursor, newestSmsId)))
+        parsed.filterIndexed { index, _ -> results[index] != -1L }
     }
     val dbEnd = System.currentTimeMillis()
 
     Log.d("SyncPerf", "Database transaction finished in ${dbEnd - dbStart}ms")
-    if (parsed.isNotEmpty()) {
+    if (inserted.isNotEmpty()) {
         WidgetUpdateManager.refreshCashiaWidgets(context)
         // Balance only changes when a transaction lands, so check it here rather than on a timer.
         BalanceAlertService.checkAndNotify(context, database)
     }
     Log.d("SyncPerf", "Total sync cycle completed in ${dbEnd - startTime}ms")
-    return parsed
+    return inserted
 }

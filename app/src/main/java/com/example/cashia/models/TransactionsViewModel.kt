@@ -1,6 +1,7 @@
 package com.example.cashia.models
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,11 +9,13 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import com.example.cashia.daos.FilteredTotals
 import com.example.cashia.utility.ParsedTx
+import com.example.cashia.utility.TransactionCorrection
+import com.example.cashia.utility.UpcomingPaymentService
 import com.example.cashia.utility.localDate
-import com.example.cashia.utility.partialFieldsFromJson
 import com.example.cashia.utility.syncTransactions
 import com.example.cashia.utility.toParsedTx
 import com.example.cashia.widget.WidgetUpdateManager
@@ -35,10 +38,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 data class TransactionState(
     /** The currently loaded window of the filtered set (newest first). */
@@ -48,7 +52,7 @@ data class TransactionState(
     val filteredCount: Int = 0,
     /** True when more matching rows exist beyond the loaded window. */
     val hasMore: Boolean = false,
-    val latestBalance: Double = 0.0,
+    val latestBalance: Double? = null,
     val latestBalanceDate: String = "",
     val latestBalanceDateParsed: LocalDate = LocalDate.now(),
     val totalIncome: Double = 0.0,
@@ -81,9 +85,11 @@ private data class HistoryFilters(
 )
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class TransactionsViewModel(private val context: Context) : ViewModel() {
+class TransactionsViewModel(
+    private val context: Context,
+    private val database: AppDatabase = AppDatabase.getDatabase(context)
+) : ViewModel() {
 
-    private val database = AppDatabase.getDatabase(context)
     private val dao = database.transactionDao()
     private val unmatchedDao = database.unmatchedSmsDao()
 
@@ -102,8 +108,8 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     // ── New-transactions event (replaces raw nullable callback) ────────────────
     private val _newTransactionsSynced =
         MutableSharedFlow<List<MpesaTransactions>>(extraBufferCapacity = 1)
-    val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
-        _newTransactionsSynced.asSharedFlow()
+//    val newTransactionsSynced: SharedFlow<List<MpesaTransactions>> =
+//        _newTransactionsSynced.asSharedFlow()
 
     // ── Sync-failure event (surfaced to the user via a Snackbar) ────────────────
     private val _syncError = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -112,7 +118,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
     // ── History pipeline: filters resolved once, applied in SQL ────────────────
 
     private val filtersFlow = combine(
-        _searchQuery.debounce(300),        // Only search input benefits from debouncing
+        _searchQuery.debounce(300.milliseconds),        // Only search input benefits from debouncing
         _selectedCategoryFilter,
         _dateRangeStart,
         _dateRangeEnd,
@@ -121,7 +127,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         val trimmed = query.trim()
         HistoryFilters(
             rawQuery = query,
-            sqlQuery = if (trimmed.isEmpty()) "" else trimmed,
+            sqlQuery = trimmed.ifEmpty { "" },
             amountQuery = trimmed.toDoubleOrNull(),
             queryCategoryIds = if (trimmed.isEmpty()) emptyList()
             else catMap.filterValues { it.contains(trimmed, ignoreCase = true) }.keys.toList(),
@@ -298,32 +304,29 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    fun saveTransactionFromSms(source: UnmatchedSms, type: String, category: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val partial = partialFieldsFromJson(source.extractedFields)
-            val transaction = try {
-                buildTransaction(
-                    smsId = source.smsId,
-                    id = source.smsId.toString(),
-                    amountStr = partial?.amount?.toString() ?: "0.00",
-                    recipient = "Manual Entry (from SMS)",
-                    dateStr = partial?.date ?: LocalDate.now()
-                        .format(DateTimeFormatter.ofPattern("d/M/yyyy")),
-                    timeStr = "12:00 PM",
-                    type = type,
-                    balance = 0.0,
-                    cost = 0.0,
-                    forcedCategory = category
-                )
-            } catch (e: Exception) {
-                Log.e("TransactionsViewModel", "Failed to build transaction from SMS", e)
-                return@launch
+    suspend fun saveTransactionFromSms(
+        source: UnmatchedSms,
+        correction: TransactionCorrection
+    ): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val transaction = correction.toTransaction(source)
+                database.withTransaction {
+                    require(unmatchedDao.claimForCorrection(source.id) == 1) {
+                        "This message has already been saved, ignored, or removed."
+                    }
+                    dao.insertCorrection(transaction)
+                    UpcomingPaymentService(database).suggest(listOf(transaction))
+                }
+            } catch (e: IllegalArgumentException) {
+                return@withContext e.message ?: "Please check the entered details."
+            } catch (e: SQLiteException) {
+                Log.e("TransactionsViewModel", "Could not save corrected SMS", e)
+                return@withContext "Could not save. This SMS or reference may already exist. Your message remains in review."
             }
-            dao.insertTransactions(listOf(transaction))
-            unmatchedDao.setStatus(source.id, SmsStatus.SAVED)
             WidgetUpdateManager.refreshCashiaWidgets(context)
+            null
         }
-    }
 
     // ── Pure computation helpers ───────────────────────────────────────────────
 
@@ -342,7 +345,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
             groupedTransactions = buildGroupedTransactions(parsedWindow),
             filteredCount = totals.count,
             hasMore = window.size < totals.count,
-            latestBalance = latestTx?.balance ?: 0.0,
+            latestBalance = latestTx?.balance,
             latestBalanceDate = latestTx?.date ?: "",
             latestBalanceDateParsed = latestTx?.localDate() ?: today,
             totalIncome = totals.income,
@@ -389,7 +392,7 @@ class TransactionsViewModel(private val context: Context) : ViewModel() {
                             transactions = dayTxs,
                             dayIncome = inc,
                             dayExpense = exp,
-                            dayBalance = dayTxs.lastOrNull { it.balance > 0 }?.balance ?: 0.0
+                            dayBalance = dayTxs.firstOrNull()?.balance
                         )
                     }
                 WeekGroup(bucket, days)

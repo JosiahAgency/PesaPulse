@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
+import android.util.Log
+import android.widget.Toast
+import com.example.cashia.utility.validatedNotificationRoute
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
@@ -28,12 +32,15 @@ import androidx.core.content.edit
 class MainActivity : FragmentActivity() {
     private val permissionRequestCode = 100
     private var isUnlocked = mutableStateOf(false)
+    private val pendingRoute = mutableStateOf<String?>(null)
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 13)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        pendingRoute.value = savedInstanceState?.getString("pending_notification_route")
+        if (savedInstanceState == null) receiveNotificationIntent(intent)
         handlePermissions()
         PesaTimeConfiguration.initialize(this)
         NotificationHelper.createChannels(this)
@@ -51,12 +58,38 @@ class MainActivity : FragmentActivity() {
             val unlocked by isUnlocked
             PesaPulseTheme(darkTheme = PesaTimeConfiguration.isDarkTheme) {
                 if (unlocked) {
-                    PesaPulseApp()
+                    PesaPulseApp(pendingRoute.value) { pendingRoute.value = null }
                 } else {
                     LockPlaceholder(onUnlockClick = { authenticateUser() })
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        receiveNotificationIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PesaTimeConfiguration.refreshCalendarContext()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("pending_notification_route", pendingRoute.value)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun receiveNotificationIntent(intent: Intent) {
+        val raw = intent.getStringExtra(NotificationHelper.EXTRA_ROUTE) ?: return
+        intent.removeExtra(NotificationHelper.EXTRA_ROUTE)
+        val route = validatedNotificationRoute(raw)
+        if (route == null) {
+            Log.w("MainActivity", "Rejected invalid notification destination")
+            Toast.makeText(this, "This notification destination is not available.", Toast.LENGTH_LONG).show()
+        } else pendingRoute.value = route
     }
 
     private fun handlePermissions() {
@@ -123,7 +156,7 @@ class MainActivity : FragmentActivity() {
         // Fire immediately on a background thread — confirms the whole pipeline works
         lifecycleScope.launch(Dispatchers.IO) {
             val db = AppDatabase.getDatabase(this@MainActivity)
-            val balance = db.transactionDao().getLatestBalance() ?: 0.0
+            val balance = db.transactionDao().getLatestBalance()
             val count = db.transactionDao().getAllTransactionsOnce().size
 
             NotificationHelper.post(
@@ -133,7 +166,7 @@ class MainActivity : FragmentActivity() {
                 title = "👋 Cashia is ready",
                 body = buildString {
                     append("Notifications are active.\n")
-                    append("🏦 Current balance: ${NotificationHelper.ksh(balance)}\n")
+                    append("🏦 Current balance: ${balance?.let { NotificationHelper.ksh(it) } ?: "Unknown"}\n")
                     append("📋 $count transactions synced")
                 }
             )

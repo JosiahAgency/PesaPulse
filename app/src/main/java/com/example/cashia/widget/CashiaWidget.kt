@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalSize
@@ -91,7 +92,7 @@ class CashiaWidget : GlanceAppWidget() {
                     .getBoolean(SHOW_BALANCE_KEY, false)
 
                 WidgetData(
-                    balance = latestTx?.balance ?: 0.0,
+                    balance = latestTx?.balance,
                     today = metrics(dayTxs),
                     week = metrics(weekTxs),
                     updatedAt = buildUpdatedLabel(latestTx?.date, latestTx?.time),
@@ -115,7 +116,7 @@ class CashiaWidget : GlanceAppWidget() {
         for (tx in txs) {
             when (tx.type) {
                 "income" -> income += tx.amount
-                "expense" -> expenses += tx.amount + tx.transactionCost
+                "expense" -> expenses += tx.amount + tx.knownFees
             }
         }
         return Metrics(income, expenses)
@@ -215,7 +216,7 @@ class CashiaWidget : GlanceAppWidget() {
 
     @Composable
     private fun BalanceCard(
-        balance: Double,
+        balance: Double?,
         showBalance: Boolean,
         isLocked: Boolean
     ) {
@@ -232,7 +233,7 @@ class CashiaWidget : GlanceAppWidget() {
             )
             Spacer(GlanceModifier.height(2.dp))
             Text(
-                text = if (showBalance) ksh(balance) else "••••••",
+                text = if (showBalance) balance?.let { ksh(it) } ?: "Unknown" else "••••••",
                 style = TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = TextUnit(22f, TextUnitType.Sp)
@@ -396,7 +397,7 @@ class CashiaWidget : GlanceAppWidget() {
     }
 
     data class WidgetData(
-        val balance: Double = 0.0,
+        val balance: Double? = null,
         val today: Metrics = Metrics(),
         val week: Metrics = Metrics(),
         val updatedAt: String = "No synced transactions",
@@ -421,7 +422,7 @@ class ToggleBalanceVisibilityAction : ActionCallback {
     ) {
         val prefs = context.getSharedPreferences("cashia_widget_prefs", Context.MODE_PRIVATE)
         val current = prefs.getBoolean("widget_show_balance", false)
-        prefs.edit().putBoolean("widget_show_balance", !current).apply()
+        prefs.edit { putBoolean("widget_show_balance", !current) }
         CashiaWidget().update(context, glanceId)
     }
 }
