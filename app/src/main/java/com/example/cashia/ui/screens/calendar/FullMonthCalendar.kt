@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,49 +34,54 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.cashia.models.MpesaTransactions
+import com.example.cashia.models.MonthActivity
 import com.example.cashia.models.UpcomingTransaction
+import com.example.cashia.ui.reusedElements.InfinitePager
 import com.example.cashia.ui.reusedElements.SectionLabel
+import com.example.cashia.ui.reusedElements.rememberInfinitePagerState
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.utility.PesaTimeConfiguration
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 
+/**
+ * Month grid.
+ *
+ * [activity] arrives as per-day totals grouped in SQL. This used to be derived by scanning
+ * the screen's full transaction window in memory for two date sets — the same question the
+ * dashboard's week strip already answered with a narrow projection.
+ */
 @Composable
 fun FullMonthCalendar(
-    allTransactions: List<MpesaTransactions>,
+    activity: MonthActivity,
     selectedDate: LocalDate,
     upcomingTransactions: List<UpcomingTransaction> = emptyList(),
     onDateSelected: (LocalDate) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val initialPage = 500
-    val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { 1000 }
-    )
+    val pagerState = rememberInfinitePagerState()
 
     val firstDay = remember { PesaTimeConfiguration.firstDayOfWeek }
     val today = remember { LocalDate.now() }
     val todayStr = remember { today.toString() }
+    val anchorMonth = remember { YearMonth.now() }
 
-    val (incomeDates, expenseDates, upcomingDates) = remember(allTransactions, upcomingTransactions, todayStr) {
-        val inc = allTransactions.filter { it.type.equals("income", true) }.map { it.date }.toHashSet()
-        val exp = allTransactions.filter { it.type.equals("expense", true) }.map { it.date }.toHashSet()
-        val upc = upcomingTransactions.map { it.dueDate }.toHashSet()
-        Triple(inc, exp, upc)
+    val upcomingDates = remember(upcomingTransactions) {
+        upcomingTransactions.mapTo(HashSet()) { it.dueDate }
     }
 
-    val currentMonth = remember(pagerState.currentPage) {
-        YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
+    val currentMonth = remember(pagerState.currentPage, anchorMonth) {
+        anchorMonth.plusMonths(InfinitePager.offsetOf(pagerState.currentPage).toLong())
     }
     val dayLabels = remember(firstDay) {
         (0..6).map { firstDay.plus(it.toLong()) }
@@ -88,7 +92,7 @@ fun FullMonthCalendar(
     LaunchedEffect(Unit) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
             if (isProgrammaticScroll) return@collect   // ← skip intermediate pages
-            val newMonth = YearMonth.now().plusMonths((page - initialPage).toLong())
+            val newMonth = anchorMonth.plusMonths(InfinitePager.offsetOf(page).toLong())
             if (selectedDate.year != newMonth.year || selectedDate.month != newMonth.month) {
                 val targetDate = if (newMonth == YearMonth.now()) LocalDate.now()
                 else newMonth.atDay(1)
@@ -100,11 +104,10 @@ fun FullMonthCalendar(
     LaunchedEffect(selectedDate) {
         val targetMonth = YearMonth.from(selectedDate)
         val currentPagerMonth =
-            YearMonth.now().plusMonths((pagerState.currentPage - initialPage).toLong())
+            anchorMonth.plusMonths(InfinitePager.offsetOf(pagerState.currentPage).toLong())
         if (targetMonth != currentPagerMonth) {
-            val targetPage = initialPage +
-                    ((targetMonth.year - YearMonth.now().year) * 12) +
-                    (targetMonth.monthValue - YearMonth.now().monthValue)
+            val monthsDiff = ChronoUnit.MONTHS.between(anchorMonth, targetMonth).toInt()
+            val targetPage = InfinitePager.pageFor(monthsDiff)
             isProgrammaticScroll = true
             pagerState.animateScrollToPage(targetPage)
             isProgrammaticScroll = false
@@ -208,7 +211,9 @@ fun FullMonthCalendar(
                 state = pagerState,
                 modifier = Modifier.fillMaxWidth()
             ) { page ->
-                val monthOfPage = remember(page) { YearMonth.now().plusMonths((page - initialPage).toLong()) }
+                val monthOfPage = remember(page, anchorMonth) {
+                    anchorMonth.plusMonths(InfinitePager.offsetOf(page).toLong())
+                }
                 val monthGrid = remember(monthOfPage) { generateMonthGrid(monthOfPage, firstDay) }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -218,18 +223,17 @@ fun FullMonthCalendar(
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             week.forEach { day ->
+                                val dayKey = day?.toString()
                                 CalendarDayItem(
                                     day,
                                     today,
                                     isSelected = day == selectedDate,
                                     isCurrentMonth = day?.month == monthOfPage.month,
-                                    hasIncome = day != null && incomeDates.contains(day.toString()),
-                                    hasExpense = day != null && expenseDates.contains(day.toString()),
-                                    hasUpcoming = day != null && upcomingDates.contains(day.toString()),
-                                    isOverdueUpcoming = day != null && overdueUpcomingDates.contains(
-                                        day.toString()
-                                    ),
-                                    onDateSelected
+                                    totals = dayKey?.let { activity.totalsByDate[it] },
+                                    hasUpcoming = dayKey != null && upcomingDates.contains(dayKey),
+                                    isOverdueUpcoming = dayKey != null &&
+                                            overdueUpcomingDates.contains(dayKey),
+                                    onDateSelected = onDateSelected
                                 )
                             }
                         }
@@ -275,13 +279,14 @@ private fun LegendDiamond(color: Color, label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Rotated square = diamond
+        // Square turned 45° to read as a diamond, matching the scheduled-payment marker
+        // drawn inside the day cells.
         Box(
             modifier = Modifier
                 .size(6.dp)
+                .rotate(45f)
                 .clip(RoundedCornerShape(1.dp))
                 .background(color)
-                .then(Modifier)
         )
         Subtitles(label)
     }

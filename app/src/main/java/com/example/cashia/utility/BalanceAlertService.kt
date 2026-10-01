@@ -15,7 +15,7 @@ object BalanceAlertService {
     suspend fun checkAndNotify(context: Context, db: AppDatabase) {
         if (!PesaTimeConfiguration.isLowBalanceAlertEnabled) return
 
-        val balance = db.transactionDao().getLatestBalance() ?: return
+        val balance = db.transactionDao().getLatestHeadlineOnce()?.balance ?: return
         val threshold = PesaTimeConfiguration.lowBalanceThreshold
 
         if (balance > threshold) {

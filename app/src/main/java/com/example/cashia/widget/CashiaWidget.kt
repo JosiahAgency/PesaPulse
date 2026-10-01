@@ -80,10 +80,13 @@ class CashiaWidget : GlanceAppWidget() {
                 val dao = AppDatabase.getDatabase(context).transactionDao()
                 val today = LocalDate.now()
                 val todayStr = today.toString()
-                val dayTxs = dao.getTransactionsForDateRange(todayStr, todayStr)
                 val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1L).toString()
-                val weekTxs = dao.getTransactionsForDateRange(weekStart, todayStr)
-                val latestTx = dao.getLatestTransactionOnce()
+                // Aggregated in SQL: the widget only renders two sums per period, and the
+                // week range contains today, so loading both as entity lists hydrated every
+                // one of today's rows twice.
+                val dayMetrics = dao.getPeriodMetricsOnce(todayStr, todayStr)
+                val weekMetrics = dao.getPeriodMetricsOnce(weekStart, todayStr)
+                val latest = dao.getLatestHeadlineOnce()
                 val isLocked =
                     (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
                         ?.isKeyguardLocked == true
@@ -92,10 +95,10 @@ class CashiaWidget : GlanceAppWidget() {
                     .getBoolean(SHOW_BALANCE_KEY, false)
 
                 WidgetData(
-                    balance = latestTx?.balance,
-                    today = metrics(dayTxs),
-                    week = metrics(weekTxs),
-                    updatedAt = buildUpdatedLabel(latestTx?.date, latestTx?.time),
+                    balance = latest?.balance,
+                    today = Metrics(dayMetrics.income, dayMetrics.expenses),
+                    week = Metrics(weekMetrics.income, weekMetrics.expenses),
+                    updatedAt = buildUpdatedLabel(latest?.date, latest?.time),
                     isLocked = isLocked,
                     revealRequested = revealRequested
                 )
@@ -108,18 +111,6 @@ class CashiaWidget : GlanceAppWidget() {
         if (date.isNullOrBlank()) return "No synced transactions"
         val dateLabel = runCatching { LocalDate.parse(date).format(uiDateFmt) }.getOrElse { date }
         return if (time.isNullOrBlank()) "Updated $dateLabel" else "Updated $dateLabel • $time"
-    }
-
-    private fun metrics(txs: List<com.example.cashia.models.MpesaTransactions>): Metrics {
-        var income = 0.0
-        var expenses = 0.0
-        for (tx in txs) {
-            when (tx.type) {
-                "income" -> income += tx.amount
-                "expense" -> expenses += tx.amount + tx.knownFees
-            }
-        }
-        return Metrics(income, expenses)
     }
 
     @Composable

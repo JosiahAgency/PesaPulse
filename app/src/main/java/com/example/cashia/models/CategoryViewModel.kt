@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
+import com.example.cashia.daos.TransactionDao
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -194,9 +195,11 @@ class CategoryViewModel(
 
     fun saveInlineCategory(category: CustomCategory) {
         viewModelScope.launch(Dispatchers.IO) {
-            categoryDao.upsertCategory(category)
-            if (category.keywords.isNotBlank()) {
-                reclassifyWithCustomCategory(category)
+            db.withTransaction {
+                categoryDao.upsertCategory(category)
+                if (category.keywords.isNotBlank()) {
+                    reclassifyWithCustomCategory(category)
+                }
             }
         }
     }
@@ -291,7 +294,7 @@ class CategoryViewModel(
                         val guessed = guessCategory(tx.recipient, tx.type, customs, corrections)
                         if (guessed != TransactionCategory.OTHER.name) tx.id to guessed else null
                     }
-                    updates.forEach { (id, cat) -> txDao.updateCategoryById(id, cat) }
+                    applyCategoryUpdates(updates)
                     updates.size
                 }
             }
@@ -319,16 +322,36 @@ class CategoryViewModel(
         }
     }
 
+    /**
+     * Applies `(transactionId -> categoryId)` pairs as one `UPDATE … WHERE id IN (…)` per
+     * distinct target category rather than one statement per row.
+     *
+     * Reclassification routinely touches thousands of transactions; issuing a statement each
+     * meant thousands of round trips and — outside a transaction — thousands of Room
+     * invalidations, each re-running every observing query on every screen.
+     */
+    private suspend fun applyCategoryUpdates(updates: List<Pair<String, String>>) {
+        if (updates.isEmpty()) return
+        updates.groupBy({ it.second }, { it.first }).forEach { (category, ids) ->
+            ids.chunked(TransactionDao.MAX_SQL_VARIABLES).forEach { chunk ->
+                txDao.updateCategoryForIds(chunk, category)
+            }
+        }
+    }
+
     private suspend fun reclassifyWithCustomCategory(newCategory: CustomCategory) {
-        val uncategorized = txDao.getUncategorizedTransactions()
         val keywords = newCategory.keywords.split(",")
             .map { it.trim().lowercase() }
             .filter { it.isNotEmpty() }
-        uncategorized.forEach { tx ->
-            if (keywords.any { kw -> tx.recipient.lowercase().contains(kw) }) {
-                txDao.updateCategoryById(tx.id, newCategory.id)
+        if (keywords.isEmpty()) return
+
+        val matchingIds = txDao.getUncategorizedTransactions()
+            .filter { tx ->
+                val recipient = tx.recipient.lowercase()
+                keywords.any { kw -> recipient.contains(kw) }
             }
-        }
+            .map { it.id }
+        applyCategoryUpdates(matchingIds.map { it to newCategory.id })
     }
 
     // ── Manual override with feedback loop ────────────────────────────────

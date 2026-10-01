@@ -11,6 +11,9 @@ import java.util.Locale
 
 private val dashboardDayFormatter = DateTimeFormatter.ofPattern("EEEE, d MMM")
 
+/** Looked up once instead of per-transaction inside [localDate] (called in hot per-row loops). */
+private val systemZone: ZoneId = ZoneId.systemDefault()
+
 /**
  * Dashboard-local day-section header — a sibling to [weekBucket] rather than a shared
  * change to it, so History's existing "THIS WEEK"/"LAST WEEK" bucketing is untouched.
@@ -50,7 +53,7 @@ data class ParsedTx(
  * instead of parsing the `date` string — far cheaper and always populated.
  */
 fun MpesaTransactions.localDate(): LocalDate =
-    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+    Instant.ofEpochMilli(timestamp).atZone(systemZone).toLocalDate()
 
 fun MpesaTransactions.toParsedTx(): ParsedTx {
     val d = localDate()

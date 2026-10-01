@@ -45,14 +45,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CategoryViewModel
-import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.models.TransactionsViewModel
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.ActionBanner
+import com.example.cashia.ui.reusedElements.rememberCategoryIndex
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
+import com.example.cashia.ui.reusedElements.UnknownFeesNotice
 import com.example.cashia.ui.reusedElements.HarmonizedActionFab
-import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.LocalNavigationDockHeight
@@ -71,10 +71,12 @@ fun TransactionScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val categoryIndex = rememberCategoryIndex(allCategories)
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -82,15 +84,12 @@ fun TransactionScreen(
 
 
     var searchExpanded by remember { mutableStateOf(false) }
-    var recentSearches by remember { mutableStateOf(listOf<String>()) }
 
     var collapsedBuckets by remember { mutableStateOf(setOf<String>()) }
 
-    val categoryMap = remember(allCategories) { allCategories.associateBy { it.id } }
     val showBackToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
     var localQuery by remember { mutableStateOf(state.searchQuery) }
-    var swipeCategoryTarget by remember { mutableStateOf<MpesaTransactions?>(null) }
 
     val hasFilters by remember {
         derivedStateOf {
@@ -118,19 +117,6 @@ fun TransactionScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Color.Transparent) { padding ->
-            swipeCategoryTarget?.let { tx ->
-                CategoryPickerSheet(
-                    allCategories = allCategories,
-                    currentCategoryId = tx.category,
-                    onPick = { newId ->
-                        categoryViewModel.updateTransactionCategory(tx.id, newId)
-                        swipeCategoryTarget = null
-                    },
-                    onDismiss = { swipeCategoryTarget = null },
-                    categoryViewModel = categoryViewModel
-                )
-            }
-
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -144,9 +130,9 @@ fun TransactionScreen(
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 item(key = "known_fees_notice") {
-                    Text(
-                        "Totals include known fees only; blank fees remain unknown.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    UnknownFeesNotice(
+                        unknownFeeCount = state.unknownFeeCount,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
 
@@ -164,7 +150,10 @@ fun TransactionScreen(
                         onRecentPick = {
                             localQuery = it
                             searchExpanded = false
+                            viewModel.commitSearch(it)
                         },
+                        onCommitSearch = viewModel::commitSearch,
+                        onClearRecents = viewModel::clearRecentSearches,
                         onCategoryPick = viewModel::setCategory,
                         onDateRange = { start, end ->
                             viewModel.setDateRange(start, end)
@@ -211,7 +200,7 @@ fun TransactionScreen(
                     item(key = "filter_pills") {
                         ActiveFilterPills(
                             searchQuery = state.searchQuery,
-                            selectedCategory = state.selectedCategory?.let { categoryMap[it] },
+                            selectedCategory = categoryIndex.resolve(state.selectedCategory),
                             dateRangeStart = state.dateRangeStart,
                             dateRangeEnd = state.dateRangeEnd,
                             onClearSearch = {
@@ -306,7 +295,7 @@ fun TransactionScreen(
                             ) { tx ->
                                 TransactionItem(
                                     tx = tx,
-                                    allCategories = allCategories,
+                                    categories = categoryIndex,
                                     categoryViewModel = categoryViewModel,
                                     upcomingViewModel = upcomingViewModel,
                                     hapticFeedback = haptic,

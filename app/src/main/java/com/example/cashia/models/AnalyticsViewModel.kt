@@ -55,20 +55,23 @@ class AnalyticsViewModel(
     private val _selectedScope = MutableStateFlow(TimeScope.MONTH)
     private val _startDate = MutableStateFlow(LocalDate.now().withDayOfMonth(1))
     private val _endDate = MutableStateFlow(LocalDate.now())
+    /**
+     * Budget headline for the anchored month. Only four scalars are needed, so they are
+     * summed in SQL rather than hydrating every row of the month — this ran as a third
+     * full-row load over a window the other two flows below already cover.
+     */
     val monthlyBudget =
         combine(_startDate, PesaTimeConfiguration.changes) { date, _ -> YearMonth.from(date) }
             .flatMapLatest { month ->
-                dao.getTransactionsInRange(
+                dao.getRangeSpendFlow(
                     month.atDay(1).toString(),
                     month.atEndOfMonth().toString()
-                ).map { rows ->
-                    val spending = rows.filter { it.type == "expense" && it.reversedTxId == null }
-                    val spent = spending.sumOf { it.amount + it.knownFees }
+                ).map { row ->
                     BudgetProgress(
-                        PesaTimeConfiguration.getMonthlyBudget(month), spent,
-                        rows.filter { it.type == "income" && it.reversedTxId == null }
-                            .sumOf { it.amount } - spent,
-                        spending.count { it.transactionCost == null }
+                        PesaTimeConfiguration.getMonthlyBudget(month),
+                        row.spent,
+                        row.earned - row.spent,
+                        row.unknownFeeCount
                     )
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -88,7 +91,7 @@ class AnalyticsViewModel(
                 end.toString()
             )
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Weekday spend/income pattern computed in SQL (see [TransactionDao.getWeekdaySpendPattern])
@@ -111,7 +114,7 @@ class AnalyticsViewModel(
             }
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Recurring-merchant detection computed in SQL (see [TransactionDao.getRecurringMerchants])
@@ -137,7 +140,7 @@ class AnalyticsViewModel(
             }
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // Type + time-range filtering runs in SQL: only the matching rows are loaded,
     // and Room re-emits automatically whenever the table changes.
@@ -158,12 +161,16 @@ class AnalyticsViewModel(
                 .toEpochMilli(),
         )
     }
-        .flatMapLatest { base ->
-            dao.getByTypeInRange(base.selectedType.name.lowercase(), base.startTs, base.endTs)
-                .map { filtered -> base.copy(filteredTransactions = filtered) }
+        .combine(periodTransactions) { base, rows ->
+            // `periodTransactions` already holds exactly this window: `timestamp` is derived
+            // from the same `date` string (see convertToTimestamp), and startTs/endTs span
+            // those whole days. Narrowing by type in memory therefore yields the same rows
+            // the dedicated type+range query returned, without a second load of the period.
+            val type = base.selectedType.name.lowercase()
+            base.copy(filteredTransactions = rows.filter { it.type == type })
         }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AnalyticsUiState())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
     private fun periodLabel(scope: TimeScope, start: LocalDate, end: LocalDate): String =
         when (scope) {

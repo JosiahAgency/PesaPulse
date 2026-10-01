@@ -121,7 +121,12 @@ class ExportViewModel(private val context: Context) : ViewModel() {
 
     fun refreshCount() {
         viewModelScope.launch(Dispatchers.IO) {
-            matchingCount = fetchTransactions().size
+            val (start, end) = resolvedRange()
+            matchingCount = if (start == null || end == null) {
+                dao.getTransactionCountOnce()
+            } else {
+                dao.getTransactionCountForDateRange(start.toString(), end.toString())
+            }
         }
     }
 

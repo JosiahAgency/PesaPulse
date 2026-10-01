@@ -12,10 +12,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.cashia.AppDatabase
 import com.example.cashia.daos.FilteredTotals
+import com.example.cashia.daos.LatestHeadlineRow
 import com.example.cashia.utility.ParsedTx
+import com.example.cashia.utility.PesaTimeConfiguration
 import com.example.cashia.utility.TransactionCorrection
 import com.example.cashia.utility.UpcomingPaymentService
-import com.example.cashia.utility.localDate
 import com.example.cashia.utility.syncTransactions
 import com.example.cashia.utility.toParsedTx
 import com.example.cashia.widget.WidgetUpdateManager
@@ -52,12 +53,11 @@ data class TransactionState(
     val filteredCount: Int = 0,
     /** True when more matching rows exist beyond the loaded window. */
     val hasMore: Boolean = false,
-    val latestBalance: Double? = null,
-    val latestBalanceDate: String = "",
-    val latestBalanceDateParsed: LocalDate = LocalDate.now(),
     val totalIncome: Double = 0.0,
     val totalExpenses: Double = 0.0,
     val totalTransactionCost: Double = 0.0,
+    /** Expenses in the filtered set with no fee recorded — [totalExpenses] understates by these. */
+    val unknownFeeCount: Int = 0,
     val currentMonth: String = "",
     val selectedCategory: String? = null,
     val searchQuery: String = "",
@@ -115,6 +115,19 @@ class TransactionsViewModel(
     private val _syncError = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val syncError: SharedFlow<String> = _syncError.asSharedFlow()
 
+    /**
+     * Sticky mirror of [syncError]. The Snackbar event is one-shot, so a screen that is
+     * composed after a failure (or one the user returns to) would otherwise render a plain
+     * "no transactions" empty state and look indistinguishable from a healthy empty period.
+     * Cleared by the next successful sync or by [dismissSyncError].
+     */
+    private val _lastSyncError = MutableStateFlow<String?>(null)
+    val lastSyncError: StateFlow<String?> = _lastSyncError.asStateFlow()
+
+    fun dismissSyncError() {
+        _lastSyncError.value = null
+    }
+
     // ── History pipeline: filters resolved once, applied in SQL ────────────────
 
     private val filtersFlow = combine(
@@ -168,11 +181,10 @@ class TransactionsViewModel(
     val state: StateFlow<TransactionState> = combine(
         windowFlow,
         totalsFlow,
-        dao.latestTransactionFlow(),
         dao.latestFulizaLimitFlow(),
         filtersFlow,
-    ) { window, totals, latestTx, fulizaLimit, f ->
-        buildState(window, totals, latestTx, fulizaLimit, f)
+    ) { window, totals, fulizaLimit, f ->
+        buildState(window, totals, fulizaLimit, f)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(
@@ -203,7 +215,13 @@ class TransactionsViewModel(
             ReversalIndex(byOriginal, byReversal)
         }
         .flowOn(Dispatchers.IO)
-        .distinctUntilChanged()
+        // Keyed on id sets rather than full data-class equality: comparing every
+        // MpesaTransactions field on every Room re-emission (which fires on any table
+        // write, not just reversal changes) is a needless O(n * fields) scan. The id sets
+        // fully determine which rows are reversal pairs, which is all this index exposes.
+        .distinctUntilChanged { old, new ->
+            old.byOriginal.keys == new.byOriginal.keys && old.byReversal.keys == new.byReversal.keys
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReversalIndex())
 
     // ── Unmatched SMS ──────────────────────────────────────────────────────────
@@ -214,6 +232,33 @@ class TransactionsViewModel(
     val allUnmatched: StateFlow<List<UnmatchedSms>> = unmatchedDao
         .allUnmatchedFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Slim headline-balance feed for the Dashboard. Collecting [state] there would keep the
+     * whole History pipeline (windowed query + totals + grouping in [buildGroupedTransactions])
+     * warm for three fields, so this projects balance/date straight off the DAO instead.
+     * `null` means "first emission not in yet", i.e. still loading.
+     */
+    val latestBalance: StateFlow<LatestHeadlineRow?> = dao.latestBalanceFlow()
+        .map { it ?: LatestHeadlineRow(balance = null, date = "", time = null) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Recent History searches, newest first. Lives in the ViewModel (backed by prefs) rather
+     * than a composable `remember` so the list survives navigating away and process death.
+     */
+    private val _recentSearches = MutableStateFlow(PesaTimeConfiguration.getRecentSearches())
+    val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
+
+    /** Call when the user commits a search (keyboard action or picking a suggestion). */
+    fun commitSearch(term: String) {
+        _recentSearches.value = PesaTimeConfiguration.addRecentSearch(term)
+    }
+
+    fun clearRecentSearches() {
+        PesaTimeConfiguration.clearRecentSearches()
+        _recentSearches.value = emptyList()
+    }
 
     // ── Balance visibility ─────────────────────────────────────────────────────
     // Compose-observable; intentionally not in TransactionState since it's purely
@@ -239,12 +284,15 @@ class TransactionsViewModel(
         _isSyncing.value = true
         try {
             val newTxs = syncTransactions(context, database)
+            _lastSyncError.value = null
             if (newTxs.isNotEmpty()) {
                 _newTransactionsSynced.tryEmit(newTxs)
             }
         } catch (e: Exception) {
             Log.e("TransactionsViewModel", "Background sync failure", e)
-            _syncError.tryEmit("Couldn't sync new SMS messages. Pull to refresh to try again.")
+            val message = "Couldn't sync new SMS messages. Pull to refresh to try again."
+            _lastSyncError.value = message
+            _syncError.tryEmit(message)
         } finally {
             _isSyncing.value = false
             syncMutex.unlock()
@@ -333,7 +381,6 @@ class TransactionsViewModel(
     private fun buildState(
         window: List<MpesaTransactions>,
         totals: FilteredTotals,
-        latestTx: MpesaTransactions?,
         fulizaLimit: Double?,
         f: HistoryFilters,
     ): TransactionState {
@@ -345,12 +392,10 @@ class TransactionsViewModel(
             groupedTransactions = buildGroupedTransactions(parsedWindow),
             filteredCount = totals.count,
             hasMore = window.size < totals.count,
-            latestBalance = latestTx?.balance,
-            latestBalanceDate = latestTx?.date ?: "",
-            latestBalanceDateParsed = latestTx?.localDate() ?: today,
             totalIncome = totals.income,
             totalExpenses = totals.expenses,
             totalTransactionCost = totals.transactionCost,
+            unknownFeeCount = totals.unknownFeeCount,
             currentMonth = "${today.month.getDisplayName(TextStyle.FULL, Locale.US)} ${today.year}",
             selectedCategory = f.category,
             searchQuery = f.rawQuery,
