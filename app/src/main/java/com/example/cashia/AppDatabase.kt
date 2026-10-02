@@ -346,6 +346,11 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_13_14,
                     MIGRATION_14_15,
                 )
+                    // Guards only against downgrades (e.g. switching to an older build/branch
+                    // on a device whose local DB was already migrated forward by a newer build).
+                    // Upgrades always go through the explicit MIGRATION_x_y chain above — this
+                    // never substitutes for a forward migration.
+                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
                     .also { INSTANCE = it }

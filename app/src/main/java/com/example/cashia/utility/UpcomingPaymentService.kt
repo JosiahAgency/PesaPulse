@@ -14,6 +14,10 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.math.abs
 
+// Precompiled once — paymentMatchReason runs per (upcoming, transaction) candidate pair, so
+// recompiling this on every call would waste cycles when matching against many transactions.
+private val tokenSplitRegex = Regex("[^\\p{L}\\p{N}]+")
+
 /** Returns evidence for a suggestion, never permission to automatically mark a payment paid. */
 fun paymentMatchReason(upcoming: UpcomingTransaction, transaction: MpesaTransactions): String? {
     val expectedType = when (upcoming.type) {
@@ -28,7 +32,7 @@ fun paymentMatchReason(upcoming: UpcomingTransaction, transaction: MpesaTransact
     val days = abs(ChronoUnit.DAYS.between(LocalDate.parse(upcoming.dueDate), LocalDate.parse(transaction.date)))
     if (days > 7) return null
     val stopWords = setOf("the", "and", "for", "ltd", "limited", "payment", "mpesa", "ksh", "kes")
-    fun tokens(value: String) = value.lowercase().split(Regex("[^\\p{L}\\p{N}]+"))
+    fun tokens(value: String) = value.lowercase().split(tokenSplitRegex)
         .filter { it.length >= 3 && it !in stopWords }.toSet()
     val titleTokens = tokens(upcoming.title)
     val recipientTokens = tokens(transaction.recipient)

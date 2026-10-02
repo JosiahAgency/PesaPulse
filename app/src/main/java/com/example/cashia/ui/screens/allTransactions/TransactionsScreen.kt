@@ -52,7 +52,7 @@ import com.example.cashia.ui.reusedElements.rememberCategoryIndex
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.EnhancedSearchBar
 import com.example.cashia.ui.reusedElements.UnknownFeesNotice
-import com.example.cashia.ui.reusedElements.HarmonizedActionFab
+import com.example.cashia.ui.reusedElements.FloatingQuickActionFab
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingPreviewSection
 import com.example.cashia.ui.screens.upcomingTransactions.UpcomingTransactionSheet
 import com.example.cashia.ui.theme.LocalNavigationDockHeight
@@ -327,21 +327,18 @@ fun TransactionScreen(
         AnimatedVisibility(
             visible = showBackToTop,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp)
                 .navigationBarsPadding()
-                .padding(bottom = LocalNavigationDockHeight.current)
+                .padding(bottom = LocalNavigationDockHeight.current + 12.dp)
         ) {
-            HarmonizedActionFab(
+            FloatingQuickActionFab(
                 icon = Icons.Rounded.KeyboardArrowUp,
-                text = "Back to top",
                 contentDescription = "Back to top",
                 onClick = {
                     coroutineScope.launch { listState.scrollToItem(0) }
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                },
-                fullWidth = true
+                }
             )
         }
     }

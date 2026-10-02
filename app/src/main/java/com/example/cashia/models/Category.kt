@@ -93,10 +93,10 @@ enum class TransactionCategory(
     BALANCE_INQUIRY("Balance Inquiry", "🔍");
 
     /** True for categories that represent internal wallet movements, not real spending. */
-    val isTransfer: Boolean
-        get() = this in setOf(
-            MSHWARI, KCB_MPESA, BANK_TRANSFER, SACCO, SAVINGS, AGENT_DEPOSIT
-        )
+//    val isTransfer: Boolean
+//        get() = this in setOf(
+//            MSHWARI, KCB_MPESA, BANK_TRANSFER, SACCO, SAVINGS, AGENT_DEPOSIT
+//        )
 }
 
 @Entity(tableName = "CustomCategories")
@@ -705,8 +705,11 @@ fun guessCategory(
 private fun String.containsAny(vararg keywords: String): Boolean =
     keywords.any { this.contains(it, ignoreCase = true) }
 
+// Precompiled once — looksLikePersonName runs per categorized transaction.
+private val whitespaceSplitRegex = "\\s+".toRegex()
+
 private fun looksLikePersonName(r: String): Boolean {
     val noDigits = r.none { it.isDigit() }
-    val words = r.trim().split("\\s+".toRegex())
+    val words = r.trim().split(whitespaceSplitRegex)
     return noDigits && words.size in 1..4 && words.all { it.length in 2..20 }
 }

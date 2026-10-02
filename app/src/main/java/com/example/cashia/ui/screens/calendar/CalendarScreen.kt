@@ -57,7 +57,7 @@ import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
 import com.example.cashia.ui.reusedElements.rememberCategoryIndex
-import com.example.cashia.ui.reusedElements.HarmonizedActionFab
+import com.example.cashia.ui.reusedElements.FloatingQuickActionFab
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
@@ -185,18 +185,15 @@ fun CalendarScreen(
             enter = fadeIn(tween(200)),
             exit = fadeOut(tween(150)),
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp)
                 .navigationBarsPadding()
-                .padding(bottom = LocalNavigationDockHeight.current)
+                .padding(bottom = LocalNavigationDockHeight.current + 12.dp)
         ) {
-            HarmonizedActionFab(
+            FloatingQuickActionFab(
                 onClick = calendarViewModel::resetToToday,
                 icon = Icons.Default.Today,
-                text = "Today",
-                contentDescription = "Today",
-                fullWidth = true
+                contentDescription = "Today"
             )
         }
     }

@@ -4,6 +4,10 @@ import android.app.Application
 import com.example.cashia.utility.NotificationHelper
 import com.example.cashia.utility.NotificationScheduler
 import com.example.cashia.utility.PesaTimeConfiguration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Guarantees notification setup runs for *every* process start, not just when
@@ -19,10 +23,33 @@ import com.example.cashia.utility.PesaTimeConfiguration
  * fixes reminders "going quiet" after a day of not opening the app.
  */
 class CashiaApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         PesaTimeConfiguration.initialize(this)
         NotificationHelper.createChannels(this)
         NotificationScheduler.scheduleAll(this)
+        warmUpDatabase()
+    }
+
+    /**
+     * Opens the Room database and runs a trivial query on a background thread right at
+     * process start. Without this, the SQLite file-open / WAL setup / first query-plan
+     * compile cost is paid lazily on whichever screen the user happens to open first
+     * (Calendar, Analytics, Export, Summary each build their own DAO/ViewModel on first
+     * navigation) — surfacing as a one-time stutter the first time each screen is visited
+     * in a session. Paying that cost here, before any UI is shown, removes it from the
+     * navigation path entirely.
+     */
+    private fun warmUpDatabase() {
+        applicationScope.launch {
+            runCatching {
+                AppDatabase.getDatabase(this@CashiaApplication)
+                    .transactionDao()
+                    .getLastTransactionTimestamp()
+            }
+        }
     }
 }
+

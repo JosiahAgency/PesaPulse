@@ -12,15 +12,20 @@ const val PARSER_VERSION = 3
 const val CONFIDENCE_FULL = 0.85f
 const val LOW_CONFIDENCE_THRESHOLD = 0.35f
 
+// Precompiled once — normalizeSmsBody runs per incoming SMS, so recompiling these on every
+// call would waste cycles on the hot ingestion path.
+private val whitespaceVariantsRegex = Regex("""[\u00A0\u200B\u200C\u200D\uFEFF\t\r\n]+""")
+private val strayDotSpaceRegex = Regex(""",\s+(?=\d)""")
+
 fun normalizeSmsBody(raw: String): String = raw
     // Collapse all whitespace variants to a single space
-    .replace(Regex("""[\u00A0\u200B\u200C\u200D\uFEFF\t\r\n]+"""), " ")
+    .replace(whitespaceVariantsRegex, " ")
     // Convert full-width digits → ASCII (e.g. ０→0, seen in some aggregators)
     .map { c ->
         if (c in '\uFF10'..'\uFF19') '0' + (c - '\uFF10') else c
     }.joinToString("")
     // Remove stray dot-space combos that break amount parsing ("Ksh1, 200.00")
-    .replace(Regex(""",\s+(?=\d)"""), ",")
+    .replace(strayDotSpaceRegex, ",")
     .trim()
 
 /**
