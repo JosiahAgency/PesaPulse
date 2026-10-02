@@ -12,6 +12,16 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "ParserLearning"
 
+// Precompiled once — toSkeleton runs per unmatched/low-confidence row during clustering and
+// reprocessing, so recompiling these on every call would waste cycles across large batches.
+private val skeletonIdRegex = Regex("""\b[A-Z]{2,3}[A-Z0-9]{6,12}\b""")
+private val skeletonAmountRegex = Regex("""[Kk][Ss][Hh]\s*[\d,]+(?:\.\d{1,2})?""")
+private val skeletonPhoneRegex = Regex("""07\d{2}[*\d]{3}\d{3}""")
+private val skeletonDateRegex = Regex("""\b\d{1,2}/\d{1,2}/\d{2,4}\b""")
+private val skeletonTimeRegex = Regex("""\b\d{1,2}:\d{2}\s*[APap][Mm]\b""")
+private val skeletonNumRegex = Regex("""\b\d{6,}\b""")
+private val skeletonSpacesRegex = Regex("""\s{2,}""")
+
 /**
  * Background service that runs the two learning-loop operations:
  *
@@ -182,18 +192,18 @@ object ParserLearningService {
      */
     private fun toSkeleton(normalized: String): String = normalized
         // Transaction IDs (e.g. OKI12345678, SIN87654321)
-        .replace(Regex("""\b[A-Z]{2,3}[A-Z0-9]{6,12}\b"""), "<ID>")
+        .replace(skeletonIdRegex, "<ID>")
         // Amounts (e.g. Ksh1,200.00, KSH450)
-        .replace(Regex("""[Kk][Ss][Hh]\s*[\d,]+(?:\.\d{1,2})?"""), "Ksh<AMT>")
+        .replace(skeletonAmountRegex, "Ksh<AMT>")
         // Phone numbers (e.g. 0712345678, 07123**678)
-        .replace(Regex("""07\d{2}[*\d]{3}\d{3}"""), "<PHONE>")
+        .replace(skeletonPhoneRegex, "<PHONE>")
         // Dates (e.g. 12/3/24, 1/12/2024)
-        .replace(Regex("""\b\d{1,2}/\d{1,2}/\d{2,4}\b"""), "<DATE>")
+        .replace(skeletonDateRegex, "<DATE>")
         // Times (e.g. 2:30 PM, 11:05 AM)
-        .replace(Regex("""\b\d{1,2}:\d{2}\s*[APap][Mm]\b"""), "<TIME>")
+        .replace(skeletonTimeRegex, "<TIME>")
         // Long digit sequences (account numbers, etc.)
-        .replace(Regex("""\b\d{6,}\b"""), "<NUM>")
+        .replace(skeletonNumRegex, "<NUM>")
         // Normalise multiple spaces introduced by replacements
-        .replace(Regex("""\s{2,}"""), " ")
+        .replace(skeletonSpacesRegex, " ")
         .trim()
 }

@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -49,10 +51,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cashia.models.CalendarViewModel
 import com.example.cashia.models.CategoryViewModel
+import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.TransactionsViewModel
+import com.example.cashia.models.UpcomingTransaction
 import com.example.cashia.models.UpcomingViewModel
 import com.example.cashia.ui.reusedElements.EmptyStateMessage
-import com.example.cashia.ui.reusedElements.HarmonizedActionFab
+import com.example.cashia.ui.reusedElements.rememberCategoryIndex
+import com.example.cashia.ui.reusedElements.FloatingQuickActionFab
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.screens.allTransactions.TransactionItem
 import com.example.cashia.ui.screens.analytics.FinancialOverviewCards
@@ -61,6 +66,7 @@ import com.example.cashia.ui.theme.LocalNavigationDockHeight
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.ui.theme.screenContentPadding
 import com.example.cashia.utility.TransactionType
+import com.example.cashia.utility.formatAmount
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -75,8 +81,10 @@ fun CalendarScreen(
     calendarViewModel: CalendarViewModel
 ) {
     val today = remember { LocalDate.now() }
-    val windowedTransactions by calendarViewModel.windowedTransactionsFlow.collectAsStateWithLifecycle()
+    val monthMetrics by calendarViewModel.monthMetrics.collectAsStateWithLifecycle()
+    val monthActivity by calendarViewModel.monthActivity.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
+    val categoryIndex = rememberCategoryIndex(allCategories)
     val reversalIndex by viewModel.reversalIndex.collectAsStateWithLifecycle()
     val upcomingUiState by upcomingViewModel.uiState.collectAsStateWithLifecycle()
     val upcomingAll by upcomingViewModel.upcoming.collectAsStateWithLifecycle()
@@ -110,13 +118,16 @@ fun CalendarScreen(
         ) {
             item {
                 FinancialOverviewCards(
-                    windowedTransactions, calendarState.selectedDate, calendarState.selectedFilter,
-                    calendarViewModel::setFilter
+                    monthlyIncome = monthMetrics.income,
+                    monthlyExpense = monthMetrics.expenses,
+                    selectedDate = calendarState.selectedDate,
+                    selectedFilter = calendarState.selectedFilter,
+                    onFilterChange = calendarViewModel::setFilter
                 )
             }
             item {
                 FullMonthCalendar(
-                    allTransactions = windowedTransactions,
+                    activity = monthActivity,
                     selectedDate = calendarState.selectedDate,
                     upcomingTransactions = upcomingAll,
                     calendarViewModel::handleDayClick
@@ -149,15 +160,16 @@ fun CalendarScreen(
                         key = { it.id }
                     ) { upcomingTx ->
                         CalendarUpcomingItem(
-                            title = "Scheduled Commitment",
-                            dateStr = upcomingTx.dueDate
+                            upcoming = upcomingTx,
+                            category = categoryIndex.resolve(upcomingTx.categoryId),
+                            onClick = { upcomingViewModel.openEdit(upcomingTx) }
                         )
                     }
                 }
                 items(calendarState.filteredTransactions, key = { it.id }) { tx ->
                     TransactionItem(
                         tx,
-                        allCategories,
+                        categoryIndex,
                         categoryViewModel,
                         upcomingViewModel,
                         hapticFeedback,
@@ -173,18 +185,15 @@ fun CalendarScreen(
             enter = fadeIn(tween(200)),
             exit = fadeOut(tween(150)),
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp)
                 .navigationBarsPadding()
-                .padding(bottom = LocalNavigationDockHeight.current)
+                .padding(bottom = LocalNavigationDockHeight.current + 12.dp)
         ) {
-            HarmonizedActionFab(
+            FloatingQuickActionFab(
                 onClick = calendarViewModel::resetToToday,
                 icon = Icons.Default.Today,
-                text = "Today",
-                contentDescription = "Today",
-                fullWidth = true
+                contentDescription = "Today"
             )
         }
     }
@@ -279,41 +288,73 @@ private fun ListHeader(
     }
 }
 
+/**
+ * A scheduled payment falling on the selected day. Every one of these used to render the
+ * same hardcoded "Scheduled Commitment" label and be inert, so a day with three commitments
+ * showed three identical, unopenable rows.
+ */
 @Composable
-private fun CalendarUpcomingItem(title: String, dateStr: String) {
+private fun CalendarUpcomingItem(
+    upcoming: UpcomingTransaction,
+    category: ResolvedCategory?,
+    onClick: () -> Unit
+) {
+    val isOverdue = remember(upcoming.dueDate) {
+        upcoming.dueDate < LocalDate.now().toString()
+    }
+    val accent =
+        if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                .background(accent.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Today,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = accent,
                 modifier = Modifier.size(18.dp)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                title,
+                upcoming.title.ifBlank { "Scheduled Commitment" },
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                "Due: $dateStr",
+                buildString {
+                    append(if (isOverdue) "Overdue" else "Due")
+                    append(" · ")
+                    append(upcoming.dueDate)
+                    category?.let { append(" · ${it.emoji} ${it.label}") }
+                },
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            formatAmount(upcoming.amount),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = accent
+        )
     }
 }

@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,7 +33,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.cashia.models.MpesaTransactions
 import com.example.cashia.ui.reusedElements.GlassySurface
 import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.Subtitles
@@ -43,33 +41,22 @@ import com.example.cashia.utility.formatCompactAmount
 import java.time.LocalDate
 
 
+/**
+ * Month summary cards.
+ *
+ * [monthlyIncome] / [monthlyExpense] are summed in SQL by the caller. They used to be
+ * re-derived here by scanning the screen's transaction window, with a formula that added
+ * only `amount` — so Calendar's monthly spend silently disagreed with the fee-inclusive
+ * figure the dashboard and analytics screens show for the very same month.
+ */
 @Composable
 fun FinancialOverviewCards(
-    transactions: List<MpesaTransactions>,
+    monthlyIncome: Double,
+    monthlyExpense: Double,
     selectedDate: LocalDate,
     selectedFilter: TransactionType,
     onFilterChange: (TransactionType) -> Unit
 ) {
-    val selectedMonth = selectedDate.month
-    val selectedYear = selectedDate.year
-    val monthPrefix = remember(selectedMonth, selectedYear) {
-        "$selectedYear-${selectedMonth.value.toString().padStart(2, '0')}"
-    }
-    val (monthlyIncome, monthlyExpense, _) = remember(transactions, monthPrefix) {
-        var income = 0.0
-        var expense = 0.0
-        var count = 0
-        for (tx in transactions) {
-            if (!tx.date.startsWith(monthPrefix)) continue
-            count++
-            when (tx.type) {
-                "income" -> income += tx.amount
-                "expense" -> expense += tx.amount
-            }
-        }
-        Triple(income, expense, count > 0)
-    }
-
     val monthlyNetFlow = monthlyIncome - monthlyExpense
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -135,7 +122,9 @@ fun SmallMetricCard(
                 .fillMaxSize()
                 .background(color.copy(alpha = backgroundAlpha))
                 .clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    // Selecting a filter is a tap, not a long press; SegmentTick is the
+                    // tick-over feedback for moving between discrete options.
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     onClick()
                 }
                 .padding(12.dp)

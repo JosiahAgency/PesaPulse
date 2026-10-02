@@ -359,7 +359,15 @@ data class WeekGroup(val bucket: String, val days: List<DayGroup>)
         Index(value = ["type"]),
         Index(value = ["category"]),
         Index(value = ["smsId"], unique = true),
-        Index(value = ["reversedTxId"])
+        Index(value = ["reversedTxId"]),
+        // Composite indices for the hot range+equality query combinations below — a
+        // single-column index can only serve one side of each predicate, forcing a
+        // partial table scan for the other. See TransactionDao for the queries each serves.
+        Index(value = ["date", "type"]),            // getDayActivityInRange (covering)
+        Index(value = ["type", "date"]),             // getExpenseTotalInRange
+        Index(value = ["type", "timestamp"]),         // getSumByType
+        Index(value = ["type", "reversedTxId"]),      // getWeekdaySpendPattern / getRecurringMerchants
+        Index(value = ["category", "timestamp"]),     // getFilteredWindow (category filter + ORDER BY timestamp)
     ]
 )
 data class MpesaTransactions(

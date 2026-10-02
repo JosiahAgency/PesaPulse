@@ -13,6 +13,8 @@ data class FilteredTotals(
     val income: Double = 0.0,
     val expenses: Double = 0.0,
     val transactionCost: Double = 0.0,
+    /** Expenses whose SMS never stated a transaction cost, so [expenses] understates reality. */
+    val unknownFeeCount: Int = 0,
 )
 
 /** SQL-side weekday spend aggregate. `dow` is SQLite's `strftime('%w')`: 0=Sunday..6=Saturday. */
@@ -32,10 +34,71 @@ data class RecurringMerchantRow(
     val lastTimestamp: Long,
 )
 
+/**
+ * Two-column projection backing the dashboard calendar's activity dots. The strip only needs
+ * to know *whether* a day had income/expense, so full entity rows are never hydrated.
+ */
+data class DayActivityRow(
+    val date: String,
+    val type: String,
+)
+
+/**
+ * Per-day income/expense totals for the month grid. Carries both the dot indicators
+ * (`income > 0` / `expense > 0`) and the long-press amount preview, so the month calendar
+ * needs no entity rows at all. Expense totals include known fees, matching every other
+ * spend figure in the app.
+ */
+data class DayTotalsRow(
+    val date: String,
+    val income: Double,
+    val expense: Double,
+)
+
+/**
+ * Latest-row headline projection — balance, its date and the stamp used for "updated"
+ * labels. Shared by every caller that only needs the newest row's headline fields
+ * (Dashboard's reactive balance, the widget's one-shot refresh, and anything that would
+ * otherwise hydrate the whole latest [MpesaTransactions] for 2-3 scalars).
+ */
+data class LatestHeadlineRow(
+    val balance: Double?,
+    val date: String,
+    val time: String?,
+)
+
+/**
+ * Income/expense totals for a date range, summed in SQL.
+ *
+ * Mirrors exactly the in-memory loops it replaces: `neutral` rows (including the Fuliza
+ * limit-update pseudo-row) contribute to neither total, and reversed transactions are
+ * *not* excluded — the callers never excluded them either.
+ */
+data class PeriodMetricsRow(
+    val income: Double = 0.0,
+    val expenses: Double = 0.0,
+)
+
+/**
+ * Budget aggregate over non-reversed rows in a date range: spend including known fees,
+ * income, and how many of those expenses never reported a fee.
+ */
+data class RangeSpendRow(
+    val spent: Double = 0.0,
+    val earned: Double = 0.0,
+    val unknownFeeCount: Int = 0,
+)
+
 @Dao
 interface TransactionDao {
 
     companion object {
+        /**
+         * SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` is 999. Bulk `IN (:ids)` queries must
+         * chunk below it, with headroom for the statement's other bound parameters.
+         */
+        const val MAX_SQL_VARIABLES = 900
+
         /**
          * Shared WHERE clause for the History screen. Mirrors the old in-memory filter:
          * excludes Fuliza limit-update pseudo-transactions, then applies free-text
@@ -83,7 +146,8 @@ interface TransactionDao {
         SELECT COUNT(*) AS count,
                COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
                COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS expenses,
-               COALESCE(SUM(transactionCost), 0) AS transactionCost
+               COALESCE(SUM(transactionCost), 0) AS transactionCost,
+               COALESCE(SUM(CASE WHEN type = 'expense' AND reversedTxId IS NULL AND transactionCost IS NULL THEN 1 ELSE 0 END), 0) AS unknownFeeCount
         FROM MpesaTransactions
         WHERE $HISTORY_FILTER
         """
@@ -96,9 +160,6 @@ interface TransactionDao {
         startDate: String?,
         endDate: String?,
     ): Flow<FilteredTotals>
-
-    @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
-    fun latestTransactionFlow(): Flow<MpesaTransactions?>
 
     @Query(
         """
@@ -120,28 +181,108 @@ interface TransactionDao {
     )
     fun getTransactionsInRange(startDate: String, endDate: String): Flow<List<MpesaTransactions>>
 
+    /**
+     * Distinct (day, type) pairs for the calendar strip's activity dots — at most two rows
+     * per day regardless of how many transactions that day holds.
+     */
+    @Query(
+        """
+        SELECT DISTINCT date, type FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate
+          AND type IN ('income', 'expense')
+          AND NOT (category = 'FULIZA' AND type = 'neutral' AND recipient = 'Fuliza Limit Update')
+        """
+    )
+    fun getDayActivityInRange(startDate: String, endDate: String): Flow<List<DayActivityRow>>
+
+    /**
+     * Per-day income/expense totals, grouped in SQL. One row per active day instead of one
+     * per transaction, which is all the month grid needs for both its dots and its amount
+     * preview.
+     */
+    @Query(
+        """
+        SELECT date,
+               COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS expense
+        FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate
+          AND NOT (category = 'FULIZA' AND type = 'neutral' AND recipient = 'Fuliza Limit Update')
+        GROUP BY date
+        HAVING income > 0 OR expense > 0
+        """
+    )
+    fun getDayTotalsInRange(startDate: String, endDate: String): Flow<List<DayTotalsRow>>
+
+    /**
+     * Total spend (amount + known fees) for a date range, summed in SQL. Reversed
+     * transactions are excluded. The Fuliza limit-update pseudo-row is `type = 'neutral'`,
+     * so the `type = 'expense'` filter already excludes it.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(amount + COALESCE(transactionCost, 0)), 0) FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate
+          AND type = 'expense' AND reversedTxId IS NULL
+        """
+    )
+    fun getExpenseTotalInRange(startDate: String, endDate: String): Flow<Double>
+
+    /** Reactive headline row — the dashboard balance never needs the rest of the row. */
+    @Query("SELECT balance, date, time FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
+    fun latestBalanceFlow(): Flow<LatestHeadlineRow?>
+
+    /** Widget headline — balance/date/time only, instead of the full latest entity. */
+    @Query("SELECT balance, date, time FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestHeadlineOnce(): LatestHeadlineRow?
+
+    /**
+     * Income/expense totals for a date range, summed in SQL. Used wherever a caller needs
+     * only the two scalars and would otherwise hydrate every row in the period.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS expenses
+        FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate
+        """
+    )
+    suspend fun getPeriodMetricsOnce(startDate: String, endDate: String): PeriodMetricsRow
+
+    /** Flow variant of [getPeriodMetricsOnce] for comparison periods that only need totals. */
+    @Query(
+        """
+        SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS expenses
+        FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate
+        """
+    )
+    fun getPeriodMetricsFlow(startDate: String, endDate: String): Flow<PeriodMetricsRow>
+
+    /**
+     * Budget aggregate for a date range over non-reversed rows only. `reversedTxId IS NULL`
+     * sits in the WHERE clause because every column selected here applied that same filter
+     * when this was computed in Kotlin.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount + COALESCE(transactionCost, 0) ELSE 0 END), 0) AS spent,
+               COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS earned,
+               COALESCE(SUM(CASE WHEN type = 'expense' AND transactionCost IS NULL THEN 1 ELSE 0 END), 0) AS unknownFeeCount
+        FROM MpesaTransactions
+        WHERE date >= :startDate AND date <= :endDate AND reversedTxId IS NULL
+        """
+    )
+    fun getRangeSpendFlow(startDate: String, endDate: String): Flow<RangeSpendRow>
+
     /** Earliest transaction date in the whole table — used to size the Projection lookback window without loading all rows. */
     @Query("SELECT MIN(date) FROM MpesaTransactions")
     fun getEarliestTransactionDateFlow(): Flow<String?>
 
-    /** Analytics: type + timestamp-range filter pushed into SQL. */
-    @Query(
-        """
-        SELECT * FROM MpesaTransactions
-        WHERE type = :type AND timestamp BETWEEN :startTs AND :endTs
-        ORDER BY timestamp DESC
-        """
-    )
-    fun getByTypeInRange(type: String, startTs: Long, endTs: Long): Flow<List<MpesaTransactions>>
-
-    @Query("SELECT id FROM MpesaTransactions")
-    suspend fun getAllTransactionIdsOnce(): List<String>
-
     @Query("SELECT * FROM MpesaTransactions WHERE id IN (:ids)")
     suspend fun getTransactionsByIds(ids: List<String>): List<MpesaTransactions>
-
-    @Query("SELECT * FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getLatestTransactionOnce(): MpesaTransactions?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransactions(transactions: List<MpesaTransactions>): List<Long>
@@ -168,6 +309,15 @@ interface TransactionDao {
     @Query("UPDATE MpesaTransactions SET category = :category WHERE id = :id")
     suspend fun updateCategoryById(id: String, category: String)
 
+    /**
+     * Sets one category across many transactions in a single statement.
+     *
+     * Callers must chunk [ids] to stay under SQLite's host-parameter limit — see
+     * [MAX_SQL_VARIABLES].
+     */
+    @Query("UPDATE MpesaTransactions SET category = :category WHERE id IN (:ids)")
+    suspend fun updateCategoryForIds(ids: List<String>, category: String)
+
     /** Re-assign all transactions that had a now-deleted custom category back to OTHER. */
     @Query("UPDATE MpesaTransactions SET category = 'OTHER' WHERE category = :deletedCategoryId")
     suspend fun resetDeletedCategory(deletedCategoryId: String)
@@ -175,14 +325,20 @@ interface TransactionDao {
     @Query("SELECT * FROM MpesaTransactions")
     suspend fun getAllTransactionsOnce(): List<MpesaTransactions>
 
+    /** Row count only — avoids hydrating every column of every row just to call `.size`. */
+    @Query("SELECT COUNT(*) FROM MpesaTransactions")
+    suspend fun getTransactionCountOnce(): Int
+
+    /** Row count for a date range only — the counting counterpart of [getTransactionsForDateRange]. */
+    @Query("SELECT COUNT(*) FROM MpesaTransactions WHERE date >= :start AND date <= :end")
+    suspend fun getTransactionCountForDateRange(start: String, end: String): Int
+
     /** Fetch a single transaction by primary key — used by the corrections feedback loop. */
     @Query("SELECT * FROM MpesaTransactions WHERE id = :id LIMIT 1")
     suspend fun getTransactionById(id: String): MpesaTransactions?
     /** Used by summary workers — pure suspend, no Flow overhead */
     @Query("""SELECT * FROM MpesaTransactions WHERE date >= :start AND date <= :end ORDER BY date DESC""")
     suspend fun getTransactionsForDateRange(start: String, end: String): List<MpesaTransactions>
-    @Query("SELECT balance FROM MpesaTransactions ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getLatestBalance(): Double?
     @Query("SELECT * FROM MpesaTransactions WHERE reversedTxId = :txId LIMIT 1")
     suspend fun getReversalFor(txId: String): MpesaTransactions?
 

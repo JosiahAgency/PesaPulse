@@ -156,8 +156,8 @@ class MainActivity : FragmentActivity() {
         // Fire immediately on a background thread — confirms the whole pipeline works
         lifecycleScope.launch(Dispatchers.IO) {
             val db = AppDatabase.getDatabase(this@MainActivity)
-            val balance = db.transactionDao().getLatestBalance()
-            val count = db.transactionDao().getAllTransactionsOnce().size
+            val balance = db.transactionDao().getLatestHeadlineOnce()?.balance
+            val count = db.transactionDao().getTransactionCountOnce()
 
             NotificationHelper.post(
                 context = this@MainActivity,

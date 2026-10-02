@@ -3,11 +3,10 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.daos.DayTotalsRow
+import com.example.cashia.daos.PeriodMetricsRow
 import com.example.cashia.daos.TransactionDao
-import com.example.cashia.utility.ParsedTx
 import com.example.cashia.utility.TransactionType
-import com.example.cashia.utility.buildDayGroups
-import com.example.cashia.utility.toParsedTx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +26,15 @@ data class CalendarUiState(
     val filterByDay: Boolean = false,
     val selectedFilter: TransactionType = TransactionType.ALL,
     val filteredTransactions: List<MpesaTransactions> = emptyList(),
-    val dayGroups: List<DayGroup> = emptyList(),
     val upcomingForDay: List<UpcomingTransaction> = emptyList()
+)
+
+/**
+ * Everything the month grid draws, resolved from a grouped SQL projection instead of entity
+ * rows: which days saw money move (the dots) and how much (the long-press preview).
+ */
+data class MonthActivity(
+    val totalsByDate: Map<String, DayTotalsRow> = emptyMap(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,65 +47,89 @@ class CalendarViewModel(
     private val _selectedFilter = MutableStateFlow(TransactionType.ALL)
 
     /**
-     * Bounded to the selected month plus its immediate neighbors instead of the full table.
-     * FullMonthCalendar's HorizontalPager reports the visible month back through
-     * [handleDayClick]'s month-change path as the user swipes, so this window stays centered
-     * on whatever month is actually on screen. Exposed for FinancialOverviewCards /
-     * FullMonthCalendar, which previously read the full transaction table directly.
+     * The month actually on screen. FullMonthCalendar's HorizontalPager reports it back
+     * through [handleDayClick]'s month-change path as the user swipes, so every query below
+     * stays centered on it rather than loading the whole table.
      */
-    val windowedTransactionsFlow: StateFlow<List<MpesaTransactions>> = _selectedDate
-        .map { date ->
-            val month = YearMonth.from(date)
-            month.minusMonths(1).atDay(1).toString() to month.plusMonths(1).atEndOfMonth()
-                .toString()
-        }
+    private val visibleMonth: StateFlow<YearMonth> = _selectedDate
+        .map { YearMonth.from(it) }
         .distinctUntilChanged()
-        .flatMapLatest { (start, end) -> dao.getTransactionsInRange(start, end) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), YearMonth.now())
 
-    private val parsedWindowFlow: StateFlow<List<ParsedTx>> = windowedTransactionsFlow
-        .map { txs -> txs.map { it.toParsedTx() } }
+    /**
+     * Full rows for the ledger list, kept at the visible month ± 1 so that swiping the month
+     * pager renders instantly instead of flashing an empty list while a new query lands —
+     * the neighbours are a deliberate prefetch, not an oversight. The dots and the summary
+     * cards no longer read this: they use SQL projections below.
+     */
+    private val windowedTransactionsFlow: StateFlow<List<MpesaTransactions>> = visibleMonth
+        .flatMapLatest { month ->
+            dao.getTransactionsInRange(
+                month.minusMonths(1).atDay(1).toString(),
+                month.plusMonths(1).atEndOfMonth().toString()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Month-grid dots and amounts. Covers the same ± 1 month span as the pager so adjacent
+     * pages are already populated as they scroll in.
+     */
+    val monthActivity: StateFlow<MonthActivity> = visibleMonth
+        .flatMapLatest { month ->
+            dao.getDayTotalsInRange(
+                month.minusMonths(1).atDay(1).toString(),
+                month.plusMonths(1).atEndOfMonth().toString()
+            )
+        }
+        .map { rows -> MonthActivity(rows.associateBy { it.date }) }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MonthActivity())
+
+    /**
+     * Summary-card totals for the visible month, summed in SQL by the same query the
+     * dashboard and analytics use — previously these were re-derived in the UI with a
+     * formula that omitted transaction fees, so Calendar could disagree with Dashboard
+     * about the same month's spend.
+     */
+    val monthMetrics: StateFlow<PeriodMetricsRow> = visibleMonth
+        .flatMapLatest { month ->
+            dao.getPeriodMetricsFlow(month.atDay(1).toString(), month.atEndOfMonth().toString())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PeriodMetricsRow())
 
     val uiState: StateFlow<CalendarUiState> = combine(
-        parsedWindowFlow,   // dates already derived once, upstream
+        windowedTransactionsFlow,
         upcomingFlow,
         _selectedDate,
         _filterByDay,
         _selectedFilter
-    ) { parsedTxs, upcomingTxs, date, byDay, filter ->
+    ) { txs, upcomingTxs, date, byDay, filter ->
 
-        // Extremely fast filtering using object properties instead of strings
-        val filteredTxs = parsedTxs.filter { pTx ->
-            val dateMatch = if (byDay) {
-                pTx.date == date
-            } else {
-                pTx.date.year == date.year && pTx.date.monthValue == date.monthValue
-            }
+        // `date` is ISO yyyy-MM-dd, so day and month membership are both prefix/equality
+        // checks on the stored string — no per-row LocalDate parsing or ParsedTx wrapper.
+        val dateStr = date.toString()
+        val monthPrefix = dateStr.substring(0, 7)
 
-            if (!dateMatch) return@filter false
-
-            when (filter) {
+        val filteredTxs = txs.filter { tx ->
+            val dateMatch = if (byDay) tx.date == dateStr else tx.date.startsWith(monthPrefix)
+            dateMatch && when (filter) {
                 TransactionType.ALL -> true
-                TransactionType.INCOME -> pTx.tx.type.equals("income", ignoreCase = true)
-                TransactionType.EXPENSE -> pTx.tx.type.equals("expense", ignoreCase = true)
+                TransactionType.INCOME -> tx.type.equals("income", ignoreCase = true)
+                TransactionType.EXPENSE -> tx.type.equals("expense", ignoreCase = true)
             }
-        }.map { it.tx }
-
-        val upcomingForDay = upcomingTxs.filter { it.dueDate == date.toString() }
+        }
 
         CalendarUiState(
             selectedDate = date,
             filterByDay = byDay,
             selectedFilter = filter,
             filteredTransactions = filteredTxs,
-            dayGroups = buildDayGroups(filteredTxs),
-            upcomingForDay = upcomingForDay
+            upcomingForDay = upcomingTxs.filter { it.dueDate == dateStr }
         )
     }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, CalendarUiState())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState())
 
     // ── Actions ──────────────────────────────────────────────────────────────
 

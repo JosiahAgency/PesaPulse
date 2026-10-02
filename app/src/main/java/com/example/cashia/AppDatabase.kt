@@ -25,7 +25,7 @@ import com.example.cashia.models.UserCorrection
 
 @Database(
     entities = [MpesaTransactions::class, CustomCategory::class, SystemCategoryOverride::class, UpcomingTransaction::class, UnmatchedSms::class, UserCorrection::class, SyncState::class, PaymentMatch::class],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -312,6 +312,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Composite indices for hot range+equality query combinations on
+                // MpesaTransactions — see the @Entity indices list for which query each serves.
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_date_type ON MpesaTransactions(date, type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_type_date ON MpesaTransactions(type, date)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_type_timestamp ON MpesaTransactions(type, timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_type_reversedTxId ON MpesaTransactions(type, reversedTxId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_MpesaTransactions_category_timestamp ON MpesaTransactions(category, timestamp)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -332,7 +344,13 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_11_12,
                     MIGRATION_12_13,
                     MIGRATION_13_14,
+                    MIGRATION_14_15,
                 )
+                    // Guards only against downgrades (e.g. switching to an older build/branch
+                    // on a device whose local DB was already migrated forward by a newer build).
+                    // Upgrades always go through the explicit MIGRATION_x_y chain above — this
+                    // never substitutes for a forward migration.
+                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
                     .also { INSTANCE = it }

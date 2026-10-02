@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
@@ -37,7 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cashia.models.ResolvedCategory
@@ -58,11 +62,14 @@ fun EnhancedSearchBar(
     onQueryChange: (String) -> Unit,
     onExpandChange: (Boolean) -> Unit,
     onRecentPick: (String) -> Unit,
+    onCommitSearch: (String) -> Unit,
+    onClearRecents: () -> Unit,
     onCategoryPick: (String?) -> Unit,
     onDateRange: (LocalDate?, LocalDate?) -> Unit,
 ) {
     var showFilterPanel by remember { mutableStateOf(false) }
     var showDateRangeDialog by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val hasActiveFilter = selectedCategory != null || dateRangeStart != null
 
     if (showDateRangeDialog) {
@@ -113,6 +120,14 @@ fun EnhancedSearchBar(
                         onValueChange = { onQueryChange(it); onExpandChange(true) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                onCommitSearch(query)
+                                onExpandChange(false)
+                                keyboardController?.hide()
+                            }
+                        ),
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
@@ -174,13 +189,27 @@ fun EnhancedSearchBar(
                     .padding(top = 4.dp)
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text(
-                        "RECENT",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        fontWeight = FontWeight.Black
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "RECENT",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            "CLEAR",
+                            modifier = Modifier.clickable { onClearRecents() },
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                     recentSearches.forEach { term ->
                         Row(
                             modifier = Modifier

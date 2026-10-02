@@ -89,7 +89,7 @@ class PaymentReliabilityTest {
         db.transactionDao().insertCorrection(tx)
         val totals = db.transactionDao().getFilteredTotals("", null, emptyList(), null, null, null).first()
         assertEquals(1000.0, totals.expenses, 0.0)
-        assertNull(db.transactionDao().getLatestBalance())
+        assertNull(db.transactionDao().getLatestHeadlineOnce()?.balance)
         db.unmatchedSmsDao().insert(UnmatchedSms(id = 1, smsId = 1, rawBody = "Original"))
         try {
             db.withTransaction {

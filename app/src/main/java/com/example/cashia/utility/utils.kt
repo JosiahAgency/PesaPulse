@@ -220,10 +220,6 @@ object PesaTimeConfiguration {
         return getMonthlyBudget(month).spendingCap
     }
 
-//    fun hasMonthlySpendingTarget(month: YearMonth): Boolean {
-//        return getMonthlySpendingTarget(month) != null
-//    }
-
     fun saveMonthlySpendingTarget(month: YearMonth, amount: Double) {
         saveMonthlyBudget(getMonthlyBudget(month).copy(spendingCap = amount))
     }
@@ -293,6 +289,33 @@ object PesaTimeConfiguration {
 
     private const val PREFS_NAME = "pesa_prefs"
     private const val MONTHLY_TARGET_KEY_PREFIX = "monthly_target_"
+    private const val RECENT_SEARCHES_KEY = "recent_searches"
+    private const val MAX_RECENT_SEARCHES = 8
+
+    /**
+     * Recent History searches, newest first. Stored as a newline-delimited string because the
+     * ordering matters and `putStringSet` does not preserve it.
+     */
+    fun getRecentSearches(): List<String> =
+        prefs.getString(RECENT_SEARCHES_KEY, null)
+            ?.split('\n')
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+    /** Pushes [term] to the front, de-duplicating case-insensitively and capping the list. */
+    fun addRecentSearch(term: String): List<String> {
+        val trimmed = term.trim()
+        if (trimmed.isEmpty()) return getRecentSearches()
+        val updated = (listOf(trimmed) + getRecentSearches()
+            .filterNot { it.equals(trimmed, ignoreCase = true) })
+            .take(MAX_RECENT_SEARCHES)
+        prefs.edit { putString(RECENT_SEARCHES_KEY, updated.joinToString("\n")) }
+        return updated
+    }
+
+    fun clearRecentSearches() {
+        prefs.edit { remove(RECENT_SEARCHES_KEY) }
+    }
 
     fun formatCurrency(amount: Double): String {
         return "$CURRENCY ${formatAmount(amount)}"
