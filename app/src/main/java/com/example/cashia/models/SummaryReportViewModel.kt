@@ -3,6 +3,7 @@ package com.example.cashia.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.cashia.daos.PeriodMetricsRow
 import com.example.cashia.daos.TransactionDao
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,11 +64,15 @@ class SummaryReportViewModel(
             val (start, end) = rangeOf(period, anchor)
             val (prevStart, prevEnd) = rangeOf(period, prevAnchor(period, anchor))
 
+            // The current period needs full rows (biggest expense, per-category and
+            // per-merchant breakdowns, the transaction list). The comparison period only
+            // feeds two headline numbers, so it is summed in SQL instead of hydrating an
+            // entire month of entities on every table change.
             combine(
                 dao.getTransactionsInRange(start.toString(), end.toString()),
-                dao.getTransactionsInRange(prevStart.toString(), prevEnd.toString()),
-            ) { txs, prevTxs ->
-                build(period, anchor, txs, prevTxs, prevStart)
+                dao.getPeriodMetricsFlow(prevStart.toString(), prevEnd.toString()),
+            ) { txs, prevMetrics ->
+                build(period, anchor, txs, prevMetrics, prevStart)
             }
         }
         .flowOn(Dispatchers.Default)
@@ -126,7 +131,7 @@ class SummaryReportViewModel(
         period: ReportPeriod,
         anchor: LocalDate,
         txs: List<MpesaTransactions>,
-        prevTxs: List<MpesaTransactions>,
+        prevMetrics: PeriodMetricsRow,
         prevStart: LocalDate,
     ): SummaryReportUiState {
         var income = 0.0
@@ -153,15 +158,6 @@ class SummaryReportViewModel(
             }
         }
 
-        var prevIncome = 0.0
-        var prevExpenses = 0.0
-        for (tx in prevTxs) {
-            when (tx.type) {
-                "income" -> prevIncome += tx.amount
-                "expense" -> prevExpenses += tx.amount + tx.knownFees
-            }
-        }
-
         return SummaryReportUiState(
             period = period,
             anchor = anchor,
@@ -171,8 +167,8 @@ class SummaryReportViewModel(
             transactionCost = cost,
             txCount = txs.size,
             prevLabel = label(period, prevStart),
-            prevIncome = prevIncome,
-            prevExpenses = prevExpenses,
+            prevIncome = prevMetrics.income,
+            prevExpenses = prevMetrics.expenses,
             categorySpends = categoryTotals.entries
                 .sortedByDescending { it.value }
                 .take(6)

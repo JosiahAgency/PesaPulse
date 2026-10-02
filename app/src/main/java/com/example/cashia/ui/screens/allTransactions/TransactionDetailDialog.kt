@@ -147,38 +147,12 @@ fun TransactionDetailDialog(
                     Spacer(Modifier.height(14.dp))
                     HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.07f))
                     Spacer(Modifier.height(12.dp))
-                    InlineDetailRow("Reference", tx.reference ?: "Unknown", monospace = true)
-                    Spacer(Modifier.height(6.dp))
-                    if (isExpense) {
-                        InlineDetailRow(
-                            "Transaction Fee",
-                            tx.transactionCost?.let { PesaTimeConfiguration.formatCurrency(it) }
-                                ?: "Unknown"
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        InlineDetailRow(
-                            "Total Deducted",
-                            if (tx.transactionCost == null) "Unknown (fees missing)"
-                            else PesaTimeConfiguration.formatCurrency(tx.amount + tx.knownFees),
-                            bold = true
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    run {
-                        InlineDetailRow(
-                            "Balance After",
-                            tx.balance?.let { PesaTimeConfiguration.formatCurrency(it) }
-                                ?: "Unknown",
-                            bold = true
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    tx.recipientPhone?.let { phone ->
-                        InlineDetailRow(
-                            "Phone",
-                            if (phone.contains("*")) "Redacted" else phone
-                        )
-                    }
+                    TransactionDetailFields(
+                        tx = tx,
+                        compactLabels = false,
+                        showPhone = true,
+                        spacing = 6.dp
+                    )
                     Spacer(Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),

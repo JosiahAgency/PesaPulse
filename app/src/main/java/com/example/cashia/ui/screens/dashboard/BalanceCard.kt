@@ -1,7 +1,6 @@
 package com.example.cashia.ui.screens.dashboard
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,11 +8,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +29,7 @@ import com.example.cashia.ui.reusedElements.SectionLabel
 import com.example.cashia.ui.reusedElements.StatPill
 import com.example.cashia.ui.reusedElements.StatPillTone
 import com.example.cashia.ui.reusedElements.Subtitles
+import com.example.cashia.ui.reusedElements.UnknownFeesNotice
 import com.example.cashia.ui.theme.CurrencyAmountStyle
 import com.example.cashia.ui.theme.primaryGradient
 import com.example.cashia.utility.PesaTimeConfiguration
@@ -40,6 +42,8 @@ fun BalanceHeroCard(
     onToggleVisibility: () -> Unit,
     income: Double,
     expenses: Double,
+    isLoading: Boolean = false,
+    unknownFeeCount: Int = 0,
 ) {
     GlassySurface(modifier = Modifier.fillMaxWidth(), glow = true) {
         Column(
@@ -54,22 +58,32 @@ fun BalanceHeroCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // [OPT] Crossfade label added for Compose tooling / tracing
                 Crossfade(
-                    targetState = isVisible,
+                    targetState = if (isLoading) BalanceDisplay.LOADING
+                    else if (isVisible) BalanceDisplay.AMOUNT else BalanceDisplay.HIDDEN,
                     label = "balance_visibility"
-                ) { visible ->
-                    Text(
-                        text = if (visible)
-                            balance?.let { PesaTimeConfiguration.formatCurrency(it) } ?: "Unknown"
-                        else
-                            "••••••",
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            brush = primaryGradient(),
-                            letterSpacing = 0.5.sp
-                        ).merge(CurrencyAmountStyle),
-                        modifier = Modifier.clickable { onToggleVisibility() }
-                    )
+                ) { display ->
+                    when (display) {
+                        // Matches the spinner the transaction list below shows while Room's
+                        // first emission is still pending — "Unknown" now means "loaded, but
+                        // no balance in the SMS", never "still loading".
+                        BalanceDisplay.LOADING -> CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 3.dp
+                        )
+
+                        else -> Text(
+                            text = if (display == BalanceDisplay.AMOUNT)
+                                balance?.let { PesaTimeConfiguration.formatCurrency(it) }
+                                    ?: "Unknown"
+                            else
+                                "••••••",
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                brush = primaryGradient(),
+                                letterSpacing = 0.5.sp
+                            ).merge(CurrencyAmountStyle)
+                        )
+                    }
                 }
                 IconButton(onClick = onToggleVisibility) {
                     Icon(
@@ -81,8 +95,11 @@ fun BalanceHeroCard(
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Subtitles("Latest Updated: $latestBalanceDate")
-            Subtitles("Spending totals include known fees only.")
+            Subtitles(
+                if (isLoading) "Loading latest balance…"
+                else "Latest Updated: $latestBalanceDate"
+            )
+            UnknownFeesNotice(unknownFeeCount)
             Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -90,14 +107,14 @@ fun BalanceHeroCard(
             ) {
                 StatPill(
                     label = "Income",
-                    amount = PesaTimeConfiguration.formatCurrency(income),
+                    amount = pillAmount(income, isVisible, isLoading),
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
                     tone = StatPillTone.INCOME,
                     modifier = Modifier.weight(1f)
                 )
                 StatPill(
                     label = "Expenses",
-                    amount = PesaTimeConfiguration.formatCurrency(expenses),
+                    amount = pillAmount(expenses, isVisible, isLoading),
                     icon = Icons.AutoMirrored.Filled.TrendingDown,
                     tone = StatPillTone.EXPENSE,
                     modifier = Modifier.weight(1f)
@@ -106,3 +123,15 @@ fun BalanceHeroCard(
         }
     }
 }
+
+/**
+ * Private mode hides the balance; period totals are just as sensitive, so they mask too.
+ * A zero total is only shown once the period has actually loaded, matching the list below.
+ */
+private fun pillAmount(amount: Double, isVisible: Boolean, isLoading: Boolean): String = when {
+    isLoading -> "—"
+    !isVisible -> "••••"
+    else -> PesaTimeConfiguration.formatCurrency(amount)
+}
+
+private enum class BalanceDisplay { LOADING, AMOUNT, HIDDEN }

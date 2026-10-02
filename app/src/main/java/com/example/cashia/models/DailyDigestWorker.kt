@@ -38,7 +38,7 @@ class DailyDigestWorker(
                 db.transactionDao().getTransactionsForDateRange(today, today)
             }
             val balance =
-                withContext(Dispatchers.IO) { db.transactionDao().getLatestBalance() }
+                withContext(Dispatchers.IO) { db.transactionDao().getLatestHeadlineOnce()?.balance }
 
             var income = 0.0
             var expense = 0.0

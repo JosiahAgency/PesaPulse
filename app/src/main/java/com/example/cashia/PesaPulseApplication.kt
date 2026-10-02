@@ -72,7 +72,7 @@ import com.example.cashia.models.SummaryReportViewModel
 import com.example.cashia.ui.screens.summary.SummaryReportScreen
 import com.example.cashia.ui.navigation.AppDestinations
 import com.example.cashia.ui.navigation.IslandNavigationBar
-import com.example.cashia.ui.reusedElements.HarmonizedActionFab
+import com.example.cashia.ui.reusedElements.FloatingQuickActionFab
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.NotificationsSettingsScreen
 import com.example.cashia.ui.screens.SettingsScreen
@@ -413,28 +413,28 @@ fun PesaPulseApp(notificationRoute: String? = null, onNotificationConsumed: () -
                         .navigationBarsPadding(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AnimatedVisibility(
-                        visible = showBackToTodayFab,
-                        enter = fadeIn(tween(200)),
-                        exit = fadeOut(tween(150))
-                    ) {
-                        HarmonizedActionFab(
-                            onClick = { dashboardViewModel.setDate(today) },
-                            icon = Icons.Default.Today,
-                            text = "Today",
-                            contentDescription = "Today",
-                            modifier = Modifier
-                                .padding(horizontal = 24.dp)
-                                .padding(bottom = 8.dp),
-                            fullWidth = true
-                        )
-                    }
-
                     IslandNavigationBar(
                         haptic, navController, navItems,
                         modifier = Modifier.onSizeChanged {
                             dockHeight = with(density) { it.height.toDp() }
                         }
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = showBackToTodayFab,
+                    enter = fadeIn(tween(200)),
+                    exit = fadeOut(tween(150)),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(end = 20.dp, bottom = 12.dp)
+                ) {
+                    FloatingQuickActionFab(
+                        onClick = { dashboardViewModel.setDate(today) },
+                        icon = Icons.Default.Today,
+                        contentDescription = "Today",
+                        modifier = Modifier.padding(bottom = dockHeight)
                     )
                 }
             }

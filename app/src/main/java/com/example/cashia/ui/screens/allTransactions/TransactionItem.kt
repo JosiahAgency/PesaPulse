@@ -64,6 +64,7 @@ import com.example.cashia.models.ResolvedCategory
 import com.example.cashia.models.ReversalIndex
 import com.example.cashia.models.TransactionCategory
 import com.example.cashia.models.UpcomingViewModel
+import com.example.cashia.ui.reusedElements.CategoryIndex
 import com.example.cashia.ui.reusedElements.Subtitles
 import com.example.cashia.ui.screens.category.CategoryPickerSheet
 import com.example.cashia.utility.PesaActions
@@ -77,7 +78,7 @@ import com.example.cashia.utility.formatAmount
 @Composable
 fun TransactionItem(
     tx: MpesaTransactions,
-    allCategories: List<ResolvedCategory>,
+    categories: CategoryIndex,
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel,
     hapticFeedback: HapticFeedback,
@@ -98,7 +99,7 @@ fun TransactionItem(
             tx = tx,
             wasReversed = reversalOfThis != null,
             reversalTx = reversalOfThis,
-            allCategories = allCategories,
+            categories = categories,
             categoryViewModel = categoryViewModel,
             upcomingViewModel = upcomingViewModel,
             hapticFeedback = hapticFeedback,
@@ -312,7 +313,7 @@ private fun NormalTransactionItem(
     tx: MpesaTransactions,
     wasReversed: Boolean,
     reversalTx: MpesaTransactions?,
-    allCategories: List<ResolvedCategory>,
+    categories: CategoryIndex,
     categoryViewModel: CategoryViewModel,
     upcomingViewModel: UpcomingViewModel,
     hapticFeedback: HapticFeedback,
@@ -320,9 +321,8 @@ private fun NormalTransactionItem(
     var expanded by remember { mutableStateOf(false) }
     var currentCategoryId by remember(tx.id) { mutableStateOf(tx.category) }
 
-    // [OPT] Fallback is stable — only recompute when the id or list changes
-    val resolvedCategory = remember(currentCategoryId, allCategories) {
-        allCategories.find { it.id == currentCategoryId }
+    val resolvedCategory = remember(currentCategoryId, categories) {
+        categories.resolve(currentCategoryId)
             ?: ResolvedCategory(
                 TransactionCategory.OTHER.name,
                 TransactionCategory.OTHER.label,
@@ -335,7 +335,7 @@ private fun NormalTransactionItem(
 
     if (showCategoryPicker) {
         CategoryPickerSheet(
-            allCategories,
+            categories.all,
             currentCategoryId = currentCategoryId,
             onPick = { newId ->
                 currentCategoryId = newId
@@ -537,50 +537,11 @@ private fun NormalTransactionItem(
                 ) {
                     HorizontalDivider(color = accentColor.copy(alpha = 0.1f))
 
-                    InlineDetailRow("REF", tx.reference ?: "Unknown", monospace = true)
-                    if (!isIncome) {
-                        InlineDetailRow(
-                            "FEES",
-                            tx.transactionCost?.let { PesaTimeConfiguration.formatCurrency(it) }
-                                ?: "Unknown"
-                        )
-                        InlineDetailRow(
-                            "TOTAL",
-                            if (tx.transactionCost == null) "Unknown (fees missing)"
-                            else PesaTimeConfiguration.formatCurrency(tx.amount + tx.knownFees),
-                            bold = true
-                        )
-                    }
-                    run {
-                        InlineDetailRow(
-                            "BALANCE AFTER",
-                            tx.balance?.let { PesaTimeConfiguration.formatCurrency(it) }
-                                ?: "Unknown",
-                            bold = true
-                        )
-                    }
-
-                    reversalTx?.let { rev ->
-                        HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.06f))
-                        Text(
-                            "REVERSAL",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 1.5.sp
-                            ),
-                            color = colorScheme.tertiary.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Bold
-                        )
-                        InlineDetailRow("REF", rev.reference ?: "Unknown", monospace = true)
-                        InlineDetailRow(
-                            "CREDITED BACK",
-                            PesaTimeConfiguration.formatCurrency(rev.amount),
-                            bold = true
-                        )
-                        InlineDetailRow(
-                            "DATE",
-                            "${rev.displayDate} · ${rev.displayTime}"
-                        )
-                    }
+                    TransactionDetailFields(
+                        tx = tx,
+                        reversalTx = reversalTx,
+                        compactLabels = true
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
