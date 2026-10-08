@@ -7,28 +7,8 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Calendar
-
-fun calculatePreviousPeriod(
-    transactions: List<MpesaTransactions>,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    type: TransactionType
-): Double {
-    val periodDays = ChronoUnit.DAYS.between(startDate, endDate) + 1
-    val previousStart = startDate.minusDays(periodDays)
-    val previousEnd = startDate.minusDays(1)
-    val prevStartTs = previousStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val prevEndTs =
-        previousEnd.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val typeLower = type.name.lowercase()
-    return transactions
-        .filter { it.timestamp in prevStartTs..prevEndTs && it.type == typeLower && it.reversedTxId == null }
-        .sumOf { it.amount }
-}
 
 fun formatCompactAmount(amount: Double): String = when {
     amount >= 1_000_000 -> "${(amount / 1_000_000).toInt()}M"
@@ -68,11 +48,8 @@ fun showDatePicker(
     ).show()
 }
 
-
-data class DailySpend(val date: LocalDate, val amount: Double)
 data class WeekdayPattern(val day: DayOfWeek, val avgAmount: Double, val txCount: Int)
 data class HourlyPattern(val hour: Int, val txCount: Int, val totalAmount: Double)
-data class SpendingStreak(val days: Int, val startDate: LocalDate, val endDate: LocalDate)
 data class RecurringMerchant(
     val recipient: String,
     val avgAmount: Double,
@@ -80,27 +57,6 @@ data class RecurringMerchant(
     val lastDate: LocalDate,
     val totalAmount: Double
 )
-
-/** Daily spend series for the given window, zeroed for days with no transactions. */
-fun dailySpendSeries(
-    transactions: List<MpesaTransactions>,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    type: String
-): List<DailySpend> {
-    val byDay = transactions
-        .filter { it.type == type && it.reversedTxId == null }
-        .groupBy { LocalDate.parse(it.date) }
-        .mapValues { (_, txs) -> txs.sumOf { it.amount } }
-
-    val result = mutableListOf<DailySpend>()
-    var cursor = startDate
-    while (!cursor.isAfter(endDate)) {
-        result.add(DailySpend(cursor, byDay[cursor] ?: 0.0))
-        cursor = cursor.plusDays(1)
-    }
-    return result
-}
 
 /** Average spend by day-of-week (useful for "you spend most on Fridays" insight). */
 fun weekdaySpendPattern(
@@ -158,9 +114,9 @@ fun detectRecurringMerchants(
         .filter { it.type == type && it.reversedTxId == null }
         .groupBy { it.recipient.trim().lowercase() }
         .mapNotNull { (_, txs) ->
-            val months = txs.map {
+            val months = txs.mapNotNull {
                 runCatching { YearMonth.from(LocalDate.parse(it.date)) }.getOrNull()
-            }.filterNotNull().distinct()
+            }.distinct()
             if (months.size < minMonths) return@mapNotNull null
 
             val latest = txs.maxOf { LocalDate.parse(it.date) }
@@ -173,41 +129,4 @@ fun detectRecurringMerchants(
             )
         }
         .sortedByDescending { it.occurrences }
-}
-
-/**
- * Longest consecutive-day streak where at least one expense was recorded.
- */
-fun longestSpendingStreak(transactions: List<MpesaTransactions>): SpendingStreak? {
-    val days = transactions
-        .filter { it.type == "expense" && it.reversedTxId == null }
-        .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
-        .toSortedSet()
-
-    if (days.isEmpty()) return null
-
-    var bestStart = days.first()
-    var bestLen = 1
-    var curStart = days.first()
-    var curLen = 1
-
-    val dayList = days.toList()
-    for (i in 1 until dayList.size) {
-        if (dayList[i] == dayList[i - 1].plusDays(1)) {
-            curLen++
-            if (curLen > bestLen) {
-                bestLen = curLen; bestStart = curStart
-            }
-        } else {
-            curStart = dayList[i]
-            curLen = 1
-        }
-    }
-    return SpendingStreak(bestLen, bestStart, bestStart.plusDays((bestLen - 1).toLong()))
-}
-
-/** Month-over-month change as a percentage. Null if previous period is zero. */
-fun periodChangePercent(current: Double, previous: Double): Float? {
-    if (previous == 0.0) return null
-    return ((current - previous) / previous * 100).toFloat()
 }

@@ -27,6 +27,7 @@ fun AnalyticsScreen(
 ) {
     val allCategories by categoryViewModel.allCategories.collectAsStateWithLifecycle()
     val periodTransactions by analyticsViewModel.periodTransactions.collectAsStateWithLifecycle()
+    val monthComparisonTransactions by analyticsViewModel.monthComparisonTransactions.collectAsStateWithLifecycle()
     val weekdayPattern by analyticsViewModel.weekdayPatternFlow.collectAsStateWithLifecycle()
     val recurringMerchants by analyticsViewModel.recurringMerchantsFlow.collectAsStateWithLifecycle()
     val uiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
@@ -126,7 +127,14 @@ fun AnalyticsScreen(
             )
         }
 
-        item { CashFlowTrendChart(periodTransactions, uiState.startDate, uiState.endDate) }
+        item {
+            CashFlowTrendChart(
+                periodTransactions,
+                uiState.startDate,
+                uiState.endDate,
+                monthComparisonTransactions
+            )
+        }
 
         if (uiState.filteredTransactions.isNotEmpty()) {
             item {

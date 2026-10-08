@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,7 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,14 +45,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,9 +70,95 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/**
+ * Flippable cash-flow card: front face is the existing cumulative trend for the selected
+ * period; back face is a this-month-vs-last-month comparison (see [MonthComparisonBody]).
+ * Both faces share one header/expand state so the card collapses and flips as a single unit.
+ */
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @Composable
 fun CashFlowTrendChart(
+    allTransactions: List<MpesaTransactions>,
+    startDate: LocalDate,
+    endDate: LocalDate,
+    monthComparisonTransactions: List<MpesaTransactions> = emptyList()
+) {
+    var expanded by remember { mutableStateOf(true) }
+    var showComparison by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val rotation by animateFloatAsState(
+        targetValue = if (showComparison) 180f else 0f,
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "cashFlowFlip"
+    )
+
+    GlassySurface(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { expanded = !expanded },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionLabel(if (showComparison) "MONTHLY COMPARISON" else "CASH FLOW TREND")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showComparison = !showComparison },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.SwapHoriz,
+                            contentDescription = if (showComparison)
+                                "Show cash flow trend" else "Show monthly comparison",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    Icon(
+                        if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { expanded = !expanded },
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            rotationY = rotation
+                            cameraDistance = 12f * density.density
+                        }
+                ) {
+                    if (rotation <= 90f) {
+                        CashFlowTrendBody(allTransactions, startDate, endDate)
+                    } else {
+                        Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
+                            MonthComparisonBody(monthComparisonTransactions)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+@Composable
+private fun CashFlowTrendBody(
     allTransactions: List<MpesaTransactions>,
     startDate: LocalDate,
     endDate: LocalDate
@@ -112,7 +204,10 @@ fun CashFlowTrendChart(
     }
 
     val hasData = incomePoints.last() > 0f || expensePoints.last() > 0f
-    if (!hasData) return
+    if (!hasData) {
+        Subtitles("No transactions in this period yet")
+        return
+    }
 
     val chartDescription = remember(incomePoints, expensePoints, startDate, endDate) {
         "Cash flow trend chart from ${startDate} to ${endDate}. " +
@@ -140,12 +235,9 @@ fun CashFlowTrendChart(
     }
 
     val progress = remember { Animatable(0f) }
-    var expanded by remember { mutableStateOf(true) }
-    LaunchedEffect(allTransactions, expanded) {
-        if (expanded) {
-            progress.snapTo(0f)
-            progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
-        }
+    LaunchedEffect(allTransactions) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
     }
 
     var crosshairX by remember { mutableFloatStateOf(-1f) }
@@ -174,30 +266,7 @@ fun CashFlowTrendChart(
         }
     }
 
-    GlassySurface(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SectionLabel("CASH FLOW TREND")
-                Icon(
-                    if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded
-                        .KeyboardArrowDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(tween(200)) + fadeIn(tween(200)),
-                exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
-            ) {
-                Column {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
                     Spacer(Modifier.height(8.dp))
                     Subtitles("Cumulative income vs. expenses")
                     Spacer(Modifier.height(6.dp))
@@ -529,9 +598,6 @@ fun CashFlowTrendChart(
                         }
                     }
                 }
-            }
-        }
-    }
 }
 
 @Composable

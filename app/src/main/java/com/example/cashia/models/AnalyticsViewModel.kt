@@ -172,6 +172,24 @@ class AnalyticsViewModel(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUiState())
 
+    /**
+     * This-month-vs-last-month comparison for the cash flow trend card's flip side.
+     * Anchored on the real "today" (via [PesaTimeConfiguration.changes]) rather than the
+     * selected period/scope, so flipping the card always compares the two most recent
+     * calendar months regardless of what date range is picked above it.
+     */
+    val monthComparisonTransactions: StateFlow<List<MpesaTransactions>> =
+        PesaTimeConfiguration.changes
+            .map { YearMonth.now() }
+            .flatMapLatest { currentMonth ->
+                val lastMonth = currentMonth.minusMonths(1)
+                dao.getTransactionsInRange(
+                    lastMonth.atDay(1).toString(),
+                    currentMonth.atEndOfMonth().toString()
+                )
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private fun periodLabel(scope: TimeScope, start: LocalDate, end: LocalDate): String =
         when (scope) {
             TimeScope.DAY -> LocalDate.now()
