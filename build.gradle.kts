@@ -18,7 +18,7 @@ buildscript {
     configurations.classpath {
         resolutionStrategy {
             force(
-                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcprov-jdk18on:1.85",
                 "org.bouncycastle:bcpkix-jdk18on:1.84",
                 "org.bouncycastle:bcutil-jdk18on:1.84",
                 "io.netty:netty-codec:4.1.122.Final",
@@ -36,7 +36,7 @@ allprojects {
     configurations.configureEach {
         resolutionStrategy {
             force(
-                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcprov-jdk18on:1.85",
                 "org.bouncycastle:bcpkix-jdk18on:1.84",
                 "org.bouncycastle:bcutil-jdk18on:1.84",
                 "io.netty:netty-codec:4.1.122.Final",
